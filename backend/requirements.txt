@@ -1,0 +1,41 @@
+# ============================================================
+# Cyber Sentinel — Backend Python Dependencies
+# ============================================================
+# Install:  pip install -r requirements.txt
+# ============================================================
+
+# --- Core Framework ---
+fastapi==0.115.*
+uvicorn[standard]==0.34.*
+python-multipart==0.0.*
+
+# --- Database ---
+motor==3.6.*               # Async MongoDB driver
+beanie==1.27.*             # MongoDB ODM (built on Motor + Pydantic)
+
+# --- Auth ---
+python-jose[cryptography]==3.3.*   # JWT encoding/decoding
+passlib[bcrypt]==1.7.*             # Password hashing
+pydantic[email]==2.10.*            # Includes EmailStr
+pydantic-settings==2.7.*          # Settings from .env
+
+# --- Task Queue ---
+celery==5.4.*
+redis==5.2.*
+
+# --- AI ---
+google-generativeai==0.8.*        # Gemini Flash SDK
+
+# --- Security Tools (Python libraries) ---
+python-nmap==0.7.*                # Nmap wrapper
+sslyze==6.*                       # SSL/TLS analyser
+# Note: sublist3r is pip-installable but may have dependency issues.
+# Install manually if needed: pip install sublist3r
+
+# --- HTTP ---
+httpx==0.28.*                     # Async HTTP client (for Wazuh + ZAP APIs)
+python-dotenv==1.0.*              # .env file loading
+
+# --- Reports ---
+weasyprint==63.*                  # HTML → PDF report generation
+jinja2==3.1.*                     # HTML templates for reports

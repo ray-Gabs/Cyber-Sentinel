@@ -1,0 +1,39 @@
+# ============================================================
+# Cyber Sentinel — Docker Compose (Dev Environment)
+# ============================================================
+# Usage:
+#   docker-compose up -d          # Start MongoDB + Redis
+#   docker-compose down           # Stop everything
+#   docker-compose logs -f mongo  # Tail MongoDB logs
+# ============================================================
+
+services:
+  # ---- MongoDB ----
+  mongo:
+    image: mongo:7
+    container_name: cyber-sentinel-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  # ---- Redis (Celery broker + result backend) ----
+  redis:
+    image: redis:7-alpine
+    container_name: cyber-sentinel-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  # ---- OWASP ZAP (optional — uncomment for full scans) ----
+  # zap:
+  #   image: ghcr.io/zaproxy/zaproxy:stable
+  #   container_name: cyber-sentinel-zap
+  #   command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.disablekey=true
+  #   ports:
+  #     - "8080:8080"
+  #   restart: unless-stopped
+
+volumes:
+  mongo_data:

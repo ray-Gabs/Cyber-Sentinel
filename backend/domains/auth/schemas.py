@@ -1,0 +1,45 @@
+# ============================================================
+# backend/domains/auth/schemas.py — Pydantic Request/Response Schemas
+# ============================================================
+# These are NOT stored in the DB. They validate HTTP request bodies
+# and shape HTTP response bodies.
+# ============================================================
+
+from pydantic import BaseModel, EmailStr, Field
+from datetime import datetime
+from typing import Optional
+
+
+# --------------- Requests ---------------
+
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=32)
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+class LoginRequest(BaseModel):
+    """Accepts either username or email + password."""
+    username: str
+    password: str
+
+
+# --------------- Responses ---------------
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UserResponse(BaseModel):
+    """Safe user object (no password hash)."""
+    id: str
+    username: str
+    email: str
+    role: str
+    is_active: bool
+    created_at: datetime
+    last_login: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
