@@ -1,0 +1,66 @@
+# ============================================================
+# Cyber Sentinel — Backend Python Dependencies
+# ============================================================
+# Install:  pip install -r requirements.txt
+# ============================================================
+
+# --- Core Framework ---
+fastapi==0.115.*
+uvicorn[standard]==0.34.*
+python-multipart==0.0.*
+
+# --- Database ---
+motor==3.6.*               # Async MongoDB driver
+beanie==1.27.*             # MongoDB ODM (built on Motor + Pydantic)
+
+# --- Auth ---
+PyJWT[crypto]>=2.8.0,<3.0.0        # JWT encoding/decoding (replaces python-jose — CVE-2024-33664)
+passlib[bcrypt]>=1.7.4,<2.0.0     # Password hashing
+bcrypt==4.0.1                      # passlib 1.7.x needs __about__; removed in bcrypt 4.1+
+pydantic[email]==2.10.*            # Includes EmailStr
+pydantic-settings==2.7.*          # Settings from .env
+
+# --- Task Queue ---
+celery==5.4.*
+redis==5.2.*
+
+# --- AI (install the one matching your AI_PROVIDER in .env) ---
+groq==0.25.*                      # Groq API SDK (Llama 3.3 70B)    — AI_PROVIDER=groq
+anthropic>=0.40.0,<1.0.0          # Claude API SDK (Anthropic)       — AI_PROVIDER=claude
+# openai>=1.0.*                   # OpenAI SDK                       — AI_PROVIDER=openai  (uncomment if needed)
+# google-generativeai>=0.8.*      # Gemini SDK                       — AI_PROVIDER=gemini  (uncomment if needed)
+
+# --- Security Tools (Python libraries) ---
+python-nmap==0.7.*                # Nmap wrapper
+sslyze==6.*                       # SSL/TLS analyser
+# Note: sublist3r is pip-installable but may have dependency issues.
+# Install manually if needed: pip install sublist3r
+
+# --- HTTP ---
+httpx==0.28.*                     # Async HTTP client (for Wazuh + ZAP APIs)
+python-dotenv==1.0.*              # .env file loading
+beautifulsoup4==4.12.*            # HTML parsing (fallback crawler + fingerprinting)
+
+# --- Reports ---
+reportlab>=4.0,<5.0               # Pure-Python PDF generation — no GTK/Cairo system deps (works on Windows + Linux)
+jinja2==3.1.*                     # HTML templates for reports
+
+# --- Rate Limiting ---
+slowapi==0.1.*                    # FastAPI rate limiting (backed by Redis)
+limits==3.*                       # Storage backends for slowapi
+
+# --- Async Email ---
+aiosmtplib==3.*                   # Async SMTP (non-blocking email sending)
+
+# --- Observability ---
+structlog==24.*                   # Structured JSON logging (replaces stdlib logging format)
+prometheus-client==0.21.*         # Prometheus metrics — /api/metrics endpoint for Grafana
+
+# --- Cloud Storage ---
+boto3==1.35.*                     # AWS S3 report storage (falls back to local filesystem if unconfigured)
+
+# --- Threat Intelligence ---
+# VirusTotal + AbuseIPDB via httpx (already included above)
+
+# --- MITRE ATT&CK ---
+# Uses bundled STIX data + LLM classification (no extra deps)

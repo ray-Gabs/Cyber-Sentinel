@@ -1,0 +1,319 @@
+# ============================================================
+# backend/domains/auth/router.py — Auth REST Endpoints
+# ============================================================
+
+import logging
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+log = logging.getLogger(__name__)
+
+from core.dependencies import get_current_user
+from core.rate_limit import limiter
+from core.config import settings
+from core.security import create_access_token
+from domains.auth.models import User
+from domains.soc.project_models import SocProject
+from domains.auth.schemas import (
+    RegisterRequest,
+    LoginRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    UpdateProfileRequest,
+    UpdateRoleRequest,
+    TokenResponse,
+    UserResponse,
+)
+from domains.auth import service
+from domains.audit import service as audit_service
+from domains.notifications import service as notif_service
+
+router = APIRouter()
+
+
+@router.post("/register", status_code=201)
+@limiter.limit(settings.rate_limit_register)
+async def register(request: Request, data: RegisterRequest):
+    """Register a new user account — returns pending state awaiting admin approval."""
+    user = await service.register_user(data)
+    ip = request.client.host if request.client else None
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="user.registered",
+        ip_address=ip,
+    )
+    # Notify all admin users of the new registration
+    try:
+        admins = await User.find(User.role == "admin").limit(500).to_list()
+        for admin in admins:
+            await notif_service.create_notification(
+                user_id=str(admin.id),
+                type="new_registration",
+                title=f"New registration: {user.username}",
+                body=f"{user.email} is awaiting admin approval",
+            )
+    except Exception as exc:
+        log.debug("admin notification failed on registration: %s", exc)
+    return {"message": "Registration received — awaiting admin approval", "status": "pending"}
+
+
+@router.post("/login", response_model=TokenResponse)
+@limiter.limit(settings.rate_limit_login)
+async def login(request: Request, data: LoginRequest):
+    """Authenticate and receive a JWT access token."""
+    result = await service.authenticate_user(data)
+    # Audit — look up user for username (fire-and-forget)
+    try:
+        user = await User.find_one({"$or": [{"username": data.identifier}, {"email": data.identifier}]})
+        if user:
+            ip = request.client.host if request.client else None
+            await audit_service.log_event(
+                user_id=str(user.id),
+                username=user.username,
+                action="user.login",
+                ip_address=ip,
+                details="Authentication successful",
+            )
+    except Exception as exc:
+        log.debug("audit log failed on login: %s", exc)
+    return result
+
+
+@router.post("/forgot-password", status_code=200)
+@limiter.limit(settings.rate_limit_forgot_password)
+async def forgot_password(request: Request, data: ForgotPasswordRequest):
+    """Send a password reset email. Always returns success to prevent user enumeration."""
+    await service.request_password_reset(data.email)
+    return {"detail": "If that email is registered, a reset link has been sent."}
+
+
+@router.post("/reset-password", status_code=200)
+@limiter.limit("20/hour")
+async def reset_password(request: Request, data: ResetPasswordRequest):
+    """Reset password using a valid reset token."""
+    await service.reset_password(data.token, data.new_password)
+    return {"detail": "Password updated successfully. You can now sign in."}
+
+
+def _user_response(user: User) -> UserResponse:
+    return UserResponse(
+        id=str(user.id),
+        username=user.username,
+        email=user.email,
+        role=user.role,
+        is_active=user.is_active,
+        status=getattr(user, "status", "active"),
+        is_demo=getattr(user, "is_demo", False),
+        created_at=user.created_at,
+        last_login=user.last_login,
+        wazuh_agent_name=user.wazuh_agent_name,
+    )
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(user: User = Depends(get_current_user)):
+    """Return the currently authenticated user's profile."""
+    return _user_response(user)
+
+
+@router.get("/me/prefs")
+async def get_prefs(user: User = Depends(get_current_user)):
+    """Return the current user's notification preferences."""
+    return getattr(user, "notification_prefs", {})
+
+
+@router.patch("/me/prefs")
+async def update_prefs(
+    prefs: dict,
+    user: User = Depends(get_current_user),
+):
+    """Update the current user's notification preferences (partial update)."""
+    existing = dict(getattr(user, "notification_prefs", {}))
+    existing.update(prefs)
+    user.notification_prefs = existing
+    await user.save()
+    return user.notification_prefs
+
+
+def _require_admin(user: User) -> None:
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+
+
+# ── Admin: user management ────────────────────────────────────────────────────
+
+@router.get("/users", response_model=list[UserResponse])
+async def list_users(user: User = Depends(get_current_user)):
+    """[Admin] List all registered users."""
+    _require_admin(user)
+    users = await User.find().sort("+created_at").limit(500).to_list()
+    return [_user_response(u) for u in users]
+
+
+@router.patch("/users/{user_id}/role", response_model=UserResponse)
+async def update_user_role(
+    user_id: str,
+    data: UpdateRoleRequest,
+    user: User = Depends(get_current_user),
+):
+    """
+    [Admin] Change a user's role.
+
+    Roles:
+      admin   — full access, sees all scans/alerts, manages users
+      analyst — student role, sees only their own scans and linked-agent alerts
+      viewer  — read-only, no scan/alert creation
+    """
+    _require_admin(user)
+    from bson import ObjectId
+    target = await User.get(ObjectId(user_id))
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    old_role = target.role
+    target.role = data.role
+    await target.save()
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="role.changed",
+        resource_type="user",
+        resource_id=user_id,
+        details=f"{target.username}: {old_role} → {data.role}",
+    )
+    return _user_response(target)
+
+
+@router.patch("/users/{user_id}/status", response_model=UserResponse)
+async def toggle_user_status(
+    user_id: str,
+    user: User = Depends(get_current_user),
+):
+    """[Admin] Activate or deactivate a user account."""
+    _require_admin(user)
+    from bson import ObjectId
+    target = await User.get(ObjectId(user_id))
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if str(target.id) == str(user.id):
+        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+    target.is_active = not target.is_active
+    await target.save()
+    action = "account.activated" if target.is_active else "account.deactivated"
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action=action,
+        resource_type="user",
+        resource_id=user_id,
+        details=f"{target.username} set to {'active' if target.is_active else 'inactive'}",
+    )
+    return _user_response(target)
+
+
+@router.patch("/users/{user_id}/approve", response_model=UserResponse)
+async def approve_user(user_id: str, user: User = Depends(get_current_user)):
+    """[Admin] Approve a pending user account so they can log in."""
+    _require_admin(user)
+    from bson import ObjectId
+    target = await User.get(ObjectId(user_id))
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    target.status = "active"
+    target.is_active = True
+    target.approved_by = str(user.id)
+    target.approved_at = datetime.now(timezone.utc)
+    await target.save()
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="user.approved",
+        resource_type="user",
+        resource_id=user_id,
+        details=f"Approved: {target.username}",
+    )
+    try:
+        await notif_service.create_notification(
+            user_id=str(target.id),
+            type="user_approved",
+            title="Account approved",
+            body="Your account has been approved. You can now log in.",
+        )
+    except Exception as exc:
+        log.debug("approval notification failed for user %s: %s", user_id, exc)
+    return _user_response(target)
+
+
+@router.patch("/users/{user_id}/suspend", response_model=UserResponse)
+async def suspend_user(user_id: str, user: User = Depends(get_current_user)):
+    """[Admin] Suspend an active user account."""
+    _require_admin(user)
+    from bson import ObjectId
+    target = await User.get(ObjectId(user_id))
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if str(target.id) == str(user.id):
+        raise HTTPException(status_code=400, detail="Cannot suspend your own account")
+    target.status = "suspended"
+    target.is_active = False
+    await target.save()
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="user.suspended",
+        resource_type="user",
+        resource_id=user_id,
+        details=f"Suspended: {target.username}",
+    )
+    try:
+        await notif_service.create_notification(
+            user_id=str(target.id),
+            type="user_suspended",
+            title="Account suspended",
+            body="Your account has been suspended. Contact an administrator.",
+        )
+    except Exception as exc:
+        log.warning("suspension notification failed for user %s: %s", str(target.id), exc)
+    return _user_response(target)
+
+
+@router.get("/users/{user_id}/agent-configs")
+async def get_user_agent_configs(user_id: str, user: User = Depends(get_current_user)):
+    """[Admin] List all SOC projects belonging to a user, with Wazuh agent info."""
+    _require_admin(user)
+    from bson import ObjectId
+    target = await User.get(ObjectId(user_id))
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    projects = await SocProject.find(SocProject.owner_id == user_id).to_list()
+    return [
+        {
+            "project_id": str(p.id),
+            "project_name": p.name,
+            "slug": p.slug,
+            "wazuh_agent_name": p.wazuh_agent_name,
+            "wazuh_agent_registered": p.wazuh_agent_registered,
+        }
+        for p in projects
+    ]
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(data: UpdateProfileRequest, user: User = Depends(get_current_user)):
+    """
+    Update the current user's profile.
+
+    Link a Wazuh agent to personalise the SOC dashboard:
+      - Your alert list will scope to only that agent's alerts.
+      - You'll get notified when that agent triggers a medium+ alert.
+      - Send wazuh_agent_name="" to unlink.
+
+    The agent name must match exactly what Wazuh shows in its agent list
+    (GET /api/alerts/agents). Ask your instructor for your agent name if unsure.
+    """
+    if data.wazuh_agent_name is not None:
+        # Empty string means "unlink"
+        user.wazuh_agent_name = data.wazuh_agent_name.strip() or None
+        await user.save()
+    return _user_response(user)

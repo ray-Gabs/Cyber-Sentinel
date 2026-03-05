@@ -1,0 +1,68 @@
+# ============================================================
+# Cyber Sentinel — Deploy to Staging
+# ============================================================
+# Triggers on every push to main AFTER CI passes.
+# Deploys to the Ubuntu VM at SSH_HOST via Docker Compose.
+#
+# Required GitHub Secrets (Settings → Secrets → Actions):
+#   SSH_HOST         — staging VM IP / hostname (e.g. 10.4.89.178)
+#   SSH_USER         — SSH user on the VM (e.g. ubuntu)
+#   SSH_PRIVATE_KEY  — private key that has access to SSH_HOST
+#   SSH_PORT         — SSH port (default 22, set secret if different)
+#
+# Optional secrets (forwarded to docker compose on the VM):
+#   STAGING_JWT_SECRET
+#   STAGING_CLAUDE_API_KEY  (or whichever AI provider you use)
+# ============================================================
+
+name: Deploy · Staging
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+# Only one staging deploy can run at a time — cancel in-flight if a newer push arrives
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to staging VM
+    runs-on: ubuntu-latest
+    environment: staging        # Links to GitHub Environment (enables required reviewers, env secrets)
+    # Only deploy when CI passed — never deploy a broken build
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@2ead44a4de06ab3ae7b4b7a6bc7c1c9f73b11f19  # v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -euo pipefail
+
+            cd /opt/cyber-sentinel
+
+            echo "=== Pulling latest code ==="
+            git fetch --all
+            git reset --hard origin/main
+
+            echo "=== Rebuilding and restarting containers ==="
+            docker compose pull --quiet
+            docker compose up -d --build --remove-orphans
+
+            echo "=== Waiting for backend health check ==="
+            timeout 60 bash -c 'until curl -sf http://localhost:8000/api/health; do sleep 3; done'
+
+            echo "=== Pruning unused images ==="
+            docker image prune -f
+
+            echo "=== Deploy complete: $(git rev-parse --short HEAD) ==="

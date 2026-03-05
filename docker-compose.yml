@@ -1,0 +1,476 @@
+# ============================================================
+# Cyber Sentinel — Docker Compose (Full Stack)
+# ============================================================
+# Default services (always started):
+#   mongo    — MongoDB 7 (persistent scan/alert storage)
+#   redis    — Redis 7 (Celery broker + result backend + app-level locks)
+#   backend  — FastAPI + uvicorn (hot-reload via volume mount)
+#   celery   — Celery prefork worker, 2 concurrent, pentest queue
+#   celery-soc — Celery prefork worker, 3 concurrent, soc queue
+#   celery-beat — Beat scheduler (Wazuh polling every 30s)
+#   frontend — React built with Vite, served by internal nginx
+#   zap      — OWASP ZAP daemon (DAST scanner for pentest engine)
+#   nginx    — Reverse proxy (HTTP on 8888)
+#
+# Optional profile (heavy — start separately when needed):
+#   docker-compose --profile wazuh up -d   # Wazuh SIEM manager
+#
+# ⚠  FIRST-TIME SETUP (MongoDB auth migration):
+#   Before starting with auth enabled, create the MongoDB admin user:
+#     docker compose up -d mongo
+#     docker exec -it cyber-sentinel-mongo mongosh --eval "
+#       db.getSiblingDB('admin').createUser({
+#         user: process.env.MONGO_INITDB_ROOT_USERNAME,
+#         pwd: process.env.MONGO_INITDB_ROOT_PASSWORD,
+#         roles: [{ role: 'root', db: 'admin' }]
+#       })"
+#     docker compose up -d
+#   If mongo was previously running WITHOUT auth, recreate the volume:
+#     docker compose down -v && docker compose up -d
+#
+# Required .env additions (see .env.example):
+#   MONGO_USERNAME=cyber_sentinel
+#   MONGO_PASSWORD=<strong password>
+#   REDIS_PASSWORD=<strong password>
+#   ZAP_API_KEY=<random token>
+#
+# Common commands:
+#   docker compose up -d --build     # First run / after Dockerfile changes
+#   docker compose up -d             # Subsequent runs (no rebuild)
+#   docker compose down              # Stop containers (keep volumes)
+#   docker compose down -v           # Stop + wipe volumes (clean slate)
+#   docker compose logs -f backend   # Tail backend logs
+#   docker compose logs -f celery    # Tail Celery pentest worker logs
+#   docker compose logs -f celery-soc  # Tail Celery SOC worker logs
+# ============================================================
+
+networks:
+  sentinel-net:
+    driver: bridge
+
+services:
+
+  # ── MongoDB ──────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: cyber-sentinel-mongo
+    networks:
+      - sentinel-net
+    ports:
+      - "27017:27017"       # exposed for Compass / direct dev access
+    volumes:
+      - mongo_data:/data/db
+    environment: {}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval \"db.adminCommand('ping')\" --quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ── Redis (Celery broker + result backend + app-level state) ─────────────
+  redis:
+    image: redis:7-alpine
+    container_name: cyber-sentinel-redis
+    networks:
+      - sentinel-net
+    ports:
+      - "6379:6379"         # exposed for direct dev inspection (redis-cli)
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-changeme}
+      --appendonly yes
+      --appendfsync everysec
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a $$REDIS_PASSWORD ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  # ── FastAPI Backend (uvicorn) ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber-sentinel-backend
+    networks:
+      - sentinel-net
+    env_file:
+      - .env
+    environment:
+      # Override .env localhost defaults with Docker service hostnames
+      - MONGODB_URI=mongodb://mongo:27017
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      - CELERY_RESULT_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
+      - APP_REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/2
+      - FRONTEND_URL=http://localhost:8888
+      # Replace 10.4.89.178 with this VM's actual IP if it changes.
+      - CORS_EXTRA_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost:8888,https://localhost,http://10.4.89.178,http://10.4.89.178:8000,http://10.4.89.178:8888
+      - ZAP_API_URL=http://zap:8080
+      - ZAP_API_KEY=${ZAP_API_KEY:-changeme}
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      # Lab mode: allow scanning private IPs (student machines on local network)
+      - ALLOW_PRIVATE_TARGETS=true
+      # First-boot admin seed
+      - FIRST_ADMIN_USERNAME=${FIRST_ADMIN_USERNAME:-admin}
+      - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL:-}
+      - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD:-}
+      # Wazuh Manager is on the HOST — use host.docker.internal
+      - WAZUH_API_URL=https://host.docker.internal:55000
+      - WAZUH_VERIFY_SSL=false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux Docker Engine 20.10+ required
+    ports:
+      - "8000:8000"         # exposed for Swagger UI / direct API testing
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ── Celery Worker — pentest queue (prefork, 2 concurrent scans) ───────────
+  # Pool: prefork — multi-process, correct for Ubuntu VM production.
+  # concurrency=2 matches the system-wide MAX_CONCURRENT_SCANS limit.
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber-sentinel-celery
+    networks:
+      - sentinel-net
+    command: celery -A core.celery_app worker --loglevel=info --pool=prefork --concurrency=2 -Q celery
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      # ROOT CAUSE FIX: without these two, all per-user/per-alert safety mechanisms are disabled
+      - CELERY_RESULT_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
+      - APP_REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/2
+      - ZAP_API_URL=http://zap:8080
+      - ZAP_API_KEY=${ZAP_API_KEY:-changeme}
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - ALLOW_PRIVATE_TARGETS=true
+      # AI keys needed for scan narrative generation
+      - AI_PROVIDER=${AI_PROVIDER:-claude}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY:-}
+      - CLAUDE_API_KEYS=${CLAUDE_API_KEYS:-}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_API_KEYS=${GROQ_API_KEYS:-}
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # Threat intel enrichment (pentest only)
+      - NVD_API_KEY=${NVD_API_KEY:-}
+      - VIRUSTOTAL_API_KEY=${VIRUSTOTAL_API_KEY:-}
+      - ABUSEIPDB_API_KEY=${ABUSEIPDB_API_KEY:-}
+      - WAZUH_API_URL=https://host.docker.internal:55000
+      - WAZUH_VERIFY_SSL=false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+    stop_grace_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping --timeout 10 2>&1 | grep -q pong || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  # ── Celery Beat Scheduler (periodic tasks — Wazuh polling every 30s) ────────
+  # Beat must run as a single instance — never scale this service.
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber-sentinel-celery-beat
+    networks:
+      - sentinel-net
+    command: celery -A core.celery_app beat --loglevel=info --scheduler celery.beat.PersistentScheduler --pidfile /tmp/celerybeat.pid
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      # ROOT CAUSE FIX: beat must connect to the correct broker/backend
+      - CELERY_RESULT_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
+      - APP_REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/2
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 $$(cat /tmp/celerybeat.pid) 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  # ── Celery SOC Worker (dedicated queue for Wazuh poll + AI triage) ─────────
+  # 3 concurrent slots: 1 poll + 1 drain + 1 triage burst headroom.
+  celery-soc:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber-sentinel-celery-soc
+    networks:
+      - sentinel-net
+    command: celery -A core.celery_app worker --loglevel=info --pool=prefork --concurrency=3 -Q soc
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
+      # ROOT CAUSE FIX: without these two, dedup lock + triage queue + poll lock are all broken
+      - CELERY_RESULT_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
+      - APP_REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/2
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - ALLOW_PRIVATE_TARGETS=true
+      # AI keys needed for alert triage
+      - AI_PROVIDER=${AI_PROVIDER:-claude}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - SOC_AI_PROVIDER=${SOC_AI_PROVIDER:-}
+      # Wazuh REST API credentials (SOC worker only)
+      - WAZUH_API_URL=https://host.docker.internal:55000
+      - WAZUH_API_USER=${WAZUH_API_USER:-wazuh}
+      - WAZUH_API_PASSWORD=${WAZUH_API_PASSWORD:-}
+      - WAZUH_VERIFY_SSL=false
+      - WAZUH_WEBHOOK_TOKEN=${WAZUH_WEBHOOK_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping --timeout 10 2>&1 | grep -q pong || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+
+  # ── React Frontend (nginx serving the Vite static build) ─────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cyber-sentinel-frontend
+    networks:
+      - sentinel-net
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── OWASP ZAP (DAST scanner daemon) ──────────────────────────────────────
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: cyber-sentinel-zap
+    networks:
+      - sentinel-net
+    command: >
+      zap.sh -daemon -host 0.0.0.0 -port 8080
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+      -config api.key=${ZAP_API_KEY:-changeme}
+    environment:
+      - ZAP_API_KEY=${ZAP_API_KEY:-changeme}
+    # ZAP is accessed internally by the backend via http://zap:8080
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf \"http://localhost:8080/JSON/core/view/version/?apikey=$$ZAP_API_KEY\""]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1536m
+        reservations:
+          memory: 512m
+
+  # ── nginx Reverse Proxy ───────────────────────────────────────────────────
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: cyber-sentinel-nginx
+    networks:
+      - sentinel-net
+    ports:
+      - "8888:80"           # http://localhost:8888  ← open this in your browser
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Wazuh Forwarder ──────────────────────────────────────────────────────
+  forwarder:
+    image: python:3.11-alpine
+    container_name: cyber-sentinel-forwarder
+    networks:
+      - sentinel-net
+    command: python3 /app/scripts/wazuh_forwarder.py
+    environment:
+      - CYBER_SENTINEL_URL=http://backend:8000
+      - WAZUH_WEBHOOK_TOKEN=${WAZUH_WEBHOOK_TOKEN:-}
+      - TENANT_GROUP=${WAZUH_TENANT_GROUP:-tenant_lab}
+      - MIN_LEVEL=${WAZUH_MIN_LEVEL:-3}
+      - ALERTS_FILE=/var/ossec/logs/alerts/alerts.json
+      - STATE_FILE=/state/wazuh_forwarder.state
+    volumes:
+      - ./scripts:/app/scripts:ro          # forwarder script (read-only)
+      - /var/ossec/logs:/var/ossec/logs:ro # host Wazuh logs (read-only)
+      - forwarder_state:/state             # persists read offset across restarts
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Wazuh All-in-One (optional — docker-compose --profile wazuh up -d) ───
+  wazuh:
+    image: wazuh/wazuh-manager:4.9.2
+    container_name: cyber-sentinel-wazuh
+    networks:
+      - sentinel-net
+    profiles: ["wazuh"]
+    hostname: wazuh.manager
+    ports:
+      - "1514:1514/udp"
+      - "1515:1515"
+      - "55000:55000"
+      - "514:514/udp"
+    environment:
+      WAZUH_MANAGER_CONFIG: |
+        <ossec_config>
+          <global>
+            <jsonout_output>yes</jsonout_output>
+            <alerts_log>yes</alerts_log>
+            <logall>no</logall>
+          </global>
+        </ossec_config>
+    volumes:
+      - wazuh_api_config:/var/ossec/api/configuration
+      - wazuh_etc:/var/ossec/etc
+      - wazuh_logs:/var/ossec/logs
+      - wazuh_queue:/var/ossec/queue
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  mongo_data:
+  forwarder_state:
+  wazuh_api_config:
+  wazuh_etc:
+  wazuh_logs:
+  wazuh_queue:

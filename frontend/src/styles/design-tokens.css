@@ -1,0 +1,97 @@
+/* Cyber Sentinel — design system tokens */
+
+:root {
+  /* Type */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Density (overridden by data-density attribute) */
+  --density: 1;
+  --row-h: calc(36px * var(--density));
+  --pad-card: calc(20px * var(--density));
+  --gap-md: calc(16px * var(--density));
+  --gap-sm: calc(10px * var(--density));
+
+  /* Radii */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+
+  /* Severity (shared across themes) */
+  --sev-critical: oklch(0.66 0.21 25);
+  --sev-high: oklch(0.74 0.17 50);
+  --sev-medium: oklch(0.82 0.15 90);
+  --sev-low: oklch(0.74 0.14 150);
+  --sev-info: oklch(0.72 0.10 230);
+  --sev-critical-bg: oklch(0.66 0.21 25 / 0.12);
+  --sev-high-bg: oklch(0.74 0.17 50 / 0.12);
+  --sev-medium-bg: oklch(0.82 0.15 90 / 0.12);
+  --sev-low-bg: oklch(0.74 0.14 150 / 0.12);
+  --sev-info-bg: oklch(0.72 0.10 230 / 0.12);
+}
+
+/* DARK (default) */
+[data-theme="dark"] {
+  --bg: oklch(0.16 0.008 250);
+  --bg-2: oklch(0.18 0.009 250);
+  --surface: oklch(0.21 0.010 250);
+  --surface-2: oklch(0.24 0.011 250);
+  --surface-3: oklch(0.27 0.012 250);
+  --border: oklch(0.30 0.013 250);
+  --border-strong: oklch(0.38 0.014 250);
+  --text: oklch(0.97 0.005 250);
+  --text-2: oklch(0.78 0.012 250);
+  --text-3: oklch(0.58 0.015 250);
+  --text-4: oklch(0.45 0.015 250);
+  --accent: oklch(0.70 0.16 245);
+  --accent-hover: oklch(0.76 0.17 245);
+  --accent-fg: oklch(0.12 0.02 250);
+  --accent-soft: oklch(0.70 0.16 245 / 0.14);
+  --accent-2: oklch(0.72 0.14 50);
+  --accent-2-soft: oklch(0.72 0.14 50 / 0.14);
+  --shadow-card: 0 1px 0 0 oklch(1 0 0 / 0.03) inset, 0 8px 28px -16px oklch(0 0 0 / 0.6);
+  --grid-line: oklch(0.30 0.013 250 / 0.5);
+  color-scheme: dark;
+}
+
+/* LIGHT */
+[data-theme="light"] {
+  --bg: oklch(0.985 0.002 250);
+  --bg-2: oklch(0.97 0.003 250);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.97 0.003 250);
+  --surface-3: oklch(0.94 0.004 250);
+  --border: oklch(0.90 0.005 250);
+  --border-strong: oklch(0.82 0.008 250);
+  --text: oklch(0.18 0.012 250);
+  --text-2: oklch(0.36 0.012 250);
+  --text-3: oklch(0.52 0.012 250);
+  --text-4: oklch(0.66 0.012 250);
+  --accent: oklch(0.55 0.18 245);
+  --accent-hover: oklch(0.50 0.19 245);
+  --accent-fg: oklch(0.99 0 0);
+  --accent-soft: oklch(0.55 0.18 245 / 0.10);
+  --accent-2: oklch(0.58 0.15 40);
+  --accent-2-soft: oklch(0.58 0.15 40 / 0.10);
+  --shadow-card: 0 1px 0 0 oklch(0 0 0 / 0.03) inset, 0 1px 2px oklch(0 0 0 / 0.04), 0 8px 24px -18px oklch(0 0 0 / 0.12);
+  --grid-line: oklch(0.90 0.005 250 / 0.7);
+  color-scheme: light;
+}
+
+/* Accent variants */
+[data-accent="blue"]   { --accent: oklch(0.70 0.16 245); --accent-hover: oklch(0.76 0.17 245); --accent-soft: oklch(0.70 0.16 245 / 0.14); }
+[data-accent="coral"]  { --accent: oklch(0.72 0.14 40);  --accent-hover: oklch(0.78 0.15 40);  --accent-soft: oklch(0.72 0.14 40 / 0.14); }
+[data-accent="green"]  { --accent: oklch(0.74 0.16 150); --accent-hover: oklch(0.80 0.17 150); --accent-soft: oklch(0.74 0.16 150 / 0.14); }
+[data-accent="violet"] { --accent: oklch(0.70 0.18 295); --accent-hover: oklch(0.76 0.19 295); --accent-soft: oklch(0.70 0.18 295 / 0.14); }
+
+[data-theme="light"][data-accent="blue"]   { --accent: oklch(0.55 0.18 245); --accent-hover: oklch(0.50 0.19 245); --accent-soft: oklch(0.55 0.18 245 / 0.10); }
+[data-theme="light"][data-accent="coral"]  { --accent: oklch(0.58 0.16 40);  --accent-hover: oklch(0.52 0.17 40);  --accent-soft: oklch(0.58 0.16 40 / 0.10); }
+[data-theme="light"][data-accent="green"]  { --accent: oklch(0.55 0.16 150); --accent-hover: oklch(0.50 0.17 150); --accent-soft: oklch(0.55 0.16 150 / 0.10); }
+[data-theme="light"][data-accent="violet"] { --accent: oklch(0.55 0.20 295); --accent-hover: oklch(0.50 0.21 295); --accent-soft: oklch(0.55 0.20 295 / 0.10); }
+
+/* Density */
+[data-density="compact"]     { --density: 0.85; }
+[data-density="comfortable"] { --density: 1.0; }
+[data-density="spacious"]    { --density: 1.15; }

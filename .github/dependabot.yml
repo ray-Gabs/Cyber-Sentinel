@@ -1,0 +1,51 @@
+# ============================================================
+# Dependabot — Automated Dependency Updates
+# ============================================================
+# Opens PRs weekly when new versions of dependencies are available.
+# Grouped by ecosystem to avoid PR spam.
+# ============================================================
+
+version: 2
+updates:
+  # GitHub Actions — keep CI/CD action SHAs current
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: chore(ci)
+
+  # Python (pip) — backend
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      fastapi-stack:
+        patterns: ["fastapi", "uvicorn", "pydantic*", "starlette"]
+      database:
+        patterns: ["motor", "beanie", "pymongo"]
+      security:
+        patterns: ["PyJWT", "passlib", "bcrypt", "slowapi", "limits"]
+    commit-message:
+      prefix: chore(deps)
+    open-pull-requests-limit: 5
+
+  # npm — frontend
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      react-stack:
+        patterns: ["react", "react-*", "@types/react*"]
+      vite:
+        patterns: ["vite", "@vitejs/*"]
+      tailwind:
+        patterns: ["tailwindcss", "postcss", "autoprefixer"]
+    commit-message:
+      prefix: chore(deps)
+    open-pull-requests-limit: 5

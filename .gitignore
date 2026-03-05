@@ -1,0 +1,87 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+.env
+
+# Node
+node_modules/
+frontend/dist/
+frontend/build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Scan output (temp)
+backend/scan_output/
+
+# Secrets and tokens (extra safety)
+*.txt
+# Allow LLM prompt files checked into the repo
+!backend/ai/prompts/*.txt
+token*
+scan_id*
+secrets/
+*.key
+*.pem
+
+# Celery runtime files
+celerybeat-schedule
+celerybeat.pid
+
+# Python extras
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Claude Code session data
+.claude/projects/
+.claude/todos/
+
+# Environment variants
+.env.*
+!.env.example
+
+# Test outputs
+test-results/
+playwright-report/
+
+# Temporary scan files
+backend/scan_output/
+backend/reports/temp/
+
+#Misc
+CLAUDE.md
+Design.md
+.claude/
+
+# Internal planning and deployment docs (not for public repo)
+docs/
+deployment.md
+DEPLOYMENT.md
+tasklist.md
+TASKLIST.md
+setup-vm.sh

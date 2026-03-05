@@ -1,0 +1,145 @@
+# ============================================================
+# Cyber Sentinel — Continuous Integration
+# ============================================================
+# Runs on every push and PR.
+# All jobs must pass before deploy workflows can trigger.
+#
+# Gate order (each depends on the previous passing):
+#   1. lint-backend   — ruff, bandit, pip-audit
+#   2. lint-frontend  — eslint, tsc
+#   3. build          — Docker build (backend + frontend)
+#   4. test           — pytest (skips gracefully if no tests yet)
+# ============================================================
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------------------------------------
+  # 1. Backend — lint, type check, security scan
+  # ------------------------------------------------------------------
+  lint-backend:
+    name: Backend · Lint & Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install linting tools
+        run: pip install ruff==0.9.* bandit==1.8.* pip-audit==2.8.*
+
+      - name: Ruff (lint + import sort)
+        run: ruff check backend/ --exclude backend/venv
+
+      - name: Bandit (SAST — skip venv)
+        run: bandit -r backend/ -ll --exclude backend/venv -q
+
+      - name: pip-audit (dependency CVE scan)
+        # Fail on CVSS >= 7.0 (HIGH). Use --progress-spinner off in CI.
+        run: pip-audit -r backend/requirements.txt --progress-spinner off
+
+  # ------------------------------------------------------------------
+  # 2. Frontend — ESLint + TypeScript type check
+  # ------------------------------------------------------------------
+  lint-frontend:
+    name: Frontend · Lint & Types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: cd frontend && npm ci --prefer-offline
+
+      - name: ESLint
+        run: cd frontend && npm run lint
+
+      - name: TypeScript type check
+        # tsconfig.json already has noEmit: true — this is purely type validation
+        run: cd frontend && npx tsc --noEmit
+
+  # ------------------------------------------------------------------
+  # 3. Build — verify Dockerfiles compile cleanly
+  # ------------------------------------------------------------------
+  build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [lint-backend, lint-frontend]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349  # v3.7.1
+
+      - name: Build backend image
+        uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75  # v6.9.0
+        with:
+          context: ./backend
+          push: false
+          tags: cyber-sentinel-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75  # v6.9.0
+        with:
+          context: ./frontend
+          push: false
+          tags: cyber-sentinel-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ------------------------------------------------------------------
+  # 4. Test — pytest (gracefully skips if no test files found)
+  # ------------------------------------------------------------------
+  test:
+    name: Backend · Tests
+    runs-on: ubuntu-latest
+    needs: [lint-backend]
+    services:
+      mongo:
+        image: mongo:7
+        ports: ["27017:27017"]
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt pytest pytest-asyncio pytest-cov
+
+      - name: Run tests (skip if none exist)
+        env:
+          MONGODB_URI: mongodb://localhost:27017
+          REDIS_URL: redis://localhost:6379/0
+          JWT_SECRET: ci-test-secret-not-for-production
+          AI_PROVIDER: groq
+        run: |
+          if find backend/tests -name "test_*.py" -quit 2>/dev/null; then
+            cd backend && python -m pytest tests/ -v --cov=. --cov-report=term-missing --cov-fail-under=0
+          else
+            echo "No test files found — skipping (add backend/tests/ to enable)"
+          fi

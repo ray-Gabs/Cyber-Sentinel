@@ -1,0 +1,124 @@
+# ============================================================
+# docker-compose.prod.yml — Production Overrides
+# ============================================================
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Adds on top of docker-compose.yml:
+#   - restart: unless-stopped (survive reboots, stop on intentional docker stop)
+#   - log rotation: 10 MB / 5 files per service — prevents disk exhaustion
+#   - resource limits: cap CPU/RAM so one service can't starve others
+#   - production commands: 4 workers, prefork pool, no hot-reload
+# ============================================================
+
+services:
+
+  backend:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "10" }
+    # Production: 4 workers, no --reload, LOG_LEVEL from env
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--access-log"]
+    volumes: []          # Remove dev source volume mount — code is baked into image
+    environment:
+      PYTHONOPTIMIZE: "1"
+      LOG_LEVEL: "INFO"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  celery:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "10" }
+    # prefork on Linux prod; --pool=solo is Windows dev only
+    command: ["celery", "-A", "core.celery_app", "worker", "--loglevel=info", "--pool=prefork", "--concurrency=4", "-Q", "celery,soc"]
+    volumes: []
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  celery-beat:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "3" }
+    volumes: []
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  zap:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  frontend:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "3" }
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+  mongo:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    # WiredTiger cache cap + fsync journal every 100ms
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.5", "--journal", "--journalCommitInterval", "100"]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  redis:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "3" }
+    # AOF persistence: survive restarts without losing Celery task queue
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory", "200mb", "--maxmemory-policy", "allkeys-lru"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  nginx:
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 64M
