@@ -7,8 +7,9 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from core.config import settings
 from core.database import init_db, close_db
@@ -69,6 +70,20 @@ app.include_router(soc_router, prefix="/api/alerts", tags=["SOC"])
 @app.get("/api/health", tags=["System"])
 async def health():
     return {"status": "ok", "service": "Cyber Sentinel", "version": "1.0.0"}
+
+
+# --------------- Global Error Handler ---------------
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch any unhandled error and return a clean JSON response."""
+    # HTTPExceptions are already handled by FastAPI — this catches everything else
+    if isinstance(exc, HTTPException):
+        raise exc
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "error": str(exc) if settings.debug else None},
+    )
 
 
 # --------------- WebSocket Endpoint ---------------
