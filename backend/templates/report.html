@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Penetration Test Report — {{ scan.target }}</title>
+<style>
+  @page { size: A4; margin: 2cm; }
+  body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #1f2937; font-size: 13px; line-height: 1.6; }
+  h1 { font-size: 24px; color: #0e7490; margin: 0 0 4px; }
+  h2 { font-size: 16px; color: #0ea5e9; border-bottom: 2px solid #e5e7eb; padding-bottom: 4px; margin: 28px 0 12px; }
+  h3 { font-size: 14px; margin: 16px 0 8px; }
+  .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
+  .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  .meta-table td { padding: 6px 12px; border: 1px solid #e5e7eb; }
+  .meta-table td:first-child { font-weight: 600; width: 160px; background: #f9fafb; }
+  .sev-grid { display: flex; gap: 10px; margin: 12px 0 20px; }
+  .sev-card { text-align: center; padding: 10px 16px; border-radius: 8px; border: 1px solid #e5e7eb; flex: 1; }
+  .sev-card .count { font-size: 22px; font-weight: 700; }
+  .sev-card .label { font-size: 10px; text-transform: uppercase; color: #6b7280; margin-top: 2px; }
+  .critical { color: #dc2626; } .high { color: #ea580c; } .medium { color: #ca8a04; } .low { color: #16a34a; } .info { color: #6b7280; }
+  .findings-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .findings-table th { text-align: left; padding: 8px 10px; background: #f9fafb; border-bottom: 2px solid #e5e7eb; font-size: 11px; text-transform: uppercase; color: #6b7280; }
+  .findings-table td { padding: 6px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+  .sev-badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 10px; font-weight: 600; color: #fff; }
+  .sev-critical { background: #dc2626; } .sev-high { background: #ea580c; } .sev-medium { background: #ca8a04; } .sev-low { background: #16a34a; } .sev-info { background: #6b7280; }
+  .ai-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 14px; margin: 10px 0; white-space: pre-wrap; line-height: 1.7; }
+  .cve-tag { display: inline-block; background: #fef3c7; color: #92400e; font-size: 10px; padding: 1px 6px; border-radius: 4px; margin: 1px 2px; }
+  .tech-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .tech-tag { display: inline-block; background: #ecfdf5; color: #065f46; font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid #a7f3d0; }
+  .footer { margin-top: 32px; text-align: center; color: #9ca3af; font-size: 10px; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<h1>Cyber Sentinel — Penetration Test Report</h1>
+<p class="subtitle">Automated Security Assessment</p>
+
+<!-- Scan Metadata -->
+<table class="meta-table">
+  <tr><td>Target</td><td>{{ scan.target }}</td></tr>
+  <tr><td>Scan Type</td><td>{{ scan.scan_type | title }}</td></tr>
+  <tr><td>Status</td><td>{{ scan.status | title }}</td></tr>
+  <tr><td>Started</td><td>{{ scan.started_at.strftime('%Y-%m-%d %H:%M UTC') if scan.started_at else 'N/A' }}</td></tr>
+  <tr><td>Completed</td><td>{{ scan.completed_at.strftime('%Y-%m-%d %H:%M UTC') if scan.completed_at else 'N/A' }}</td></tr>
+  <tr><td>Risk Score</td><td>{{ '%.1f' | format(scan.risk_score) }}/10 {% if scan.risk_score >= 7 %}⚠️ HIGH RISK{% elif scan.risk_score >= 4 %}⚡ MEDIUM RISK{% else %}✅ LOW RISK{% endif %}</td></tr>
+  <tr><td>Total Findings</td><td>{{ findings | length }}</td></tr>
+  <tr><td>Tools Used</td><td>{{ scan.completed_tools | join(', ') }}</td></tr>
+</table>
+
+<!-- Severity Summary -->
+<h2>Severity Summary</h2>
+<div class="sev-grid">
+  <div class="sev-card"><div class="count critical">{{ counts.critical }}</div><div class="label">Critical</div></div>
+  <div class="sev-card"><div class="count high">{{ counts.high }}</div><div class="label">High</div></div>
+  <div class="sev-card"><div class="count medium">{{ counts.medium }}</div><div class="label">Medium</div></div>
+  <div class="sev-card"><div class="count low">{{ counts.low }}</div><div class="label">Low</div></div>
+  <div class="sev-card"><div class="count info">{{ counts.info }}</div><div class="label">Info</div></div>
+</div>
+
+{% if technologies %}
+<!-- Tech Stack Detected -->
+<h2>Detected Technologies</h2>
+<div class="tech-list">
+{% for tech in technologies %}
+  <span class="tech-tag">{{ tech.name }}{% if tech.version %} {{ tech.version }}{% endif %}</span>
+{% endfor %}
+</div>
+{% endif %}
+
+{% if scan.ai_summary and not scan.ai_summary.startswith('AI analysis') %}
+<!-- AI Analysis -->
+<h2>Executive Summary (AI-Generated)</h2>
+<div class="ai-box">{{ scan.ai_summary }}</div>
+
+{% if scan.ai_remediation %}
+<h2>Remediation Plan (AI-Generated)</h2>
+<div class="ai-box">{{ scan.ai_remediation }}</div>
+{% endif %}
+{% endif %}
+
+<!-- Findings -->
+<h2 class="page-break">Findings ({{ findings | length }})</h2>
+{% if findings %}
+<table class="findings-table">
+  <thead>
+    <tr>
+      <th style="width:80px">Severity</th>
+      <th>Finding</th>
+      <th style="width:90px">Tool</th>
+      <th style="width:160px">Location</th>
+      <th style="width:100px">CVEs</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for f in findings %}
+    <tr>
+      <td><span class="sev-badge sev-{{ f.severity }}">{{ f.severity | upper }}</span></td>
+      <td>
+        <strong>{{ f.name }}</strong>
+        {% if f.description %}<br><span style="color:#6b7280;font-size:11px">{{ f.description[:200] }}</span>{% endif %}
+      </td>
+      <td style="font-size:11px">{{ tool_labels.get(f.tool, f.tool) }}</td>
+      <td style="font-size:11px;word-break:break-all">{{ f.matched_at or '—' }}</td>
+      <td>
+        {% for ref in f.reference if 'CVE-' in ref %}
+          <span class="cve-tag">{{ ref }}</span>
+        {% endfor %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:#6b7280">No vulnerabilities detected.</p>
+{% endif %}
+
+<div class="footer">
+  Generated by Cyber Sentinel — {{ generated_at }} | Confidential
+</div>
+
+</body>
+</html>

@@ -2,6 +2,7 @@
 # backend/core/database.py — MongoDB Connection (Motor + Beanie)
 # ============================================================
 
+import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 
@@ -17,13 +18,15 @@ async def init_db() -> None:
     Call this once during FastAPI lifespan startup.
     """
     global _client
-    _client = AsyncIOMotorClient(settings.mongodb_uri)
+    _client = AsyncIOMotorClient(settings.mongodb_uri, tlsCAFile=certifi.where())
     database = _client[settings.mongodb_db_name]
 
     # Import all document models here so Beanie registers them.
     from domains.auth.models import User
     from domains.pentesting.models import Scan
     from domains.soc.models import Alert, AiVerdict
+    from domains.correlation.models import Correlation
+    from domains.soc.playbook import PlaybookExecution
 
     await init_beanie(
         database=database,
@@ -32,6 +35,8 @@ async def init_db() -> None:
             Scan,
             Alert,
             AiVerdict,
+            Correlation,
+            PlaybookExecution,
         ],
     )
 

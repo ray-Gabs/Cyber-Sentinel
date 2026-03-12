@@ -120,3 +120,85 @@ async def override_verdict(alert_id: str, data: AnalystOverrideRequest) -> Alert
         await latest.save()
 
     return alert
+
+
+async def enrich_alert_threat_intel(alert_id: str) -> Alert:
+    """Enrich an alert with VirusTotal + AbuseIPDB threat intelligence."""
+    from domains.soc.threat_intel import threat_intel_service
+
+    alert = await get_alert(alert_id)
+    results = await threat_intel_service.enrich_alert(alert)
+    alert.threat_intel = results
+    await alert.save()
+    return alert
+
+
+async def apply_mitre_mapping(alert: Alert) -> Alert:
+    """Apply MITRE ATT&CK mapping to an alert."""
+    from domains.soc.mitre_attack import map_alert_to_attack
+
+    techniques = map_alert_to_attack(alert)
+    alert.mitre_techniques = techniques
+    alert.mitre_tactics = list({t["tactic"] for t in techniques})
+    await alert.save()
+    return alert
+
+
+async def get_alert_stats() -> dict:
+    """Get aggregated alert statistics for the analytics dashboard."""
+    total = await Alert.find().count()
+    by_verdict = {
+        "true_positive": await Alert.find({"ai_verdict": "TRUE_POSITIVE"}).count(),
+        "false_positive": await Alert.find({"ai_verdict": "FALSE_POSITIVE"}).count(),
+        "unknown": await Alert.find({"ai_verdict": "UNKNOWN"}).count(),
+        "unanalysed": await Alert.find({"ai_verdict": None}).count(),
+    }
+    by_action = {
+        "escalate": await Alert.find({"ai_action": "ESCALATE"}).count(),
+        "monitor": await Alert.find({"ai_action": "MONITOR"}).count(),
+        "dismiss": await Alert.find({"ai_action": "DISMISS"}).count(),
+    }
+
+    # Severity distribution (Wazuh levels grouped)
+    by_severity = {
+        "critical": await Alert.find({"rule_level": {"$gte": 12}}).count(),
+        "high": await Alert.find({"rule_level": {"$gte": 8, "$lt": 12}}).count(),
+        "medium": await Alert.find({"rule_level": {"$gte": 4, "$lt": 8}}).count(),
+        "low": await Alert.find({"rule_level": {"$lt": 4}}).count(),
+    }
+
+    # Recent alerts (last 7 days) per day
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    daily_counts = []
+    for days_ago in range(6, -1, -1):
+        day_start = (now - timedelta(days=days_ago)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        count = await Alert.find({"timestamp": {"$gte": day_start, "$lt": day_end}}).count()
+        daily_counts.append({"date": day_start.strftime("%Y-%m-%d"), "count": count})
+
+    # Top rule IDs
+    pipeline = [
+        {"$group": {"_id": "$rule_id", "count": {"$sum": 1}, "desc": {"$first": "$rule_description"}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10},
+    ]
+    top_rules = await Alert.aggregate(pipeline).to_list()
+
+    # Top agents
+    agent_pipeline = [
+        {"$group": {"_id": "$agent_name", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10},
+    ]
+    top_agents = await Alert.aggregate(agent_pipeline).to_list()
+
+    return {
+        "total": total,
+        "by_verdict": by_verdict,
+        "by_action": by_action,
+        "by_severity": by_severity,
+        "daily_counts": daily_counts,
+        "top_rules": top_rules,
+        "top_agents": top_agents,
+    }

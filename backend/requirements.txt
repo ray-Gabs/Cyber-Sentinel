@@ -16,6 +16,7 @@ beanie==1.27.*             # MongoDB ODM (built on Motor + Pydantic)
 # --- Auth ---
 python-jose[cryptography]==3.3.*   # JWT encoding/decoding
 passlib[bcrypt]==1.7.*             # Password hashing
+bcrypt<5.0.0                       # Pin bcrypt 4.x (passlib compat)
 pydantic[email]==2.10.*            # Includes EmailStr
 pydantic-settings==2.7.*          # Settings from .env
 
@@ -24,7 +25,7 @@ celery==5.4.*
 redis==5.2.*
 
 # --- AI ---
-google-generativeai==0.8.*        # Gemini Flash SDK
+groq==0.25.*                      # Groq API SDK (Llama 3.3 70B)
 
 # --- Security Tools (Python libraries) ---
 python-nmap==0.7.*                # Nmap wrapper
@@ -35,7 +36,14 @@ sslyze==6.*                       # SSL/TLS analyser
 # --- HTTP ---
 httpx==0.28.*                     # Async HTTP client (for Wazuh + ZAP APIs)
 python-dotenv==1.0.*              # .env file loading
+beautifulsoup4==4.12.*            # HTML parsing (fallback crawler + fingerprinting)
 
 # --- Reports ---
 weasyprint==63.*                  # HTML → PDF report generation
 jinja2==3.1.*                     # HTML templates for reports
+
+# --- Threat Intelligence ---
+# VirusTotal + AbuseIPDB via httpx (already included above)
+
+# --- MITRE ATT&CK ---
+# Uses bundled STIX data + LLM classification (no extra deps)

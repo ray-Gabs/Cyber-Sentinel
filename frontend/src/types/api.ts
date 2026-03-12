@@ -26,7 +26,7 @@ export type {
   ScanStatus,
   Severity,
   Finding,
-  AiReport,
+  CVEData,
 } from "./scan";
 export type {
   Alert,
@@ -34,8 +34,13 @@ export type {
   AlertFilterParams,
   AlertClassification,
   AlertAction,
-  AlertStatus,
-  AiVerdict,
-  AnalystOverride,
   AnalystOverrideRequest,
+  AlertStats,
+  MitreTechnique,
+  ThreatIntelResult,
 } from "./alert";
+export type {
+  Correlation,
+  CorrelationLink,
+  CorrelationRunRequest,
+} from "./correlation";

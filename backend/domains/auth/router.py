@@ -9,6 +9,8 @@ from domains.auth.models import User
 from domains.auth.schemas import (
     RegisterRequest,
     LoginRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserResponse,
 )
@@ -36,6 +38,20 @@ async def register(data: RegisterRequest):
 async def login(data: LoginRequest):
     """Authenticate and receive a JWT access token."""
     return await service.authenticate_user(data)
+
+
+@router.post("/forgot-password", status_code=200)
+async def forgot_password(data: ForgotPasswordRequest):
+    """Send a password reset email. Always returns success to prevent user enumeration."""
+    await service.request_password_reset(data.email)
+    return {"detail": "If that email is registered, a reset link has been sent."}
+
+
+@router.post("/reset-password", status_code=200)
+async def reset_password(data: ResetPasswordRequest):
+    """Reset password using a valid reset token."""
+    await service.reset_password(data.token, data.new_password)
+    return {"detail": "Password updated successfully. You can now sign in."}
 
 
 @router.get("/me", response_model=UserResponse)

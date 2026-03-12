@@ -2,16 +2,22 @@
 # Cyber Sentinel — Docker Compose (Dev Environment)
 # ============================================================
 # Usage:
-#   docker-compose up -d          # Start MongoDB + Redis
-#   docker-compose down           # Stop everything
-#   docker-compose logs -f mongo  # Tail MongoDB logs
+#   docker-compose up -d                    # Start Redis only (using Atlas MongoDB)
+#   docker-compose --profile local-db up -d # Start Redis + local MongoDB
+#   docker-compose --profile zap up -d      # Start Redis + ZAP
+#   docker-compose --profile wazuh up -d    # Start Redis + Wazuh
+#   docker-compose down                     # Stop everything
+#
+# If you are using MongoDB Atlas (cloud), just run Redis.
+# If you want local MongoDB, use --profile local-db.
 # ============================================================
 
 services:
-  # ---- MongoDB ----
+  # ---- MongoDB (optional — use --profile local-db) ----
   mongo:
     image: mongo:7
     container_name: cyber-sentinel-mongo
+    profiles: ["local-db"]
     ports:
       - "27017:27017"
     volumes:
@@ -26,14 +32,46 @@ services:
       - "6379:6379"
     restart: unless-stopped
 
-  # ---- OWASP ZAP (optional — uncomment for full scans) ----
-  # zap:
-  #   image: ghcr.io/zaproxy/zaproxy:stable
-  #   container_name: cyber-sentinel-zap
-  #   command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.disablekey=true
-  #   ports:
-  #     - "8080:8080"
-  #   restart: unless-stopped
+  # ---- OWASP ZAP (optional — use --profile zap) ----
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: cyber-sentinel-zap
+    profiles: ["zap"]
+    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.disablekey=true
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  # ---- Wazuh All-in-One (optional — use --profile wazuh) ----
+  wazuh:
+    image: wazuh/wazuh-manager:4.9.2
+    container_name: cyber-sentinel-wazuh
+    profiles: ["wazuh"]
+    hostname: wazuh.manager
+    ports:
+      - "1514:1514/udp"   # Agent communication
+      - "1515:1515"       # Agent enrollment
+      - "55000:55000"     # Wazuh API
+      - "514:514/udp"     # Syslog
+    environment:
+      WAZUH_MANAGER_CONFIG: |
+        <ossec_config>
+          <global>
+            <jsonout_output>yes</jsonout_output>
+            <alerts_log>yes</alerts_log>
+            <logall>no</logall>
+          </global>
+        </ossec_config>
+    volumes:
+      - wazuh_api_config:/var/ossec/api/configuration
+      - wazuh_etc:/var/ossec/etc
+      - wazuh_logs:/var/ossec/logs
+      - wazuh_queue:/var/ossec/queue
+    restart: unless-stopped
 
 volumes:
   mongo_data:
+  wazuh_api_config:
+  wazuh_etc:
+  wazuh_logs:
+  wazuh_queue:

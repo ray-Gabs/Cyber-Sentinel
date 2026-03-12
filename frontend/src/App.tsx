@@ -30,6 +30,9 @@ import AlertFeed from "@/pages/soc/AlertFeed";
 import AlertDetail from "@/pages/soc/AlertDetail";
 import Analytics from "@/pages/soc/Analytics";
 import Settings from "@/pages/Settings";
+import Correlation from "@/pages/Correlation";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 
 // React Query client — used for data fetching/caching (you'll use this later)
 const queryClient = new QueryClient();
@@ -62,6 +65,8 @@ function AppRoutes() {
       {/* Public routes */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Protected routes — wrapped in the sidebar/header layout */}
       <Route
@@ -78,6 +83,7 @@ function AppRoutes() {
         <Route path="/alerts" element={<AlertFeed />} />
         <Route path="/alerts/:id" element={<AlertDetail />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/correlations" element={<Correlation />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
 

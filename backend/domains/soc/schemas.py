@@ -21,6 +21,7 @@ class AlertSummaryResponse(BaseModel):
     ai_confidence: Optional[float] = None
     ai_action: Optional[str] = None
     analyst_override: Optional[str] = None
+    mitre_techniques: list[dict] = []
     ingested_at: datetime
 
 
@@ -33,6 +34,8 @@ class AlertDetailResponse(AlertSummaryResponse):
     ai_reasoning: Optional[str] = None
     analyst_notes: Optional[str] = None
     analysed_at: Optional[datetime] = None
+    mitre_tactics: list[str] = []
+    threat_intel: Optional[dict] = None
 
 
 # --------------- Requests ---------------

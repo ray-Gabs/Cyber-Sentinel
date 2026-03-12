@@ -12,6 +12,7 @@ import {
   BarChart3,
   Settings,
   Shield,
+  Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
@@ -22,6 +23,7 @@ const navItems = [
   { to: ROUTES.SCANS, label: "Scans", icon: Crosshair },
   { to: ROUTES.ALERTS, label: "Alerts", icon: ShieldAlert },
   { to: ROUTES.ANALYTICS, label: "Analytics", icon: BarChart3 },
+  { to: ROUTES.CORRELATIONS, label: "Correlation", icon: Link2 },
   { to: ROUTES.SETTINGS, label: "Settings", icon: Settings },
 ];
 

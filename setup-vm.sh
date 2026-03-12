@@ -43,18 +43,25 @@ sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 # Let current user run docker without sudo
 sudo usermod -aG docker $USER
 
-# --- 5. Install Security Tools (optional but recommended) ---
+# --- 5. Install Security Tools ---
 echo "[5/7] Installing security tools..."
-sudo apt install -y nmap
+sudo apt install -y nmap whatweb unzip
 
 # Install Nuclei
 echo "  Installing Nuclei..."
 NUCLEI_VERSION=$(curl -s https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/v//')
 wget -q "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_amd64.zip" -O /tmp/nuclei.zip
-sudo apt install -y unzip
 unzip -o /tmp/nuclei.zip -d /tmp/
 sudo mv /tmp/nuclei /usr/local/bin/
 rm /tmp/nuclei.zip
+
+# Install Katana (web crawler)
+echo "  Installing Katana..."
+KATANA_VERSION=$(curl -s https://api.github.com/repos/projectdiscovery/katana/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/v//')
+wget -q "https://github.com/projectdiscovery/katana/releases/download/v${KATANA_VERSION}/katana_${KATANA_VERSION}_linux_amd64.zip" -O /tmp/katana.zip
+unzip -o /tmp/katana.zip -d /tmp/
+sudo mv /tmp/katana /usr/local/bin/
+rm /tmp/katana.zip
 
 # --- 6. Install Git ---
 echo "[6/7] Installing Git..."

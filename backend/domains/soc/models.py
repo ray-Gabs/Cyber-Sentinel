@@ -31,11 +31,18 @@ class Alert(Document):
     full_log: str = ""
     data: Optional[dict] = None                # syscheck, vulnerability, etc.
 
-    # AI verdict (populated after Gemini analysis)
+    # AI verdict (populated after LLM analysis)
     ai_verdict: Optional[str] = None           # TRUE_POSITIVE | FALSE_POSITIVE | UNKNOWN
     ai_confidence: Optional[float] = None      # 0.0 – 100.0
     ai_reasoning: Optional[str] = None
     ai_action: Optional[str] = None            # ESCALATE | MONITOR | DISMISS
+
+    # MITRE ATT&CK mapping
+    mitre_tactics: list[str] = []              # e.g. ["Credential Access", "Initial Access"]
+    mitre_techniques: list[dict] = []          # e.g. [{"tactic": "...", "technique": "T1110", "name": "Brute Force"}]
+
+    # Threat Intelligence enrichment
+    threat_intel: Optional[dict] = None        # VT + AbuseIPDB results
 
     # Human analyst override
     analyst_override: Optional[str] = None     # TRUE_POSITIVE | FALSE_POSITIVE
