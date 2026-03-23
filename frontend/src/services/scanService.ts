@@ -40,6 +40,15 @@ export async function deleteScan(id: string): Promise<void> {
   await api.delete(`/scans/${id}`);
 }
 
+/** POST /api/scans/ with same target+type as an existing scan → re-run */
+export async function reRunScan(scan: { target: string; scan_type: string }): Promise<Scan> {
+  const res = await api.post<Scan>("/scans/", {
+    target: scan.target,
+    scan_type: scan.scan_type,
+  });
+  return res.data;
+}
+
 /** GET /api/scans/:id/report/html → download HTML report */
 export async function exportHtmlReport(id: string): Promise<string> {
   const res = await api.get<string>(`/scans/${id}/report/html`, {
