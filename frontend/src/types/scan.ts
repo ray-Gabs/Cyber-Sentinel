@@ -41,8 +41,32 @@ export interface Finding {
   matched_at?: string;        // URL or host:port where found
   template_id?: string;       // Nuclei template ID
   reference?: string[];       // CVE links, references
+  references?: string[];      // Additional references (rich findings)
   cve_data?: CVEData[];       // NVD CVE + EPSS enrichment
   owasp_category?: string;    // OWASP 2025 category e.g. "A05:2025"
+  raw?: Record<string, unknown>;
+
+  // ── Precise location ──────────────────────────────────
+  affected_url?: string;
+  affected_parameter?: string;
+  http_method?: string;
+  injection_point?: string;
+  line_number?: number;
+
+  // ── Evidence ──────────────────────────────────────────
+  request_snippet?: string;
+  response_snippet?: string;
+  evidence?: string;
+
+  // ── Audience-specific context ─────────────────────────
+  plain_english?: string;        // Jargon-free explanation for non-technical users
+  technical_detail?: string;     // Precise technical detail for developers / pentesters
+  business_impact?: string;      // Business risk framing for stakeholders
+
+  // ── Remediation ───────────────────────────────────────
+  remediation_steps?: string[];
+  remediation_code?: string;
+  remediation_priority?: string; // "immediate" | "high" | "medium" | "low"
 }
 
 export interface Scan {

@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:21st.dev)",
+      "Bash(cd:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/mtshi/AppData/Local/Temp/claude/D--Dev-personal-Cyber-Sentinel-Cyber-Sentinel/21abe123-121f-4f41-bb09-44d22dd292bb/tasks/**)",
+      "Bash(done)",
+      "Bash(./venv/Scripts/python.exe -m py_compile domains/pentesting/tools/sqli_checker.py)",
+      "Bash(./venv/Scripts/python.exe -m py_compile domains/pentesting/tools/xss_checker.py)",
+      "Bash(grep -l \"_make_finding\" \"D:/Dev/personal/Cyber Sentinel/Cyber-Sentinel/backend/domains/pentesting/tools/\"*.py)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -rL \"_endpoint_context\" *.py)",
+      "Bash(./venv/Scripts/python.exe -m py_compile domains/pentesting/tools/auth_checker.py)",
+      "Bash(./venv/Scripts/python.exe -m py_compile domains/pentesting/tools/ssrf_checker.py)",
+      "Bash(xargs ./venv/Scripts/python.exe -m py_compile)"
+    ]
+  }
+}

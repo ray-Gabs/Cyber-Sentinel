@@ -110,6 +110,21 @@ class LLMService:
             if getattr(f, "reference", None):
                 refs = f.reference if isinstance(f.reference, list) else [f.reference]
                 entry["refs"] = refs[:3]
+            # Include new enriched fields when present
+            if getattr(f, "affected_parameter", None):
+                entry["param"] = f.affected_parameter
+            if getattr(f, "http_method", None):
+                entry["method"] = f.http_method
+            if getattr(f, "injection_point", None):
+                entry["injection_point"] = f.injection_point
+            if getattr(f, "evidence", None):
+                entry["evidence"] = f.evidence[:200]
+            if getattr(f, "plain_english", None):
+                entry["plain_english"] = f.plain_english[:200]
+            if getattr(f, "business_impact", None):
+                entry["business_impact"] = f.business_impact[:200]
+            if getattr(f, "remediation_priority", None):
+                entry["fix_priority"] = f.remediation_priority
             condensed.append(entry)
 
         # Build severity counts
@@ -273,6 +288,25 @@ class LLMService:
                     {"id": c.cve_id, "cvss": c.cvss_score, "epss": c.epss_score}
                     for c in f.cve_data[:3]
                 ]
+            # Include new enriched fields when present
+            if getattr(f, "affected_parameter", None):
+                entry["param"] = f.affected_parameter
+            if getattr(f, "http_method", None):
+                entry["method"] = f.http_method
+            if getattr(f, "injection_point", None):
+                entry["injection_point"] = f.injection_point
+            if getattr(f, "evidence", None):
+                entry["evidence"] = f.evidence[:250]
+            if getattr(f, "request_snippet", None):
+                entry["request"] = f.request_snippet[:200]
+            if getattr(f, "technical_detail", None):
+                entry["technical_detail"] = f.technical_detail[:250]
+            if getattr(f, "plain_english", None):
+                entry["plain_english"] = f.plain_english[:200]
+            if getattr(f, "business_impact", None):
+                entry["business_impact"] = f.business_impact[:200]
+            if getattr(f, "remediation_priority", None):
+                entry["fix_priority"] = f.remediation_priority
             condensed.append(entry)
 
         # Technology stack

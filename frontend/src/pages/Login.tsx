@@ -1,5 +1,6 @@
 /**
  * Login page — animated cybersecurity-themed sign-in.
+ * Background: DottedBackground canvas wave.
  */
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -8,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ShieldCheck, LogIn, AlertCircle, Eye, EyeOff, Lock, User, Sun, Moon } from "lucide-react";
 import { ROUTES } from "@/lib/constants";
+import { DottedBackground } from "@/components/ui/DottedBackground";
 
 const containerVariants = {
   hidden: {},
@@ -24,11 +26,11 @@ export default function Login() {
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername]       = useState("");
+  const [password, setPassword]       = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError]             = useState("");
+  const [loading, setLoading]         = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -52,36 +54,42 @@ export default function Login() {
       className="relative flex min-h-screen items-center justify-center px-4 overflow-hidden"
       style={{ backgroundColor: "var(--bg-base)" }}
     >
-      {/* Animated background grid */}
+      {/* ── Dotted wave background ── */}
+      <DottedBackground isDark={isDark} className="opacity-100" />
+
+      {/* ── Central radial glow — gives depth behind the card ── */}
+      <motion.div
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[120px] pointer-events-none"
+        style={{ backgroundColor: isDark ? "rgba(59,130,246,0.06)" : "rgba(37,99,235,0.06)" }}
+        animate={{ scale: [1, 1.08, 1], opacity: [0.7, 1, 0.7] }}
+        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      {/* ── Vignette — fades edges so card pops ── */}
       <div
-        className="absolute inset-0 opacity-30"
+        className="absolute inset-0 pointer-events-none"
         style={{
-          backgroundImage: isDark
-            ? "linear-gradient(rgba(14,165,233,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(14,165,233,0.06) 1px, transparent 1px)"
-            : "linear-gradient(rgba(2,132,199,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(2,132,199,0.06) 1px, transparent 1px)",
-          backgroundSize: "60px 60px",
+          background: isDark
+            ? "radial-gradient(ellipse 60% 60% at 50% 50%, transparent 40%, rgba(2,8,23,0.75) 100%)"
+            : "radial-gradient(ellipse 60% 60% at 50% 50%, transparent 40%, rgba(242,246,255,0.75) 100%)",
         }}
       />
 
-      {/* Radial glow */}
-      <motion.div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full blur-3xl pointer-events-none"
-        style={{ backgroundColor: isDark ? "rgba(14,165,233,0.04)" : "rgba(2,132,199,0.05)" }}
-        animate={{ scale: [1, 1.05, 1], opacity: [0.6, 1, 0.6] }}
-        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-      />
-
-      {/* Theme toggle in corner */}
+      {/* ── Theme toggle ── */}
       <button
         onClick={toggleTheme}
-        className="absolute top-5 right-5 btn-ghost rounded-full p-2"
+        className="absolute top-5 right-5 btn-ghost rounded-full p-2 z-10"
         title={isDark ? "Light mode" : "Dark mode"}
       >
-        {isDark ? <Sun size={16} style={{ color: "var(--text-muted)" }} /> : <Moon size={16} style={{ color: "var(--text-muted)" }} />}
+        {isDark
+          ? <Sun  size={16} style={{ color: "var(--text-muted)" }} />
+          : <Moon size={16} style={{ color: "var(--text-muted)" }} />
+        }
       </button>
 
+      {/* ── Login card ── */}
       <motion.div
-        className="relative w-full max-w-md"
+        className="relative w-full max-w-md z-10"
         variants={containerVariants}
         initial="hidden"
         animate="show"
@@ -91,22 +99,25 @@ export default function Login() {
           <motion.div
             className="relative mx-auto w-16 h-16 flex items-center justify-center"
             animate={{ y: [0, -5, 0] }}
-            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
           >
+            {/* Layered halo rings */}
             <div
-              className="absolute inset-0 rounded-2xl rotate-6 opacity-60"
+              className="absolute inset-0 rounded-2xl rotate-6 opacity-50"
               style={{ backgroundColor: "var(--accent-dim)" }}
             />
             <div
-              className="absolute inset-0 rounded-2xl -rotate-6 opacity-40"
+              className="absolute inset-0 rounded-2xl -rotate-6 opacity-30"
               style={{ backgroundColor: "var(--accent-dim)" }}
             />
+            {/* Icon container */}
             <div
               className="relative rounded-2xl w-full h-full flex items-center justify-center border"
               style={{
                 backgroundColor: "var(--bg-card)",
                 borderColor: "var(--accent)",
                 borderWidth: "1.5px",
+                boxShadow: "0 0 24px var(--accent-glow)",
               }}
             >
               <ShieldCheck size={28} style={{ color: "var(--accent)" }} />
@@ -115,7 +126,7 @@ export default function Login() {
 
           <h1
             className="mt-5 text-3xl font-bold tracking-tight"
-            style={{ fontFamily: "Space Grotesk, sans-serif", color: "var(--text-base)" }}
+            style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}
           >
             Cyber Sentinel
           </h1>
@@ -124,17 +135,21 @@ export default function Login() {
           </p>
         </motion.div>
 
-        {/* Card */}
+        {/* Form card */}
         <motion.form
           onSubmit={handleSubmit}
           className="card space-y-5"
           variants={itemVariants}
-          style={{ boxShadow: isDark ? "0 25px 60px rgba(0,0,0,0.5)" : "0 8px 30px rgba(0,0,0,0.08)" }}
+          style={{
+            boxShadow: isDark
+              ? "0 0 0 1px rgba(59,130,246,0.08), 0 32px 64px rgba(0,0,0,0.6)"
+              : "0 0 0 1px rgba(37,99,235,0.08), 0 8px 32px rgba(0,0,0,0.08)",
+          }}
         >
           <div>
             <h2
               className="text-lg font-semibold"
-              style={{ fontFamily: "Space Grotesk, sans-serif", color: "var(--text-base)" }}
+              style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}
             >
               Welcome back
             </h2>
@@ -210,11 +225,7 @@ export default function Login() {
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary w-full mt-2"
-          >
+          <button type="submit" disabled={loading} className="btn-primary w-full mt-2">
             {loading ? (
               <>
                 <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">

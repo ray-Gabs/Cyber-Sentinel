@@ -3,6 +3,7 @@
  */
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { ShieldAlert } from "lucide-react";
 import { getAlerts } from "@/services/alertService";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { formatDate, timeAgo, cn } from "@/lib/utils";
@@ -26,6 +27,14 @@ function levelColor(level: number): string {
   if (level >= 8) return "text-severity-high";
   if (level >= 5) return "text-severity-medium";
   return "text-severity-low";
+}
+
+function getSeverityBorder(level: number): string {
+  if (level >= 12) return "#EF4444";
+  if (level >= 8)  return "#F97316";
+  if (level >= 5)  return "#EAB308";
+  if (level >= 1)  return "#3B82F6";
+  return "#475569";
 }
 
 export default function AlertFeed() {
@@ -132,9 +141,13 @@ export default function AlertFeed() {
 
       {/* Alert list */}
       {alerts.length === 0 ? (
-        <div className="card">
-          <p className="text-gray-500 py-8 text-center">
-            No alerts yet. Connect Wazuh to start monitoring.
+        <div className="card flex flex-col items-center justify-center py-20 text-center">
+          <ShieldAlert size={36} className="mb-3" style={{ color: "var(--text-subtle)" }} />
+          <p className="text-base font-semibold" style={{ fontFamily: "Syne, sans-serif", color: "var(--text-muted)" }}>
+            No alerts yet
+          </p>
+          <p className="text-sm mt-1" style={{ color: "var(--text-subtle)" }}>
+            SOC alerts will appear here when Wazuh detects events
           </p>
         </div>
       ) : (
@@ -146,11 +159,26 @@ export default function AlertFeed() {
                 key={alert.id}
                 onClick={() => navigate(`/alerts/${alert.id}`)}
                 className="card cursor-pointer hover:border-gray-600 transition-colors"
+                style={{
+                  borderLeft: `3px solid ${getSeverityBorder(alert.rule_level)}`,
+                  paddingLeft: "16px",
+                }}
               >
                 <div className="flex items-start gap-4">
                   {/* Level badge */}
                   <div className="text-center shrink-0 w-12">
-                    <div className={cn("text-xl font-bold", levelColor(alert.rule_level))}>
+                    <div className={cn("text-xl font-bold flex items-center justify-center gap-1", levelColor(alert.rule_level))}>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: "6px",
+                          height: "6px",
+                          borderRadius: "50%",
+                          backgroundColor: getSeverityBorder(alert.rule_level),
+                          flexShrink: 0,
+                          verticalAlign: "middle",
+                        }}
+                      />
                       {alert.rule_level}
                     </div>
                     <div className="text-[10px] text-gray-500 uppercase">level</div>

@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useMotionValue, useSpring } from "framer-motion";
 import { getScans } from "@/services/scanService";
 import { getAlertStats } from "@/services/alertService";
 import { TOOL_INFO, SCAN_TYPE_LABELS } from "@/lib/constants";
@@ -17,6 +17,18 @@ import {
   ChevronRight, TrendingUp, Radio,
 } from "lucide-react";
 import type { ScanSummary, AlertStats } from "@/types";
+
+// ── Animated count-up number ───────────────────────────────────────────────
+function CountUp({ value }: { value: number }) {
+  const motionVal = useMotionValue(0);
+  const spring = useSpring(motionVal, { stiffness: 80, damping: 20 });
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => { motionVal.set(value); }, [value, motionVal]);
+  useEffect(() => spring.on("change", (v) => setDisplay(Math.round(v))), [spring]);
+
+  return <span>{display}</span>;
+}
 
 const containerVariants = {
   hidden: {},
@@ -143,6 +155,24 @@ export default function Dashboard() {
     (sum, s) => sum + (s.risk_score && s.risk_score >= 7 ? 1 : 0), 0
   );
 
+  // Severity buckets — derived from completed scans using risk_score bands
+  // Each bucket accumulates the finding_count of scans that fall in its band
+  const sevCritical = completedScans
+    .filter((s) => s.risk_score != null && s.risk_score >= 8)
+    .reduce((sum, s) => sum + (s.finding_count || 0), 0);
+  const sevHigh = completedScans
+    .filter((s) => s.risk_score != null && s.risk_score >= 6 && s.risk_score < 8)
+    .reduce((sum, s) => sum + (s.finding_count || 0), 0);
+  const sevMedium = completedScans
+    .filter((s) => s.risk_score != null && s.risk_score >= 4 && s.risk_score < 6)
+    .reduce((sum, s) => sum + (s.finding_count || 0), 0);
+  const sevLow = completedScans
+    .filter((s) => s.risk_score != null && s.risk_score < 4 && (s.finding_count || 0) > 0)
+    .reduce((sum, s) => sum + (s.finding_count || 0), 0);
+  const sevInfo = completedScans
+    .filter((s) => !s.risk_score && (s.finding_count || 0) === 0)
+    .length;
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-3">
@@ -164,7 +194,7 @@ export default function Dashboard() {
         className="flex items-center justify-between"
       >
         <div>
-          <h1 className="text-2xl font-bold" style={{ fontFamily: "Space Grotesk, sans-serif", color: "var(--text-base)" }}>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}>
             Security Dashboard
           </h1>
           <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
@@ -210,9 +240,9 @@ export default function Dashboard() {
                   </p>
                   <p
                     className="text-3xl font-bold mt-2 tabular-nums"
-                    style={{ fontFamily: "Space Grotesk, sans-serif", color: stat.color }}
+                    style={{ fontFamily: "Syne, sans-serif", color: stat.color }}
                   >
-                    {stat.value}
+                    <CountUp value={stat.value} />
                   </p>
                 </div>
                 <div
@@ -229,6 +259,94 @@ export default function Dashboard() {
           );
         })}
       </motion.div>
+
+      {/* Severity distribution bar — only shown when there are completed scans with findings */}
+      {totalFindings > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.28, duration: 0.35 }}
+          className="card"
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <div
+              className="flex items-center justify-center w-8 h-8 rounded-lg"
+              style={{ backgroundColor: "rgba(239,68,68,0.1)" }}
+            >
+              <Activity size={16} style={{ color: "var(--sev-critical)" }} />
+            </div>
+            <div>
+              <h2
+                className="text-sm font-semibold"
+                style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}
+              >
+                Severity Distribution
+              </h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                Findings across all completed scans
+              </p>
+            </div>
+          </div>
+
+          {/* Stacked bar */}
+          {(() => {
+            const sevSegments = [
+              { label: "Critical", count: sevCritical, color: "var(--sev-critical)" },
+              { label: "High",     count: sevHigh,     color: "var(--sev-high)"     },
+              { label: "Medium",   count: sevMedium,   color: "var(--sev-medium)"   },
+              { label: "Low",      count: sevLow,      color: "var(--sev-low)"      },
+              { label: "Info",     count: sevInfo,     color: "var(--sev-info)"     },
+            ];
+            const sevTotal = sevSegments.reduce((s, seg) => s + seg.count, 0) || 1;
+
+            return (
+              <>
+                {/* Bar */}
+                <div className="flex w-full h-3 rounded-full overflow-hidden gap-0.5 mb-4">
+                  {sevSegments.map((seg) => {
+                    const pct = (seg.count / sevTotal) * 100;
+                    return pct > 0 ? (
+                      <motion.div
+                        key={seg.label}
+                        title={`${seg.label}: ${seg.count}`}
+                        initial={{ scaleX: 0, originX: 0 }}
+                        animate={{ scaleX: 1 }}
+                        transition={{ duration: 0.7, ease: "easeOut", delay: 0.1 }}
+                        style={{
+                          width: `${pct}%`,
+                          backgroundColor: seg.color,
+                          transformOrigin: "left",
+                        }}
+                      />
+                    ) : null;
+                  })}
+                </div>
+
+                {/* Legend */}
+                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                  {sevSegments.map((seg) => (
+                    <div key={seg.label} className="flex items-center gap-1.5">
+                      <span
+                        className="w-2.5 h-2.5 rounded-sm shrink-0"
+                        style={{ backgroundColor: seg.color }}
+                      />
+                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        {seg.label}
+                      </span>
+                      <span
+                        className="text-xs font-semibold tabular-nums"
+                        style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}
+                      >
+                        {seg.count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+        </motion.div>
+      )}
 
       {/* SOC Alert strip — only shown when there's data */}
       {alertStats && alertStats.total > 0 && (
@@ -260,7 +378,7 @@ export default function Dashboard() {
                 style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}
               >
                 <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>{label}</p>
-                <p className="text-2xl font-bold mt-1 tabular-nums" style={{ fontFamily: "Space Grotesk, sans-serif", color }}>{value}</p>
+                <p className="text-2xl font-bold mt-1 tabular-nums" style={{ fontFamily: "Syne, sans-serif", color }}>{value}</p>
               </div>
             ))}
           </div>
