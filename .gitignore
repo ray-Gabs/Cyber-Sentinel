@@ -66,3 +66,8 @@ playwright-report/
 # Temporary scan files
 backend/scan_output/
 backend/reports/temp/
+
+#Misc
+CLAUDE.md
+Design.mdCLAUDE.md
+.claude/
