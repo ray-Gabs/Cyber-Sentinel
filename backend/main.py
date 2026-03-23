@@ -10,9 +10,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from core.config import settings
 from core.database import init_db, close_db
+from core.rate_limit import limiter
 from core.websocket import ws_manager
 
 
@@ -45,11 +48,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# --------------- Rate Limiting ---------------
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # --------------- CORS ---------------
+# Allow the primary frontend URL + any extras configured via CORS_EXTRA_ORIGINS.
+# For network deployments add: CORS_EXTRA_ORIGINS=http://192.168.x.x:5173
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

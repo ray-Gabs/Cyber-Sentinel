@@ -45,6 +45,13 @@ beautifulsoup4==4.12.*            # HTML parsing (fallback crawler + fingerprint
 xhtml2pdf==0.2.*                  # HTML → PDF report generation (pure Python)
 jinja2==3.1.*                     # HTML templates for reports
 
+# --- Rate Limiting ---
+slowapi==0.1.*                    # FastAPI rate limiting (backed by Redis)
+limits==3.*                       # Storage backends for slowapi
+
+# --- Async Email ---
+aiosmtplib==3.*                   # Async SMTP (non-blocking email sending)
+
 # --- Threat Intelligence ---
 # VirusTotal + AbuseIPDB via httpx (already included above)
 

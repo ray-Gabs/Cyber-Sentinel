@@ -75,6 +75,10 @@ class Settings(BaseSettings):
 
     # ---- Frontend ----
     frontend_url: str = "http://localhost:5173"
+    # Comma-separated list of additional allowed CORS origins.
+    # Use this when deploying on a network so other machines can reach the UI.
+    # Example: CORS_EXTRA_ORIGINS=http://192.168.1.50:5173,http://10.0.0.5:5173
+    cors_extra_origins: str = ""
 
     # ---- SMTP (password reset emails) ----
     smtp_host: str = ""
@@ -84,8 +88,25 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     smtp_use_tls: bool = True
 
-    # ---- Rate limiting ----
-    scan_rate_limit: int = 10  # max scans per user per hour
+    # ---- Rate limiting (slowapi format: "N/period") ----
+    # These protect against brute-force and abuse on public endpoints.
+    # Period: second | minute | hour | day
+    rate_limit_login: str = "10/minute"          # per IP
+    rate_limit_forgot_password: str = "5/hour"   # per IP — prevent email flooding
+    rate_limit_register: str = "10/hour"         # per IP
+    rate_limit_scan: str = "20/hour"             # per IP — prevent scan abuse
+
+    # Per-user scan quota (MongoDB-based, checked against authenticated user ID)
+    scan_rate_limit: int = 20                    # max scans per user per hour
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """All allowed CORS origins: primary frontend + any extras from env."""
+        origins = [self.frontend_url]
+        if self.cors_extra_origins:
+            extras = [o.strip() for o in self.cors_extra_origins.split(",") if o.strip()]
+            origins.extend(extras)
+        return origins
 
     @model_validator(mode="after")
     def _validate_secrets(self):
