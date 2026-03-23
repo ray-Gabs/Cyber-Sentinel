@@ -27,6 +27,8 @@ export type {
   Severity,
   Finding,
   CVEData,
+  AuthType,
+  AuthConfig,
 } from "./scan";
 export type {
   Alert,

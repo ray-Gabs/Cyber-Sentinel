@@ -1,15 +1,114 @@
 /**
- * Dashboard — overview page showing active scans, findings, alert stats, and recent activity.
+ * Dashboard — security posture overview with animated stat cards,
+ * live scan monitoring, SOC telemetry, and quick actions.
  */
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import { getScans } from "@/services/scanService";
 import { getAlertStats } from "@/services/alertService";
 import { TOOL_INFO, SCAN_TYPE_LABELS } from "@/lib/constants";
 import StatusBadge from "@/components/common/StatusBadge";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import ToolIcon from "@/components/common/ToolIcon";
+import {
+  Rocket, ShieldCheck, BarChart3, Link2,
+  Activity, AlertTriangle, CheckCircle2, Crosshair,
+  ChevronRight, TrendingUp, Radio,
+} from "lucide-react";
 import type { ScanSummary, AlertStats } from "@/types";
+
+const containerVariants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.07 } },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  show: (i: number) => ({
+    opacity: 1, y: 0,
+    transition: { delay: i * 0.07, duration: 0.35, ease: "easeOut" as const },
+  }),
+};
+
+const statCards = (
+  activeScans: number,
+  completedScans: number,
+  totalFindings: number,
+  criticalFindings: number,
+) => [
+  {
+    label: "Active Scans",
+    value: activeScans,
+    icon: Radio,
+    color: activeScans > 0 ? "var(--accent)" : "var(--text-muted)",
+    iconBg: activeScans > 0 ? "rgba(14,165,233,0.12)" : "var(--bg-muted)",
+    accent: activeScans > 0 ? "var(--accent)" : "var(--border-muted)",
+    pulse: activeScans > 0,
+  },
+  {
+    label: "Completed Scans",
+    value: completedScans,
+    icon: CheckCircle2,
+    color: "var(--text-base)",
+    iconBg: "rgba(34,197,94,0.1)",
+    accent: "#22c55e",
+    pulse: false,
+  },
+  {
+    label: "Total Findings",
+    value: totalFindings,
+    icon: Activity,
+    color: "var(--text-base)",
+    iconBg: "rgba(168,85,247,0.1)",
+    accent: "#a855f7",
+    pulse: false,
+  },
+  {
+    label: "High-Risk Targets",
+    value: criticalFindings,
+    icon: AlertTriangle,
+    color: criticalFindings > 0 ? "var(--sev-critical)" : "var(--text-muted)",
+    iconBg: criticalFindings > 0 ? "rgba(239,68,68,0.12)" : "var(--bg-muted)",
+    accent: criticalFindings > 0 ? "var(--sev-critical)" : "var(--border-muted)",
+    pulse: false,
+  },
+];
+
+const quickActions = [
+  {
+    to: "/scans/new",
+    icon: Rocket,
+    label: "New Scan",
+    desc: "Launch a penetration test",
+    accent: "var(--accent)",
+    accentBg: "var(--accent-dim)",
+  },
+  {
+    to: "/alerts",
+    icon: ShieldCheck,
+    label: "Alert Feed",
+    desc: "Wazuh SIEM alerts & AI verdicts",
+    accent: "#f59e0b",
+    accentBg: "rgba(245,158,11,0.1)",
+  },
+  {
+    to: "/analytics",
+    icon: BarChart3,
+    label: "Analytics",
+    desc: "Trends and statistics",
+    accent: "#a855f7",
+    accentBg: "rgba(168,85,247,0.1)",
+  },
+  {
+    to: "/correlations",
+    icon: Link2,
+    label: "Correlation",
+    desc: "Link findings to SOC alerts",
+    accent: "#22c55e",
+    accentBg: "rgba(34,197,94,0.1)",
+  },
+];
 
 export default function Dashboard() {
   const [scans, setScans] = useState<ScanSummary[]>([]);
@@ -25,7 +124,7 @@ export default function Dashboard() {
       if (scanData.status === "fulfilled") setScans(scanData.value);
       if (statsData.status === "fulfilled") setAlertStats(statsData.value);
     } catch {
-      // ignore
+      // silently fail
     } finally {
       setLoading(false);
     }
@@ -37,142 +136,253 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const activeScans = scans.filter((s) => s.status === "running" || s.status === "pending");
+  const activeScans  = scans.filter((s) => s.status === "running" || s.status === "pending");
   const completedScans = scans.filter((s) => s.status === "completed");
-  const totalFindings = scans.reduce((sum, s) => sum + (s.finding_count || 0), 0);
-  const criticalFindings = scans.reduce((sum, s) => {
-    // We only have finding_count in summary — use risk_score as proxy
-    return sum + (s.risk_score && s.risk_score >= 7 ? 1 : 0);
-  }, 0);
+  const totalFindings  = scans.reduce((sum, s) => sum + (s.finding_count || 0), 0);
+  const criticalFindings = scans.reduce(
+    (sum, s) => sum + (s.risk_score && s.risk_score >= 7 ? 1 : 0), 0
+  );
 
   if (loading) {
-    return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>;
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-3">
+        <LoadingSpinner size="lg" />
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading security telemetry...</p>
+      </div>
+    );
   }
+
+  const cards = statCards(activeScans.length, completedScans.length, totalFindings, criticalFindings);
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-      <p className="text-sm text-gray-500">Overview of your security posture</p>
+      {/* Page header */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex items-center justify-between"
+      >
+        <div>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: "Space Grotesk, sans-serif", color: "var(--text-base)" }}>
+            Security Dashboard
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
+            Real-time overview of your security posture
+          </p>
+        </div>
+        <div
+          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+          style={{ backgroundColor: "rgba(34,197,94,0.1)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.2)" }}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+          Platform Online
+        </div>
+      </motion.div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="card">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Active Scans</p>
-          <p className={`text-3xl font-bold mt-1 ${activeScans.length > 0 ? "text-sentinel-400" : "text-white"}`}>
-            {activeScans.length}
-          </p>
-        </div>
-        <div className="card">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Completed Scans</p>
-          <p className="text-3xl font-bold mt-1 text-white">{completedScans.length}</p>
-        </div>
-        <div className="card">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Total Findings</p>
-          <p className="text-3xl font-bold mt-1 text-white">{totalFindings}</p>
-        </div>
-        <div className="card">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">High-Risk Scans</p>
-          <p className={`text-3xl font-bold mt-1 ${criticalFindings > 0 ? "text-severity-critical" : "text-white"}`}>
-            {criticalFindings}
-          </p>
-        </div>
-      </div>
+      <motion.div
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+      >
+        {cards.map((stat, i) => {
+          const Icon = stat.icon;
+          return (
+            <motion.div
+              key={stat.label}
+              className="card relative overflow-hidden"
+              custom={i}
+              variants={cardVariants}
+              whileHover={{ y: -3, transition: { duration: 0.15 } }}
+              style={{ borderTop: `2px solid ${stat.accent}` }}
+            >
+              {/* Subtle background glow */}
+              <div
+                className="absolute top-0 right-0 w-20 h-20 rounded-full blur-2xl opacity-30 pointer-events-none"
+                style={{ backgroundColor: stat.accent }}
+              />
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                    {stat.label}
+                  </p>
+                  <p
+                    className="text-3xl font-bold mt-2 tabular-nums"
+                    style={{ fontFamily: "Space Grotesk, sans-serif", color: stat.color }}
+                  >
+                    {stat.value}
+                  </p>
+                </div>
+                <div
+                  className="relative flex items-center justify-center w-10 h-10 rounded-xl shrink-0"
+                  style={{ backgroundColor: stat.iconBg }}
+                >
+                  {stat.pulse && (
+                    <span className="absolute inset-0 rounded-xl animate-ping opacity-30" style={{ backgroundColor: stat.accent }} />
+                  )}
+                  <Icon size={18} style={{ color: stat.color }} />
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
+      </motion.div>
 
-      {/* SOC Alert Stats */}
+      {/* SOC Alert strip — only shown when there's data */}
       {alertStats && alertStats.total > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-gray-400 uppercase mb-3">SOC Overview</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="card">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Total Alerts</p>
-              <p className="text-3xl font-bold mt-1 text-white">{alertStats.total.toLocaleString()}</p>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.35 }}
+          className="card"
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg" style={{ backgroundColor: "rgba(245,158,11,0.12)" }}>
+              <TrendingUp size={16} style={{ color: "#f59e0b" }} />
             </div>
-            <div className="card">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">True Positives</p>
-              <p className="text-3xl font-bold mt-1 text-red-400">
-                {alertStats.by_verdict?.TRUE_POSITIVE ?? 0}
-              </p>
-            </div>
-            <div className="card">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Escalated</p>
-              <p className="text-3xl font-bold mt-1 text-orange-400">
-                {alertStats.by_action?.ESCALATE ?? 0}
-              </p>
-            </div>
-            <div className="card">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">False Positives</p>
-              <p className="text-3xl font-bold mt-1 text-green-400">
-                {alertStats.by_verdict?.FALSE_POSITIVE ?? 0}
-              </p>
+            <div>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text-base)" }}>SOC Overview</h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Wazuh alert telemetry</p>
             </div>
           </div>
-        </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { label: "Total Alerts", value: alertStats.total.toLocaleString(), color: "var(--text-base)" },
+              { label: "True Positives", value: alertStats.by_verdict?.TRUE_POSITIVE ?? 0, color: "var(--sev-critical)" },
+              { label: "Escalated", value: alertStats.by_action?.ESCALATE ?? 0, color: "var(--sev-high)" },
+              { label: "False Positives", value: alertStats.by_verdict?.FALSE_POSITIVE ?? 0, color: "#4ade80" },
+            ].map(({ label, value, color }) => (
+              <div
+                key={label}
+                className="rounded-xl p-3"
+                style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}
+              >
+                <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>{label}</p>
+                <p className="text-2xl font-bold mt-1 tabular-nums" style={{ fontFamily: "Space Grotesk, sans-serif", color }}>{value}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
       )}
 
-      {/* Active scans with live progress */}
+      {/* Active scans — live progress */}
       {activeScans.length > 0 && (
-        <div className="card border-sentinel-500/20">
-          <h2 className="text-lg font-semibold text-white mb-4">Active Scans</h2>
-          <div className="space-y-4">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25, duration: 0.35 }}
+          className="card"
+          style={{ borderColor: "var(--accent)", boxShadow: "0 0 0 1px var(--accent-dim), 0 4px 24px var(--accent-dim)" }}
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <div
+              className="flex items-center justify-center w-8 h-8 rounded-lg"
+              style={{ backgroundColor: "var(--accent-dim)" }}
+            >
+              <Crosshair size={16} style={{ color: "var(--accent)" }} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text-base)" }}>Active Scans</h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>{activeScans.length} scan{activeScans.length !== 1 ? "s" : ""} in progress</p>
+            </div>
+          </div>
+          <div className="space-y-3">
             {activeScans.map((scan) => (
-              <Link key={scan.id} to={`/scans/${scan.id}`} className="block">
-                <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4 hover:border-sentinel-500/40 transition-colors">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-white">{scan.target}</span>
+              <Link key={scan.id} to={`/scans/${scan.id}`} className="block group">
+                <div
+                  className="rounded-xl p-4 transition-colors"
+                  style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-sm font-medium truncate" style={{ color: "var(--text-base)" }}>{scan.target}</span>
                       <StatusBadge value={scan.status} variant="status" />
-                      <span className="text-xs text-gray-500">{SCAN_TYPE_LABELS[scan.scan_type]}</span>
+                      <span className="text-xs hidden sm:block" style={{ color: "var(--text-muted)" }}>
+                        {SCAN_TYPE_LABELS[scan.scan_type]}
+                      </span>
                     </div>
-                    <span className="text-sm text-white font-medium">{scan.progress}%</span>
+                    <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: "var(--accent)" }}>
+                      {scan.progress}%
+                    </span>
                   </div>
-                  <div className="w-full h-1.5 bg-gray-700 rounded-full">
-                    <div
-                      className="h-1.5 rounded-full bg-sentinel-500 transition-all duration-500"
-                      style={{ width: `${scan.progress}%` }}
+                  <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "var(--border)" }}>
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{ backgroundColor: "var(--accent)" }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${scan.progress}%` }}
+                      transition={{ duration: 0.5 }}
                     />
                   </div>
                   {scan.current_stage && TOOL_INFO[scan.current_stage] && (
-                    <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1">
-                      <ToolIcon name={TOOL_INFO[scan.current_stage].icon} size={12} /> Running: {TOOL_INFO[scan.current_stage].label}
-                      <span className="text-gray-600 ml-2">({TOOL_INFO[scan.current_stage].owasp})</span>
+                    <p className="text-xs mt-2 flex items-center gap-1.5" style={{ color: "var(--text-muted)" }}>
+                      <ToolIcon name={TOOL_INFO[scan.current_stage].icon} size={11} />
+                      {TOOL_INFO[scan.current_stage].label}
+                      <span style={{ color: "var(--text-subtle)" }}>— {TOOL_INFO[scan.current_stage].owasp}</span>
                     </p>
                   )}
                 </div>
               </Link>
             ))}
           </div>
-        </div>
+        </motion.div>
       )}
 
-      {/* Recent scans */}
+      {/* Bottom row: Recent scans + Quick actions */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="card">
+        {/* Recent scans */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35, duration: 0.35 }}
+          className="card"
+        >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Recent Scans</h2>
-            <Link to="/scans" className="text-xs text-sentinel-400 hover:underline">View all</Link>
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text-base)" }}>Recent Scans</h2>
+            <Link
+              to="/scans"
+              className="flex items-center gap-1 text-xs font-medium transition-opacity hover:opacity-70"
+              style={{ color: "var(--accent)" }}
+            >
+              View all <ChevronRight size={12} />
+            </Link>
           </div>
+
           {scans.length === 0 ? (
-            <p className="text-gray-500 py-8 text-center">No scans yet.</p>
+            <div className="flex flex-col items-center justify-center py-10 gap-3">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ backgroundColor: "var(--bg-muted)" }}>
+                <Crosshair size={22} style={{ color: "var(--text-subtle)" }} />
+              </div>
+              <p className="text-sm text-center" style={{ color: "var(--text-muted)" }}>No scans yet</p>
+              <Link to="/scans/new" className="btn-primary text-xs">Launch first scan</Link>
+            </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {scans.slice(0, 8).map((scan) => (
                 <Link
                   key={scan.id}
                   to={`/scans/${scan.id}`}
-                  className="flex items-center justify-between rounded-lg border border-gray-700/50 px-3 py-2 hover:border-gray-600 transition-colors"
+                  className="flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors group"
+                  style={{ border: "1px solid transparent" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--bg-muted)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; (e.currentTarget as HTMLElement).style.borderColor = "transparent"; }}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <StatusBadge value={scan.status} variant="status" />
-                    <span className="text-sm text-white truncate">{scan.target}</span>
+                    <span className="text-sm truncate" style={{ color: "var(--text-base)" }}>{scan.target}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-gray-500 shrink-0">
-                    <span>{scan.finding_count} findings</span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>{scan.finding_count} findings</span>
                     {scan.risk_score != null && (
-                      <span className={
-                        scan.risk_score >= 7 ? "text-severity-critical" :
-                        scan.risk_score >= 4 ? "text-severity-medium" :
-                        "text-severity-low"
-                      }>
+                      <span
+                        className="text-xs font-semibold tabular-nums"
+                        style={{
+                          color: scan.risk_score >= 7 ? "var(--sev-critical)" :
+                                 scan.risk_score >= 4 ? "var(--sev-medium)" : "#4ade80",
+                        }}
+                      >
                         {scan.risk_score.toFixed(1)}
                       </span>
                     )}
@@ -181,52 +391,45 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-        </div>
-        <div className="card">
-          <h2 className="text-lg font-semibold text-white mb-4">Quick Actions</h2>
-          <div className="space-y-3">
-            <Link
-              to="/scans/new"
-              className="flex items-center gap-3 rounded-lg border border-gray-700/50 px-4 py-3 hover:border-sentinel-500/40 transition-colors"
-            >
-              <span className="text-xl">🚀</span>
-              <div>
-                <p className="text-sm font-medium text-white">New Scan</p>
-                <p className="text-xs text-gray-500">Launch a penetration test against a target</p>
-              </div>
-            </Link>
-            <Link
-              to="/alerts"
-              className="flex items-center gap-3 rounded-lg border border-gray-700/50 px-4 py-3 hover:border-sentinel-500/40 transition-colors"
-            >
-              <span className="text-xl">🛡️</span>
-              <div>
-                <p className="text-sm font-medium text-white">Alert Feed</p>
-                <p className="text-xs text-gray-500">View Wazuh SIEM alerts and AI verdicts</p>
-              </div>
-            </Link>
-            <Link
-              to="/analytics"
-              className="flex items-center gap-3 rounded-lg border border-gray-700/50 px-4 py-3 hover:border-sentinel-500/40 transition-colors"
-            >
-              <span className="text-xl">📊</span>
-              <div>
-                <p className="text-sm font-medium text-white">Analytics</p>
-                <p className="text-xs text-gray-500">View trends and statistics</p>
-              </div>
-            </Link>
-            <Link
-              to="/correlations"
-              className="flex items-center gap-3 rounded-lg border border-gray-700/50 px-4 py-3 hover:border-sentinel-500/40 transition-colors"
-            >
-              <span className="text-xl">🔗</span>
-              <div>
-                <p className="text-sm font-medium text-white">Correlation</p>
-                <p className="text-xs text-gray-500">Link pentest findings to SOC alerts</p>
-              </div>
-            </Link>
+        </motion.div>
+
+        {/* Quick actions */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.42, duration: 0.35 }}
+          className="card"
+        >
+          <h2 className="text-sm font-semibold mb-4" style={{ color: "var(--text-base)" }}>Quick Actions</h2>
+          <div className="space-y-2.5">
+            {quickActions.map(({ to, icon: Icon, label, desc, accent, accentBg }) => (
+              <Link
+                key={to}
+                to={to}
+                className="flex items-center gap-3.5 rounded-xl p-3.5 transition-all group"
+                style={{ border: "1px solid var(--border)" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--bg-muted)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border-muted)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}
+              >
+                <div
+                  className="flex items-center justify-center w-9 h-9 rounded-xl shrink-0 transition-transform group-hover:scale-105"
+                  style={{ backgroundColor: accentBg }}
+                >
+                  <Icon size={17} style={{ color: accent }} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold" style={{ color: "var(--text-base)" }}>{label}</p>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>{desc}</p>
+                </div>
+                <ChevronRight
+                  size={14}
+                  className="ml-auto shrink-0 transition-transform group-hover:translate-x-0.5"
+                  style={{ color: "var(--text-subtle)" }}
+                />
+              </Link>
+            ))}
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

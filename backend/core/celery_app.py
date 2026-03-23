@@ -35,6 +35,8 @@ celery.conf.update(
     worker_prefetch_multiplier=1,
     # Each task gets a fresh connection (avoids stale Motor connections)
     worker_max_tasks_per_child=50,
+    # Celery 6.0 compatibility — retry broker connections on startup
+    broker_connection_retry_on_startup=True,
 )
 
 # --------------- Beat Schedule (Periodic Tasks) ---------------

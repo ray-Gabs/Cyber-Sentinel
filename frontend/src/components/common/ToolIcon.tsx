@@ -14,6 +14,11 @@ import {
   Swords,
   Sparkles,
   Wrench,
+  Settings,
+  Package,
+  Layout,
+  ShieldCheck,
+  AlertOctagon,
   type LucideProps,
 } from "lucide-react";
 
@@ -33,6 +38,11 @@ const iconMap: Record<string, React.ComponentType<LucideProps>> = {
   Swords,
   Sparkles,
   Wrench,
+  Settings,
+  Package,
+  Layout,
+  ShieldCheck,
+  AlertOctagon,
 };
 
 interface ToolIconProps extends LucideProps {

@@ -37,7 +37,6 @@ async def _poll_async():
 
     from domains.soc.wazuh_client import wazuh_client
     from domains.soc.service import ingest_wazuh_alert, apply_ai_verdict, apply_mitre_mapping
-    from domains.soc.mitre_attack import map_alert_to_attack
     from ai.llm_service import llm_service as gemini_service
 
     try:

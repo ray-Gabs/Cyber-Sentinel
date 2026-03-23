@@ -34,3 +34,35 @@ logs/
 
 # Scan output (temp)
 backend/scan_output/
+
+# Secrets and tokens (extra safety)
+*.txt
+token*
+scan_id*
+secrets/
+*.key
+*.pem
+
+# Python extras
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Claude Code session data
+.claude/projects/
+.claude/todos/
+
+# Environment variants
+.env.*
+!.env.example
+
+# Test outputs
+test-results/
+playwright-report/
+
+# Temporary scan files
+backend/scan_output/
+backend/reports/temp/

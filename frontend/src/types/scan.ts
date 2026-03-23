@@ -8,6 +8,18 @@ export type ScanStatus =
   | "failed"
   | "cancelled";
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
+export type AuthType = "none" | "cookie" | "bearer" | "basic" | "header";
+
+export interface AuthConfig {
+  auth_type: AuthType;
+  cookies?: string;
+  bearer_token?: string;
+  basic_username?: string;
+  basic_password?: string;
+  custom_headers?: Record<string, string>;
+  login_url?: string;
+  login_data?: Record<string, string>;
+}
 
 export interface CVEData {
   cve_id: string;
@@ -30,6 +42,7 @@ export interface Finding {
   template_id?: string;       // Nuclei template ID
   reference?: string[];       // CVE links, references
   cve_data?: CVEData[];       // NVD CVE + EPSS enrichment
+  owasp_category?: string;    // OWASP 2025 category e.g. "A05:2025"
 }
 
 export interface Scan {
@@ -56,6 +69,7 @@ export interface Scan {
   sslyze_raw?: Record<string, unknown>;
   whatweb_raw?: Record<string, unknown>;
   error_message?: string;
+  auth_config?: AuthConfig;
 }
 
 export interface ScanSummary {
@@ -75,4 +89,6 @@ export interface ScanSummary {
 export interface ScanCreateRequest {
   target: string;
   scan_type: ScanType;
+  tools_enabled?: string[];
+  auth_config?: AuthConfig;
 }

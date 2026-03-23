@@ -31,9 +31,25 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480  # 8 hours
 
-    # ---- Groq (Llama 3.3 70B) ----
+    # ---- AI Provider ----
+    # Set ai_provider to one of: groq | claude | openai | gemini
+    ai_provider: str = "groq"
+
+    # ---- Groq (Llama 3.3 70B — free tier) ----
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
+
+    # ---- Claude (Anthropic) ----
+    claude_api_key: str = ""
+    claude_model: str = "claude-sonnet-4-6"
+
+    # ---- OpenAI ----
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+
+    # ---- Gemini (Google) ----
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
 
     # ---- Wazuh ----
     wazuh_api_url: str = "https://localhost:55000"
@@ -81,9 +97,17 @@ class Settings(BaseSettings):
                 "Set JWT_SECRET in your .env file.",
                 stacklevel=2,
             )
-        if not self.groq_api_key:
+        # Check that the configured provider has a key
+        _provider_key_map = {
+            "groq": self.groq_api_key,
+            "claude": self.claude_api_key,
+            "openai": self.openai_api_key,
+            "gemini": self.gemini_api_key,
+        }
+        if not _provider_key_map.get(self.ai_provider, ""):
             warnings.warn(
-                "GROQ_API_KEY not set — AI analysis will be disabled.",
+                f"No API key found for AI provider '{self.ai_provider}' — "
+                "AI analysis will be disabled. Set the matching *_API_KEY in .env.",
                 stacklevel=2,
             )
         return self

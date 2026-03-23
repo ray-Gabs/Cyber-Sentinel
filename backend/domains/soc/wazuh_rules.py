@@ -50,7 +50,7 @@ CUSTOM_RULES: list[dict[str, Any]] = [
         "regex": r"(?:\.\./|\.\.\\|%2e%2e%2f|%2e%2e/|\.%2e/|%2e\./)",
         "xml": """<rule id="100003" level="8">
   <if_group>web|accesslog|apache|nginx</if_group>
-  <regex type="pcre2">(?i)(?:\\.\\.\/|\\.\\.\\\\|%2e%2e%2f|%2e%2e\/|\\.%2e\/|%2e\\.\\/)</regex>
+  <regex type="pcre2">(?i)(?:\\.\\./|\\.\\.\\\\|%2e%2e%2f|%2e%2e/|\\.%2e/|%2e\\.\\/)</regex>
   <description>Directory traversal attempt detected</description>
   <group>web_attack,attack,MITRE:T1190</group>
 </rule>""",
