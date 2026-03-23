@@ -1,0 +1,124 @@
+{% extends "email/base.html" %}
+
+{% block title %}Scan Complete — {{ target }} — Cyber Sentinel{% endblock %}
+
+{% block content %}
+  <!-- Status badge row -->
+  <table cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td style="background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);
+                 border-radius:6px;padding:4px 12px;">
+        <span style="color:#4ADE80;font-size:11px;font-weight:700;letter-spacing:0.08em;
+                     text-transform:uppercase;">&#10003; Completed</span>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Heading -->
+  <p style="margin:0 0 6px;font-size:22px;font-weight:700;color:#E2E8F0;letter-spacing:-0.4px;">
+    Scan complete
+  </p>
+  <p style="margin:0 0 28px;font-size:13px;color:#475569;font-family:'Courier New',Courier,monospace;
+             word-break:break-all;">
+    {{ target }}
+  </p>
+
+  <!-- Timing table -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;border-collapse:collapse;">
+    <tr>
+      <td style="padding:10px 14px;background:#0A0A0F;border:1px solid #2A2A3A;border-radius:8px 8px 0 0;">
+        <span style="font-size:11px;color:#475569;text-transform:uppercase;letter-spacing:0.08em;">Started</span><br/>
+        <span style="font-size:13px;color:#E2E8F0;font-family:'Courier New',monospace;">{{ started_at }}</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:10px 14px;background:#0A0A0F;border:1px solid #2A2A3A;border-top:0;">
+        <span style="font-size:11px;color:#475569;text-transform:uppercase;letter-spacing:0.08em;">Completed</span><br/>
+        <span style="font-size:13px;color:#E2E8F0;font-family:'Courier New',monospace;">{{ completed_at }}</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:10px 14px;background:#0A0A0F;border:1px solid #2A2A3A;border-top:0;border-radius:0 0 8px 8px;">
+        <span style="font-size:11px;color:#475569;text-transform:uppercase;letter-spacing:0.08em;">Duration</span><br/>
+        <span style="font-size:13px;color:#E2E8F0;">{{ duration }}</span>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Severity summary -->
+  {% if severity_summary %}
+  <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#94A3B8;text-transform:uppercase;
+             letter-spacing:0.06em;">Findings summary</p>
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;border-collapse:collapse;
+           border:1px solid #2A2A3A;border-radius:8px;overflow:hidden;">
+    {% if severity_summary.get('critical', 0) > 0 %}
+    <tr>
+      <td style="padding:10px 16px;background:#0A0A0F;border-bottom:1px solid #2A2A3A;">
+        <span style="display:inline-block;width:8px;height:8px;background:#EF4444;border-radius:50%;margin-right:8px;"></span>
+        <span style="font-size:13px;color:#94A3B8;">Critical</span>
+      </td>
+      <td style="padding:10px 16px;background:#0A0A0F;border-bottom:1px solid #2A2A3A;text-align:right;">
+        <strong style="font-size:13px;color:#F87171;">{{ severity_summary.critical }}</strong>
+      </td>
+    </tr>
+    {% endif %}
+    {% if severity_summary.get('high', 0) > 0 %}
+    <tr>
+      <td style="padding:10px 16px;background:#0A0A0F;border-bottom:1px solid #2A2A3A;">
+        <span style="display:inline-block;width:8px;height:8px;background:#F97316;border-radius:50%;margin-right:8px;"></span>
+        <span style="font-size:13px;color:#94A3B8;">High</span>
+      </td>
+      <td style="padding:10px 16px;background:#0A0A0F;border-bottom:1px solid #2A2A3A;text-align:right;">
+        <strong style="font-size:13px;color:#FB923C;">{{ severity_summary.high }}</strong>
+      </td>
+    </tr>
+    {% endif %}
+    {% if severity_summary.get('medium', 0) > 0 %}
+    <tr>
+      <td style="padding:10px 16px;background:#0A0A0F;border-bottom:1px solid #2A2A3A;">
+        <span style="display:inline-block;width:8px;height:8px;background:#EAB308;border-radius:50%;margin-right:8px;"></span>
+        <span style="font-size:13px;color:#94A3B8;">Medium</span>
+      </td>
+      <td style="padding:10px 16px;background:#0A0A0F;border-bottom:1px solid #2A2A3A;text-align:right;">
+        <strong style="font-size:13px;color:#FBBF24;">{{ severity_summary.medium }}</strong>
+      </td>
+    </tr>
+    {% endif %}
+    {% if severity_summary.get('low', 0) > 0 %}
+    <tr>
+      <td style="padding:10px 16px;background:#0A0A0F;border-bottom:1px solid #2A2A3A;">
+        <span style="display:inline-block;width:8px;height:8px;background:#22C55E;border-radius:50%;margin-right:8px;"></span>
+        <span style="font-size:13px;color:#94A3B8;">Low</span>
+      </td>
+      <td style="padding:10px 16px;background:#0A0A0F;border-bottom:1px solid #2A2A3A;text-align:right;">
+        <strong style="font-size:13px;color:#4ADE80;">{{ severity_summary.low }}</strong>
+      </td>
+    </tr>
+    {% endif %}
+    {% if severity_summary.get('info', 0) > 0 %}
+    <tr>
+      <td style="padding:10px 16px;background:#0A0A0F;">
+        <span style="display:inline-block;width:8px;height:8px;background:#3B82F6;border-radius:50%;margin-right:8px;"></span>
+        <span style="font-size:13px;color:#94A3B8;">Info</span>
+      </td>
+      <td style="padding:10px 16px;background:#0A0A0F;text-align:right;">
+        <strong style="font-size:13px;color:#60A5FA;">{{ severity_summary.info }}</strong>
+      </td>
+    </tr>
+    {% endif %}
+  </table>
+  {% endif %}
+
+  <!-- CTA Button -->
+  <table cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="background:linear-gradient(135deg,#3B82F6,#1D4ED8);border-radius:10px;">
+        <a href="{{ dashboard_url }}"
+           style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
+                  color:#ffffff;text-decoration:none;letter-spacing:-0.2px;">
+          View Full Report &rarr;
+        </a>
+      </td>
+    </tr>
+  </table>
+{% endblock %}
