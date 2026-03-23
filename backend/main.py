@@ -71,11 +71,13 @@ from domains.auth.router import router as auth_router
 from domains.pentesting.router import router as pentest_router
 from domains.soc.router import router as soc_router
 from domains.correlation.router import router as correlation_router
+from domains.notifications.router import router as notifications_router
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 app.include_router(pentest_router, prefix="/api/scans", tags=["Pentesting"])
 app.include_router(soc_router, prefix="/api/alerts", tags=["SOC"])
 app.include_router(correlation_router, prefix="/api/correlations", tags=["Correlation"])
+app.include_router(notifications_router, prefix="/api/notifications", tags=["Notifications"])
 
 # --------------- Health Check ---------------
 

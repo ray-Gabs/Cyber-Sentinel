@@ -31,6 +31,7 @@ async def init_db() -> None:
     from domains.soc.models import Alert, AiVerdict
     from domains.correlation.models import Correlation
     from domains.soc.playbook import PlaybookExecution
+    from domains.notifications.models import Notification
 
     await init_beanie(
         database=database,
@@ -41,6 +42,7 @@ async def init_db() -> None:
             AiVerdict,
             Correlation,
             PlaybookExecution,
+            Notification,
         ],
     )
 
