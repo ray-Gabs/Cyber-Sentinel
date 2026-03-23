@@ -22,13 +22,13 @@ export default {
           critical: "#ef4444",
           high:     "#f97316",
           medium:   "#eab308",
-          low:      "#3b82f6",
-          info:     "#6b7280",
+          low:      "#22c55e",
+          info:     "#3b82f6",
         },
       },
       fontFamily: {
         display: ["Syne", "system-ui", "sans-serif"],
-        sans:    ["IBM Plex Sans", "system-ui", "sans-serif"],
+        sans:    ["Plus Jakarta Sans", "IBM Plex Sans", "system-ui", "sans-serif"],
         mono:    ["JetBrains Mono", "Fira Code", "monospace"],
       },
       keyframes: {

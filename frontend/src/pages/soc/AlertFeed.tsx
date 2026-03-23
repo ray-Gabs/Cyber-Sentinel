@@ -1,50 +1,80 @@
 /**
- * AlertFeed — live alert list from Wazuh with AI triage verdicts.
+ * AlertFeed — live Wazuh alert list with AI triage verdicts.
+ * Fully themed with CSS variables. GitHub issue-list meets SOC dashboard.
  */
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ShieldAlert } from "lucide-react";
+import { motion } from "framer-motion";
+import { ShieldAlert, RefreshCw, ChevronRight } from "lucide-react";
 import { getAlerts } from "@/services/alertService";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import { formatDate, timeAgo, cn } from "@/lib/utils";
+import { timeAgo } from "@/lib/utils";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import type { AlertSummary } from "@/types";
 
-const VERDICT_COLORS: Record<string, string> = {
-  TRUE_POSITIVE: "text-red-400",
-  FALSE_POSITIVE: "text-green-400",
-  UNKNOWN: "text-yellow-400",
-};
-
-const ACTION_BADGES: Record<string, { bg: string; text: string }> = {
-  ESCALATE: { bg: "bg-red-500/10 border-red-500/30", text: "text-red-400" },
-  MONITOR: { bg: "bg-yellow-500/10 border-yellow-500/30", text: "text-yellow-400" },
-  DISMISS: { bg: "bg-gray-500/10 border-gray-500/30", text: "text-gray-400" },
-};
-
-function levelColor(level: number): string {
-  if (level >= 12) return "text-severity-critical";
-  if (level >= 8) return "text-severity-high";
-  if (level >= 5) return "text-severity-medium";
-  return "text-severity-low";
+// ── Severity helpers ───────────────────────────────────────────────────────
+function getSeverityColor(level: number): string {
+  if (level >= 12) return "var(--sev-critical)";
+  if (level >= 8)  return "var(--sev-high)";
+  if (level >= 5)  return "var(--sev-medium)";
+  return "var(--sev-low)";
 }
 
-function getSeverityBorder(level: number): string {
-  if (level >= 12) return "#EF4444";
-  if (level >= 8)  return "#F97316";
-  if (level >= 5)  return "#EAB308";
-  if (level >= 1)  return "#3B82F6";
-  return "#475569";
+function getSeverityLabel(level: number): string {
+  if (level >= 12) return "Critical";
+  if (level >= 8)  return "High";
+  if (level >= 5)  return "Medium";
+  return "Low";
 }
 
+// ── Verdict / action badge configs ────────────────────────────────────────
+const VERDICT_STYLE: Record<string, { bg: string; color: string; border: string }> = {
+  TRUE_POSITIVE:  { bg: "rgba(239,68,68,0.12)",          color: "var(--sev-critical-text)", border: "rgba(239,68,68,0.25)"          },
+  FALSE_POSITIVE: { bg: "var(--color-success-dim)",       color: "var(--sev-low-text)",      border: "var(--color-success-border)"   },
+  UNKNOWN:        { bg: "rgba(234,179,8,0.12)",           color: "var(--sev-medium-text)",   border: "rgba(234,179,8,0.25)"          },
+};
+
+const ACTION_STYLE: Record<string, { bg: string; color: string; border: string }> = {
+  ESCALATE: { bg: "rgba(239,68,68,0.08)",  color: "var(--sev-critical-text)", border: "rgba(239,68,68,0.2)"  },
+  MONITOR:  { bg: "rgba(234,179,8,0.08)",  color: "var(--sev-medium-text)",   border: "rgba(234,179,8,0.2)"  },
+  DISMISS:  { bg: "rgba(71,85,105,0.1)",   color: "var(--text-muted)",        border: "rgba(71,85,105,0.2)"  },
+};
+
+// ── Filter configs ─────────────────────────────────────────────────────────
+const VERDICT_FILTERS = [
+  { value: "",               label: "All Verdicts"   },
+  { value: "TRUE_POSITIVE",  label: "True Positive"  },
+  { value: "FALSE_POSITIVE", label: "False Positive" },
+  { value: "UNKNOWN",        label: "Unknown"        },
+];
+
+const LEVEL_FILTERS = [
+  { value: 0,  label: "All Levels"     },
+  { value: 12, label: "Critical 12+"   },
+  { value: 8,  label: "High 8+"        },
+  { value: 5,  label: "Medium 5+"      },
+];
+
+// ── Animations ─────────────────────────────────────────────────────────────
+const listVariants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.04 } },
+};
+const rowVariants = {
+  hidden: { opacity: 0, y: 8 },
+  show:   { opacity: 1, y: 0, transition: { duration: 0.22, ease: "easeOut" as const } },
+};
+
+// ── Component ──────────────────────────────────────────────────────────────
 export default function AlertFeed() {
   const navigate = useNavigate();
-  const [alerts, setAlerts] = useState<AlertSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
+  const [alerts, setAlerts]             = useState<AlertSummary[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [page, setPage]                 = useState(1);
   const [filterVerdict, setFilterVerdict] = useState("");
-  const [filterLevel, setFilterLevel] = useState(0);
-  const [filterAgent, setFilterAgent] = useState("");
+  const [filterLevel, setFilterLevel]   = useState(0);
+  const [filterAgent, setFilterAgent]   = useState("");
+  const [liveCount, setLiveCount]       = useState(0);
 
   const { messages } = useWebSocket<AlertSummary>({ channel: "alerts" });
 
@@ -58,92 +88,142 @@ export default function AlertFeed() {
         agent_name: filterAgent || undefined,
       });
       setAlerts(data);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
   }, [page, filterVerdict, filterLevel, filterAgent]);
 
-  useEffect(() => {
-    fetchAlerts();
-  }, [fetchAlerts]);
+  useEffect(() => { fetchAlerts(); }, [fetchAlerts]);
 
-  // Merge real-time alerts
+  // Merge real-time WebSocket alerts
   useEffect(() => {
     if (messages.length > 0 && page === 1) {
       const newest = messages[0]?.data;
       if (newest?.id && !alerts.some((a) => a.id === newest.id)) {
         setAlerts((prev) => [newest, ...prev].slice(0, 50));
+        setLiveCount((n) => n + 1);
       }
     }
   }, [messages]);
 
+  const uniqueAgents = [...new Set(alerts.map((a) => a.agent_name).filter(Boolean))];
+
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
+      <div className="flex flex-col items-center justify-center py-24 gap-3">
         <LoadingSpinner size="lg" />
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading alerts...</p>
       </div>
     );
   }
 
-  const uniqueAgents = [...new Set(alerts.map((a) => a.agent_name).filter(Boolean))];
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+
+      {/* ── Header ──────────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex items-start justify-between gap-4"
+      >
         <div>
-          <h1 className="text-2xl font-bold text-white">SOC Alerts</h1>
-          <p className="text-sm text-gray-500">
-            Wazuh alerts with AI triage — {alerts.length} alerts
+          <h1
+            className="text-2xl font-bold"
+            style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}
+          >
+            SOC Alerts
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
+            Wazuh alerts with AI triage
+            {liveCount > 0 && (
+              <span className="ml-2 inline-flex items-center gap-1" style={{ color: "var(--sev-low-text)" }}>
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                +{liveCount} live
+              </span>
+            )}
           </p>
         </div>
-        <button onClick={fetchAlerts} className="btn-secondary text-sm">
+        <button
+          onClick={() => { setLoading(true); fetchAlerts(); }}
+          className="btn-secondary shrink-0 gap-1.5"
+        >
+          <RefreshCw size={13} />
           Refresh
         </button>
-      </div>
+      </motion.div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <select
-          className="input text-xs py-1.5 w-auto"
-          value={filterVerdict}
-          onChange={(e) => { setFilterVerdict(e.target.value); setPage(1); }}
-        >
-          <option value="">All Verdicts</option>
-          <option value="TRUE_POSITIVE">True Positive</option>
-          <option value="FALSE_POSITIVE">False Positive</option>
-          <option value="UNKNOWN">Unknown</option>
-        </select>
+      {/* ── Filters ─────────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1, duration: 0.25 }}
+        className="space-y-2"
+      >
+        {/* Verdict filter chips */}
+        <div className="flex gap-1.5 flex-wrap">
+          {VERDICT_FILTERS.map(({ value, label }) => {
+            const active = filterVerdict === value;
+            return (
+              <button
+                key={value}
+                onClick={() => { setFilterVerdict(value); setPage(1); }}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
+                style={{
+                  backgroundColor: active ? "var(--accent-dim)" : "transparent",
+                  color:           active ? "var(--accent)"     : "var(--text-muted)",
+                  border:          active ? "1px solid rgba(59,130,246,0.3)" : "1px solid transparent",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
 
-        <select
-          className="input text-xs py-1.5 w-auto"
-          value={filterLevel}
-          onChange={(e) => { setFilterLevel(Number(e.target.value)); setPage(1); }}
-        >
-          <option value={0}>All Levels</option>
-          <option value={5}>Level 5+</option>
-          <option value={8}>Level 8+ (High)</option>
-          <option value={12}>Level 12+ (Critical)</option>
-        </select>
+        {/* Level + Agent filters */}
+        <div className="flex gap-1.5 flex-wrap items-center">
+          {LEVEL_FILTERS.map(({ value, label }) => {
+            const active = filterLevel === value;
+            return (
+              <button
+                key={value}
+                onClick={() => { setFilterLevel(value); setPage(1); }}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
+                style={{
+                  backgroundColor: active ? "rgba(234,179,8,0.12)" : "transparent",
+                  color:           active ? "var(--sev-medium-text)" : "var(--text-muted)",
+                  border:          active ? "1px solid rgba(234,179,8,0.3)" : "1px solid transparent",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
 
-        <select
-          className="input text-xs py-1.5 w-auto"
-          value={filterAgent}
-          onChange={(e) => { setFilterAgent(e.target.value); setPage(1); }}
-        >
-          <option value="">All Agents</option>
-          {uniqueAgents.map((a) => (
-            <option key={a} value={a}>{a}</option>
-          ))}
-        </select>
-      </div>
+          {uniqueAgents.length > 0 && (
+            <select
+              className="input text-xs py-1.5 w-auto"
+              style={{ maxWidth: "160px" }}
+              value={filterAgent}
+              onChange={(e) => { setFilterAgent(e.target.value); setPage(1); }}
+            >
+              <option value="">All Agents</option>
+              {uniqueAgents.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      </motion.div>
 
-      {/* Alert list */}
+      {/* ── Alert list ──────────────────────────────────────────── */}
       {alerts.length === 0 ? (
         <div className="card flex flex-col items-center justify-center py-20 text-center">
           <ShieldAlert size={36} className="mb-3" style={{ color: "var(--text-subtle)" }} />
-          <p className="text-base font-semibold" style={{ fontFamily: "Syne, sans-serif", color: "var(--text-muted)" }}>
+          <p
+            className="text-base font-semibold"
+            style={{ fontFamily: "Syne, sans-serif", color: "var(--text-muted)" }}
+          >
             No alerts yet
           </p>
           <p className="text-sm mt-1" style={{ color: "var(--text-subtle)" }}>
@@ -151,113 +231,187 @@ export default function AlertFeed() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <motion.div
+          className="space-y-2"
+          variants={listVariants}
+          initial="hidden"
+          animate="show"
+        >
           {alerts.map((alert) => {
-            const actionInfo = alert.ai_action ? ACTION_BADGES[alert.ai_action] : null;
+            const sevColor   = getSeverityColor(alert.rule_level);
+            const sevLabel   = getSeverityLabel(alert.rule_level);
+            const verdictSty = alert.ai_verdict ? VERDICT_STYLE[alert.ai_verdict] : null;
+            const actionSty  = alert.ai_action  ? ACTION_STYLE[alert.ai_action]   : null;
+
             return (
-              <div
+              <motion.div
                 key={alert.id}
+                variants={rowVariants}
                 onClick={() => navigate(`/alerts/${alert.id}`)}
-                className="card cursor-pointer hover:border-gray-600 transition-colors"
+                className="card cursor-pointer group transition-all duration-150"
                 style={{
-                  borderLeft: `3px solid ${getSeverityBorder(alert.rule_level)}`,
-                  paddingLeft: "16px",
+                  padding: "1rem 1.25rem 1rem 1rem",
+                  borderLeft: `3px solid ${sevColor}`,
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.borderColor = sevColor;
+                  (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
+                  (e.currentTarget as HTMLElement).style.boxShadow = `0 4px 16px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.04)`;
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.transform = "";
+                  (e.currentTarget as HTMLElement).style.boxShadow = "";
                 }}
               >
                 <div className="flex items-start gap-4">
                   {/* Level badge */}
-                  <div className="text-center shrink-0 w-12">
-                    <div className={cn("text-xl font-bold flex items-center justify-center gap-1", levelColor(alert.rule_level))}>
-                      <span
-                        style={{
-                          display: "inline-block",
-                          width: "6px",
-                          height: "6px",
-                          borderRadius: "50%",
-                          backgroundColor: getSeverityBorder(alert.rule_level),
-                          flexShrink: 0,
-                          verticalAlign: "middle",
-                        }}
-                      />
+                  <div
+                    className="w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0"
+                    style={{
+                      backgroundColor: `${sevColor}15`,
+                      border: `1px solid ${sevColor}30`,
+                    }}
+                  >
+                    <span
+                      className="text-base font-bold tabular-nums leading-none"
+                      style={{ color: sevColor, fontFamily: "JetBrains Mono, monospace" }}
+                    >
                       {alert.rule_level}
-                    </div>
-                    <div className="text-[10px] text-gray-500 uppercase">level</div>
+                    </span>
+                    <span
+                      className="text-[8px] uppercase tracking-wider mt-0.5"
+                      style={{ color: sevColor, opacity: 0.7 }}
+                    >
+                      {sevLabel.slice(0, 3)}
+                    </span>
                   </div>
 
                   {/* Main content */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-white truncate">
-                        {alert.rule_description}
-                      </span>
-                      <span className="text-xs text-gray-600 bg-gray-800 px-1.5 py-0.5 rounded">
-                        Rule {alert.rule_id}
-                      </span>
-                    </div>
+                    <p
+                      className="text-sm font-semibold truncate"
+                      style={{ color: "var(--text-base)" }}
+                    >
+                      {alert.rule_description}
+                    </p>
 
-                    <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-500">
-                      <span>{alert.agent_name}</span>
-                      <span title={formatDate(alert.timestamp)}>{timeAgo(alert.timestamp)}</span>
-                      {alert.mitre_techniques && alert.mitre_techniques.length > 0 && (
-                        <div className="flex gap-1">
-                          {alert.mitre_techniques.slice(0, 3).map((t, i) => (
-                            <span
-                              key={i}
-                              className="bg-purple-500/10 border border-purple-500/30 text-purple-400 px-1.5 py-0.5 rounded text-[10px]"
-                            >
-                              {t.technique}
-                            </span>
-                          ))}
-                        </div>
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      {alert.agent_name && (
+                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          {alert.agent_name}
+                        </span>
                       )}
+                      <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                        {timeAgo(alert.timestamp)}
+                      </span>
+                      <span
+                        className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+                        style={{
+                          backgroundColor: "var(--bg-muted)",
+                          color: "var(--text-subtle)",
+                          border: "1px solid var(--border)",
+                        }}
+                      >
+                        #{alert.rule_id}
+                      </span>
                     </div>
-                  </div>
 
-                  {/* Verdict + Action */}
-                  <div className="flex items-center gap-3 shrink-0">
-                    {alert.ai_verdict && (
-                      <div className="text-right">
-                        <div className={cn("text-xs font-medium", VERDICT_COLORS[alert.ai_verdict] ?? "text-gray-400")}>
-                          {alert.ai_verdict.replace("_", " ")}
-                        </div>
-                        {alert.ai_confidence != null && (
-                          <div className="text-[10px] text-gray-600">
-                            {Math.round(alert.ai_confidence * 100)}% conf
-                          </div>
-                        )}
+                    {/* MITRE techniques */}
+                    {alert.mitre_techniques && alert.mitre_techniques.length > 0 && (
+                      <div className="flex gap-1 mt-1.5 flex-wrap">
+                        {alert.mitre_techniques.slice(0, 3).map((t, i) => (
+                          <span
+                            key={i}
+                            className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                            style={{
+                              backgroundColor: "var(--color-purple-dim)",
+                              color: "var(--color-purple-text)",
+                              border: "1px solid var(--color-purple-border)",
+                            }}
+                          >
+                            {t.technique}
+                          </span>
+                        ))}
                       </div>
                     )}
-                    {actionInfo && alert.ai_action && (
-                      <span className={cn("text-[10px] font-medium border px-2 py-1 rounded", actionInfo.bg, actionInfo.text)}>
+                  </div>
+
+                  {/* Right: verdict + action + confidence */}
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    {verdictSty && alert.ai_verdict && (
+                      <span
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                        style={{
+                          backgroundColor: verdictSty.bg,
+                          color: verdictSty.color,
+                          border: `1px solid ${verdictSty.border}`,
+                        }}
+                      >
+                        {alert.ai_verdict.replace("_", " ")}
+                      </span>
+                    )}
+
+                    {actionSty && alert.ai_action && (
+                      <span
+                        className="text-[10px] font-medium px-2 py-0.5 rounded"
+                        style={{
+                          backgroundColor: actionSty.bg,
+                          color: actionSty.color,
+                          border: `1px solid ${actionSty.border}`,
+                        }}
+                      >
                         {alert.ai_action}
                       </span>
                     )}
+
+                    {alert.ai_confidence != null && (
+                      <span className="text-[10px]" style={{ color: "var(--text-subtle)" }}>
+                        {Math.round(alert.ai_confidence * 100)}% conf
+                      </span>
+                    )}
+
                     {alert.analyst_override && (
-                      <span className="text-[10px] font-medium border border-blue-500/30 bg-blue-500/10 text-blue-400 px-2 py-1 rounded">
+                      <span
+                        className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                        style={{
+                          backgroundColor: "var(--accent-dim)",
+                          color: "var(--sev-info-text)",
+                          border: "1px solid rgba(59,130,246,0.2)",
+                        }}
+                      >
                         OVERRIDE
                       </span>
                     )}
+
+                    {/* Arrow hint */}
+                    <ChevronRight
+                      size={13}
+                      className="transition-transform group-hover:translate-x-0.5"
+                      style={{ color: "var(--text-subtle)" }}
+                    />
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       )}
 
-      {/* Pagination */}
+      {/* ── Pagination ──────────────────────────────────────────── */}
       {alerts.length >= 50 && (
-        <div className="flex justify-center gap-3">
+        <div className="flex justify-center items-center gap-3 pt-2">
           <button
-            className="btn-secondary text-sm"
+            className="btn-secondary"
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
             Previous
           </button>
-          <span className="text-sm text-gray-400 self-center">Page {page}</span>
+          <span className="text-sm tabular-nums" style={{ color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+            Page {page}
+          </span>
           <button
-            className="btn-secondary text-sm"
+            className="btn-secondary"
             onClick={() => setPage((p) => p + 1)}
           >
             Next
