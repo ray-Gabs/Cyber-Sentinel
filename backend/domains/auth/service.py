@@ -37,6 +37,27 @@ async def register_user(data: RegisterRequest) -> User:
         hashed_password=hash_password(data.password),
     )
     await user.insert()
+
+    # Welcome email — non-blocking; registration succeeds even if email fails
+    try:
+        await send_email(
+            to=user.email,
+            subject="Welcome to Cyber Sentinel",
+            template="welcome.html",
+            context={
+                "username": user.username,
+                "dashboard_url": settings.frontend_url,
+            },
+            plain_text=(
+                f"Hi {user.username},\n\n"
+                f"Your Cyber Sentinel account is ready. "
+                f"Visit {settings.frontend_url} to get started.\n\n"
+                f"— Cyber Sentinel"
+            ),
+        )
+    except Exception as e:
+        log.warning("Welcome email not sent to %s: %s", user.email, e)
+
     return user
 
 
@@ -138,3 +159,26 @@ async def reset_password(token: str, new_password: str) -> None:
 
     user.hashed_password = hash_password(new_password)
     await user.save()
+
+    # Password-changed security notification — non-blocking
+    changed_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    try:
+        await send_email(
+            to=user.email,
+            subject="Security Alert — Your Cyber Sentinel Password Was Changed",
+            template="change_password.html",
+            context={
+                "username": user.username,
+                "changed_at": changed_at,
+                "dashboard_url": settings.frontend_url,
+                "support_url": settings.frontend_url,
+            },
+            plain_text=(
+                f"Hi {user.username},\n\n"
+                f"Your Cyber Sentinel password was changed at {changed_at}.\n\n"
+                f"If you didn't do this, contact your administrator immediately.\n\n"
+                f"— Cyber Sentinel"
+            ),
+        )
+    except Exception as e:
+        log.warning("Password-changed email not sent to %s: %s", user.email, e)

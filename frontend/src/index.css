@@ -279,6 +279,18 @@
     box-shadow: 0 0 0 3px var(--accent-dim);
   }
 
+  /* ── Autofill override — prevents browser from painting yellow/blue over inputs ── */
+  .input:-webkit-autofill,
+  .input:-webkit-autofill:hover,
+  .input:-webkit-autofill:focus,
+  .input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px var(--bg-input) inset !important;
+    -webkit-text-fill-color: var(--text-base) !important;
+    caret-color: var(--text-base);
+    border-color: var(--border-muted) !important;
+    transition: background-color 9999s ease-in-out 0s;
+  }
+
   .label {
     display: block;
     font-size: 0.8125rem;

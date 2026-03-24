@@ -16,7 +16,6 @@ import {
   Rocket, ShieldCheck, BarChart3, Link2,
   Activity, AlertTriangle, CheckCircle2,
   ChevronRight, TrendingUp, Radio, Crosshair,
-  ExternalLink,
 } from "lucide-react";
 import type { ScanSummary, AlertStats } from "@/types";
 
@@ -49,28 +48,26 @@ function CountUp({ value }: { value: number }) {
   return <span>{display}</span>;
 }
 
-// ── Risk gradient for scan card thumbnail ─────────────────────────────────
-function getScanGradient(scan: ScanSummary): string {
-  if (scan.status === "running" || scan.status === "pending")
-    return "linear-gradient(135deg, rgba(59,130,246,0.5) 0%, rgba(147,197,253,0.15) 100%)";
-  if (scan.status === "failed")
-    return "linear-gradient(135deg, rgba(239,68,68,0.4) 0%, rgba(239,68,68,0.1) 100%)";
-  if (scan.risk_score == null)
-    return "linear-gradient(135deg, rgba(71,85,105,0.35) 0%, rgba(71,85,105,0.1) 100%)";
-  if (scan.risk_score >= 7)
-    return "linear-gradient(135deg, rgba(239,68,68,0.55) 0%, rgba(249,115,22,0.25) 100%)";
-  if (scan.risk_score >= 4)
-    return "linear-gradient(135deg, rgba(234,179,8,0.5) 0%, rgba(234,179,8,0.15) 100%)";
-  return "linear-gradient(135deg, rgba(34,197,94,0.4) 0%, rgba(34,197,94,0.1) 100%)";
+// ── Scan card accent colors ────────────────────────────────────────────────
+interface ScanCardColors {
+  border: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
 }
 
-function getRiskColor(score: number | null | undefined, status: string): string {
-  if (status === "running" || status === "pending") return "var(--sev-info-text)";
-  if (status === "failed") return "var(--sev-critical-text)";
-  if (score == null) return "var(--text-subtle)";
-  if (score >= 7) return "var(--sev-critical-text)";
-  if (score >= 4) return "var(--sev-medium-text)";
-  return "var(--sev-low-text)";
+function getScanColors(scan: ScanSummary): ScanCardColors {
+  if (scan.status === "running" || scan.status === "pending")
+    return { border: "var(--sev-info)", badgeBg: "rgba(59,130,246,0.12)", badgeText: "var(--sev-info-text)", badgeBorder: "rgba(59,130,246,0.25)" };
+  if (scan.status === "failed")
+    return { border: "var(--sev-critical)", badgeBg: "rgba(239,68,68,0.12)", badgeText: "var(--sev-critical-text)", badgeBorder: "rgba(239,68,68,0.25)" };
+  if (scan.risk_score == null)
+    return { border: "var(--border-muted)", badgeBg: "var(--bg-muted)", badgeText: "var(--text-muted)", badgeBorder: "var(--border-muted)" };
+  if (scan.risk_score >= 7)
+    return { border: "var(--sev-critical)", badgeBg: "rgba(239,68,68,0.12)", badgeText: "var(--sev-critical-text)", badgeBorder: "rgba(239,68,68,0.25)" };
+  if (scan.risk_score >= 4)
+    return { border: "var(--sev-high)", badgeBg: "rgba(249,115,22,0.12)", badgeText: "var(--sev-high-text)", badgeBorder: "rgba(249,115,22,0.3)" };
+  return { border: "var(--sev-low)", badgeBg: "rgba(34,197,94,0.12)", badgeText: "var(--sev-low-text)", badgeBorder: "rgba(34,197,94,0.25)" };
 }
 
 function getDomain(url: string): string {
@@ -85,7 +82,7 @@ function getDomain(url: string): string {
 // ── Scan grid card ─────────────────────────────────────────────────────────
 function ScanGridCard({ scan }: { scan: ScanSummary }) {
   const navigate = useNavigate();
-  const riskColor = getRiskColor(scan.risk_score, scan.status);
+  const colors = getScanColors(scan);
   const isActive = scan.status === "running" || scan.status === "pending";
 
   return (
@@ -94,43 +91,14 @@ function ScanGridCard({ scan }: { scan: ScanSummary }) {
       onClick={() => navigate(`/scans/${scan.id}`)}
       whileHover={{ y: -3 }}
       transition={{ duration: 0.15 }}
+      style={{ borderTop: `2px solid ${colors.border}` }}
     >
-      {/* Thumbnail gradient */}
-      <div
-        className="relative flex items-center justify-between px-3 py-2.5"
-        style={{ background: getScanGradient(scan), minHeight: "52px" }}
-      >
-        <StatusBadge value={scan.status} variant="status" />
-
-        {isActive ? (
-          <div className="flex items-center gap-1.5">
-            <span
-              className="w-1.5 h-1.5 rounded-full animate-pulse"
-              style={{ backgroundColor: "var(--sev-info-text)" }}
-            />
-            <span
-              className="text-xs font-semibold tabular-nums"
-              style={{ color: "var(--sev-info-text)", fontFamily: "JetBrains Mono, monospace" }}
-            >
-              {scan.progress}%
-            </span>
-          </div>
-        ) : scan.risk_score != null ? (
-          <span
-            className="text-sm font-bold tabular-nums"
-            style={{ color: riskColor, fontFamily: "JetBrains Mono, monospace" }}
-          >
-            {scan.risk_score.toFixed(1)}
-          </span>
-        ) : null}
-      </div>
-
       {/* Progress bar for running scans */}
       {isActive && (
         <div className="w-full h-0.5" style={{ backgroundColor: "var(--border)" }}>
           <motion.div
             className="h-full"
-            style={{ backgroundColor: "#3B82F6" }}
+            style={{ backgroundColor: colors.border }}
             initial={{ width: 0 }}
             animate={{ width: `${scan.progress}%` }}
             transition={{ duration: 0.5 }}
@@ -139,7 +107,33 @@ function ScanGridCard({ scan }: { scan: ScanSummary }) {
       )}
 
       {/* Card body */}
-      <div className="px-3 py-2.5 flex flex-col gap-1">
+      <div className="px-3 pt-3 pb-2.5 flex flex-col gap-2">
+        {/* Status + score row */}
+        <div className="flex items-center justify-between gap-1.5">
+          <StatusBadge value={scan.status} variant="status" />
+          {isActive ? (
+            <span
+              className="text-xs font-bold tabular-nums"
+              style={{ color: "var(--sev-info-text)", fontFamily: "JetBrains Mono, monospace" }}
+            >
+              {scan.progress}%
+            </span>
+          ) : scan.risk_score != null ? (
+            <span
+              className="text-xs font-bold px-1.5 py-0.5 rounded tabular-nums"
+              style={{
+                backgroundColor: colors.badgeBg,
+                color: colors.badgeText,
+                border: `1px solid ${colors.badgeBorder}`,
+                fontFamily: "JetBrains Mono, monospace",
+              }}
+            >
+              {scan.risk_score.toFixed(1)}
+            </span>
+          ) : null}
+        </div>
+
+        {/* Domain */}
         <p
           className="text-xs font-semibold truncate"
           style={{ color: "var(--text-base)", fontFamily: "JetBrains Mono, monospace" }}
@@ -148,13 +142,11 @@ function ScanGridCard({ scan }: { scan: ScanSummary }) {
           {getDomain(scan.target)}
         </p>
 
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
-            <span>{scan.finding_count} findings</span>
-            <span className="w-0.5 h-0.5 rounded-full" style={{ backgroundColor: "var(--text-subtle)" }} />
-            <span>{SCAN_TYPE_LABELS[scan.scan_type] || scan.scan_type}</span>
-          </div>
-          <ExternalLink size={10} style={{ color: "var(--text-subtle)", flexShrink: 0 }} />
+        {/* Meta */}
+        <div className="flex items-center gap-1.5 text-[10px]" style={{ color: "var(--text-muted)" }}>
+          <span>{scan.finding_count} findings</span>
+          <span className="w-0.5 h-0.5 rounded-full" style={{ backgroundColor: "var(--text-subtle)" }} />
+          <span className="truncate">{SCAN_TYPE_LABELS[scan.scan_type] || scan.scan_type}</span>
         </div>
       </div>
     </motion.div>
@@ -367,7 +359,7 @@ export default function Dashboard() {
                   </p>
                   <p
                     className="text-3xl font-bold mt-2 tabular-nums"
-                    style={{ fontFamily: "Syne, sans-serif", color: stat.color }}
+                    style={{ fontFamily: "Space Grotesk, sans-serif", color: stat.color }}
                   >
                     <CountUp value={stat.value} />
                   </p>
@@ -484,7 +476,7 @@ export default function Dashboard() {
                 style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}
               >
                 <p className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: "var(--text-muted)" }}>{label}</p>
-                <p className="text-2xl font-bold mt-1 tabular-nums" style={{ fontFamily: "Syne, sans-serif", color }}>{value}</p>
+                <p className="text-2xl font-bold mt-1 tabular-nums" style={{ fontFamily: "Space Grotesk, sans-serif", color }}>{value}</p>
               </div>
             ))}
           </div>
@@ -662,34 +654,6 @@ export default function Dashboard() {
             ))}
           </div>
 
-          {/* Platform status summary */}
-          <div
-            className="mt-5 pt-4 space-y-2.5"
-            style={{ borderTop: "1px solid var(--border)" }}
-          >
-            <p className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: "var(--text-subtle)" }}>
-              Platform Status
-            </p>
-            {[
-              { label: "Scanner Engine", ok: true },
-              { label: "Celery Worker",  ok: true },
-              { label: "MongoDB",        ok: true },
-              { label: "Wazuh Agent",    ok: false },
-            ].map(({ label, ok }) => (
-              <div key={label} className="flex items-center justify-between">
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</span>
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{ backgroundColor: ok ? "var(--sev-low)" : "var(--sev-critical)" }}
-                  />
-                  <span className="text-[10px] font-medium" style={{ color: ok ? "var(--sev-low-text)" : "var(--sev-critical-text)" }}>
-                    {ok ? "Online" : "Offline"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
         </motion.div>
       </div>
     </div>

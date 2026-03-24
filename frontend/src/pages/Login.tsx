@@ -1,36 +1,45 @@
 /**
- * Login page — animated cybersecurity-themed sign-in.
- * Background: DottedBackground canvas wave.
+ * Login — full-screen parallax auth.
+ * DottedBackground + AnimatedGridPattern cover the entire viewport.
+ * Cyber Sentinel logo floats above a glassy form card centered in the scene.
  */
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
-import { ShieldCheck, LogIn, AlertCircle, Eye, EyeOff, Lock, User, Sun, Moon } from "lucide-react";
+import {
+  ShieldCheck, LogIn, AlertCircle, Eye, EyeOff,
+  Lock, User, Sun, Moon, CheckCircle2,
+} from "lucide-react";
 import { ROUTES } from "@/lib/constants";
 import { DottedBackground } from "@/components/ui/DottedBackground";
-
-const containerVariants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.1 } },
-};
+import { AnimatedGridPattern } from "@/components/ui/AnimatedGridPattern";
+import { cn } from "@/lib/utils";
 
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
-  show:   { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" as const } },
+  show:   { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] as const } },
+};
+
+const containerVariants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.08 } },
 };
 
 export default function Login() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
+  const { login }  = useAuth();
+  const navigate   = useNavigate();
+  const location   = useLocation();
   const { isDark, toggleTheme } = useTheme();
 
-  const [username, setUsername]       = useState("");
-  const [password, setPassword]       = useState("");
+  const justRegistered = (location.state as { registered?: boolean } | null)?.registered ?? false;
+
+  const [username,     setUsername]     = useState("");
+  const [password,     setPassword]     = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError]             = useState("");
-  const [loading, setLoading]         = useState(false);
+  const [error,        setError]        = useState("");
+  const [loading,      setLoading]      = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -40,10 +49,10 @@ export default function Login() {
       await login({ username, password });
       navigate(ROUTES.DASHBOARD);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-        "Login failed. Check your credentials.";
-      setError(msg);
+      setError(
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        || "Login failed. Check your credentials.",
+      );
     } finally {
       setLoading(false);
     }
@@ -51,120 +60,152 @@ export default function Login() {
 
   return (
     <div
-      className="relative flex min-h-screen items-center justify-center px-4 overflow-hidden"
-      style={{ backgroundColor: "var(--bg-base)" }}
+      className="relative min-h-screen flex items-center justify-center overflow-hidden"
+      style={{ backgroundColor: "#06091A" }}
     >
-      {/* ── Dotted wave background ── */}
-      <DottedBackground isDark={isDark} className="opacity-100" />
+      {/* ── Layer 1: animated dot wave — full screen ──────────────── */}
+      <DottedBackground isDark={true} className="opacity-60" />
 
-      {/* ── Central radial glow — gives depth behind the card ── */}
-      <motion.div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[120px] pointer-events-none"
-        style={{ backgroundColor: isDark ? "rgba(59,130,246,0.06)" : "rgba(37,99,235,0.06)" }}
-        animate={{ scale: [1, 1.08, 1], opacity: [0.7, 1, 0.7] }}
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-      />
+      {/* ── Layer 2: animated grid squares — full screen ─────────── */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ color: "rgba(59,130,246,0.16)" }}
+      >
+        <AnimatedGridPattern
+          width={52}
+          height={52}
+          numSquares={24}
+          maxOpacity={0.75}
+          duration={4.5}
+          repeatDelay={0.6}
+          className={cn(
+            "[mask-image:radial-gradient(ellipse_85%_85%_at_50%_50%,white,transparent)]",
+            "stroke-current fill-current w-full h-full absolute inset-0",
+          )}
+        />
+      </div>
 
-      {/* ── Vignette — fades edges so card pops ── */}
+      {/* ── Layer 3: central blue glow ────────────────────────────── */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: isDark
-            ? "radial-gradient(ellipse 60% 60% at 50% 50%, transparent 40%, rgba(2,8,23,0.75) 100%)"
-            : "radial-gradient(ellipse 60% 60% at 50% 50%, transparent 40%, rgba(242,246,255,0.75) 100%)",
+          background: "radial-gradient(ellipse 65% 55% at 50% 50%, rgba(59,130,246,0.09) 0%, transparent 65%)",
         }}
       />
 
-      {/* ── Theme toggle ── */}
+      {/* ── Layer 4: edge vignette (darkens corners) ─────────────── */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: "radial-gradient(ellipse 90% 90% at 50% 50%, transparent 35%, rgba(2,8,23,0.82) 100%)",
+        }}
+      />
+
+      {/* ── Theme toggle ─────────────────────────────────────────── */}
       <button
         onClick={toggleTheme}
-        className="absolute top-5 right-5 btn-ghost rounded-full p-2 z-10"
+        className="absolute top-5 right-5 btn-ghost rounded-full p-2 z-20"
         title={isDark ? "Light mode" : "Dark mode"}
       >
         {isDark
-          ? <Sun  size={16} style={{ color: "var(--text-muted)" }} />
-          : <Moon size={16} style={{ color: "var(--text-muted)" }} />
+          ? <Sun  size={15} style={{ color: "rgba(96,120,152,0.9)" }} />
+          : <Moon size={15} style={{ color: "rgba(96,120,152,0.9)" }} />
         }
       </button>
 
-      {/* ── Login card ── */}
+      {/* ── Main content — centered, above all layers ────────────── */}
       <motion.div
-        className="relative w-full max-w-md z-10"
+        className="relative z-10 w-full max-w-[400px] px-5 py-10 flex flex-col items-center"
         variants={containerVariants}
         initial="hidden"
         animate="show"
       >
-        {/* Logo */}
-        <motion.div className="text-center mb-8" variants={itemVariants}>
+        {/* Logo + wordmark — floats on the parallax, above the card */}
+        <motion.div className="text-center mb-7" variants={itemVariants}>
           <motion.div
-            className="relative mx-auto w-16 h-16 flex items-center justify-center"
+            className="flex justify-center mb-4"
             animate={{ y: [0, -5, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
           >
-            {/* Layered halo rings */}
             <div
-              className="absolute inset-0 rounded-2xl rotate-6 opacity-50"
-              style={{ backgroundColor: "var(--accent-dim)" }}
-            />
-            <div
-              className="absolute inset-0 rounded-2xl -rotate-6 opacity-30"
-              style={{ backgroundColor: "var(--accent-dim)" }}
-            />
-            {/* Icon container */}
-            <div
-              className="relative rounded-2xl w-full h-full flex items-center justify-center border"
+              className="w-16 h-16 rounded-2xl flex items-center justify-center relative"
               style={{
-                backgroundColor: "var(--bg-card)",
-                borderColor: "var(--accent)",
-                borderWidth: "1.5px",
-                boxShadow: "0 0 24px var(--accent-glow)",
+                background: "linear-gradient(135deg, rgba(59,130,246,0.35) 0%, rgba(168,85,247,0.22) 100%)",
+                border: "1px solid rgba(59,130,246,0.45)",
+                boxShadow: "0 0 40px rgba(59,130,246,0.28), 0 0 12px rgba(59,130,246,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
               }}
             >
-              <ShieldCheck size={28} style={{ color: "var(--accent)" }} />
+              <ShieldCheck size={28} style={{ color: "#93c5fd" }} />
             </div>
           </motion.div>
 
           <h1
-            className="mt-5 text-3xl font-bold tracking-tight"
-            style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}
+            className="text-2xl font-bold tracking-tight"
+            style={{ fontFamily: "Syne, sans-serif", color: "#E4EEFF", letterSpacing: "-0.025em" }}
           >
             Cyber Sentinel
           </h1>
-          <p className="mt-1.5 text-sm" style={{ color: "var(--text-muted)" }}>
-            AI-Powered Pentesting &amp; SOC Platform
+          <p
+            className="text-[10px] uppercase tracking-[0.22em] font-semibold mt-1.5"
+            style={{ color: "#60a5fa", opacity: 0.65 }}
+          >
+            v1.0 · ITS Lab
           </p>
         </motion.div>
 
-        {/* Form card */}
-        <motion.form
-          onSubmit={handleSubmit}
-          className="card space-y-5"
+        {/* ── Glass card ───────────────────────────────────────────── */}
+        <motion.div
           variants={itemVariants}
+          className="w-full rounded-2xl p-7 space-y-5"
           style={{
-            boxShadow: isDark
-              ? "0 0 0 1px rgba(59,130,246,0.08), 0 32px 64px rgba(0,0,0,0.6)"
-              : "0 0 0 1px rgba(37,99,235,0.08), 0 8px 32px rgba(0,0,0,0.08)",
+            backgroundColor: "rgba(6,9,26,0.82)",
+            backdropFilter: "blur(24px)",
+            WebkitBackdropFilter: "blur(24px)",
+            border: "1px solid rgba(59,130,246,0.18)",
+            boxShadow:
+              "0 0 0 1px rgba(59,130,246,0.06), " +
+              "0 32px 72px rgba(0,0,0,0.70), " +
+              "0 0 80px rgba(59,130,246,0.05)",
           }}
         >
+          {/* Heading */}
           <div>
             <h2
-              className="text-lg font-semibold"
-              style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}
+              className="text-xl font-bold"
+              style={{ fontFamily: "Syne, sans-serif", color: "#E4EEFF", letterSpacing: "-0.015em" }}
             >
               Welcome back
             </h2>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+            <p className="text-sm mt-0.5" style={{ color: "#607898" }}>
               Sign in to access your dashboard
             </p>
           </div>
 
+          {/* Registration success banner */}
+          {justRegistered && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm"
+              style={{
+                backgroundColor: "rgba(34,197,94,0.08)",
+                border: "1px solid rgba(34,197,94,0.22)",
+                color: "#4ade80",
+              }}
+            >
+              <CheckCircle2 size={14} className="shrink-0" />
+              Account created — sign in to continue
+            </motion.div>
+          )}
+
+          {/* Error */}
           {error && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
-              className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm"
+              className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm"
               style={{
-                backgroundColor: "rgba(239,68,68,0.1)",
+                backgroundColor: "rgba(239,68,68,0.08)",
                 border: "1px solid rgba(239,68,68,0.2)",
                 color: "#f87171",
               }}
@@ -174,74 +215,78 @@ export default function Login() {
             </motion.div>
           )}
 
-          <div>
-            <label htmlFor="username" className="label">Username</label>
-            <div className="relative">
-              <User
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                style={{ color: "var(--text-subtle)" }}
-              />
-              <input
-                id="username"
-                type="text"
-                className="input pl-10"
-                placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                required
-              />
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="username" className="label">Username</label>
+              <div className="relative">
+                <User
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{ color: "var(--text-subtle)" }}
+                />
+                <input
+                  id="username"
+                  type="text"
+                  className="input pl-9"
+                  placeholder="Enter your username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
+                  required
+                />
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label htmlFor="password" className="label">Password</label>
-            <div className="relative">
-              <Lock
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                style={{ color: "var(--text-subtle)" }}
-              />
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                className="input pl-10 pr-10"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                style={{ color: "var(--text-subtle)" }}
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
+            <div>
+              <label htmlFor="password" className="label">Password</label>
+              <div className="relative">
+                <Lock
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{ color: "var(--text-subtle)" }}
+                />
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  className="input pl-9 pr-10"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+                  style={{ color: "var(--text-subtle)" }}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
             </div>
-          </div>
 
-          <button type="submit" disabled={loading} className="btn-primary w-full mt-2">
-            {loading ? (
-              <>
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Signing in...
-              </>
-            ) : (
-              <>
-                <LogIn size={15} />
-                Sign in
-              </>
-            )}
-          </button>
+            <button type="submit" disabled={loading} className="btn-primary w-full">
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Signing in...
+                </>
+              ) : (
+                <>
+                  <LogIn size={14} />
+                  Sign in
+                </>
+              )}
+            </button>
+          </form>
 
+          {/* Links */}
           <div className="flex items-center justify-between text-xs pt-1" style={{ color: "var(--text-muted)" }}>
             <Link
               to={ROUTES.FORGOT_PASSWORD}
@@ -258,14 +303,15 @@ export default function Login() {
               Create account
             </Link>
           </div>
-        </motion.form>
+        </motion.div>
 
+        {/* Footer below card */}
         <motion.p
           variants={itemVariants}
-          className="mt-6 text-center text-xs"
-          style={{ color: "var(--text-subtle)" }}
+          className="text-[10px] uppercase tracking-[0.18em] font-medium mt-6"
+          style={{ color: "#1E3A5F" }}
         >
-          Cyber Sentinel v1.0 &mdash; ITS Cybersecurity Lab
+          Smart City &amp; Cybersecurity Lab · ITS
         </motion.p>
       </motion.div>
     </div>
