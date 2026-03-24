@@ -6,7 +6,8 @@ RESPONSE FORMAT (respond ONLY with valid JSON, no markdown, no code fences, no e
 {
   "executive_summary": "...",
   "remediation": "...",
-  "risk_score": 0.0
+  "risk_score": 0.0,
+  "attack_chain": "..."
 }
 
 FIELD REQUIREMENTS:
@@ -14,9 +15,11 @@ FIELD REQUIREMENTS:
 executive_summary — A professional 4-6 sentence executive summary written for C-suite and board members.
   Sentence 1: State what was tested, when, and the scan type used.
   Sentence 2: Quantify the findings clearly (e.g. "The assessment identified X findings: Y critical, Z high, W medium").
-  Sentence 3-4: Highlight the 1-2 most business-impactful risks in plain language. Explain what an attacker could do, not just what was found.
+  Sentence 3-4: Highlight the 1-2 most business-impactful risks in plain language. Explain what an attacker could do, not just what was found. Note the confidence level (Confirmed/Likely/Possible) for top findings.
   Sentence 5-6: Provide an overall security posture assessment and urgency level.
   Style: Measured, professional tone. No fear-mongering. No technical jargon without explanation.
+  If CVSS vector strings (cvss_vector) are present, cite the most critical one (e.g. "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H").
+  If CWE IDs (cwes) are present, reference them alongside CVEs (e.g. "CVE-2024-XXXX (CWE-89, SQL Injection)").
 
 remediation — A prioritised remediation plan formatted as a numbered list (use \n for line breaks).
   Format each item as: "N. [CRITICAL/HIGH/MEDIUM/LOW] Category — Finding: Clear action step with specific technical guidance."
@@ -27,6 +30,14 @@ remediation — A prioritised remediation plan formatted as a numbered list (use
   Include estimated effort per item: Quick Fix (<1h), Medium (1-4h), Major (1+ day).
 
 risk_score — A float from 0.0 to 10.0.
+
+attack_chain — Identify 1-2 multi-step attack chains where findings combine into compound risks.
+  Format: 2-4 sentences describing how an attacker could chain findings together step by step.
+  Example pattern: "Directory listing exposure + server version disclosure + outdated library with CVE-XXXX = attacker enumerates the stack, discovers exposed files, then targets the known CVE for remote code execution."
+  Rate each chain as "High Impact" or "Medium Impact".
+  State likelihood based on finding confidence: "Likely" if multiple Confirmed findings form the chain, "Possible" if mixed confidence.
+  If no plausible multi-step chains exist in the scan data, state: "No multi-step attack chains identified from the scan data."
+  ONLY chain findings that actually appear in the provided scan data — never hypothesise additional steps.
 
 OWASP TOP 10:2025 CATEGORIES (use these exact codes for classification):
 - A01:2025 Broken Access Control
@@ -52,11 +63,15 @@ QUALITY RULES:
 - Reference specific vulnerability names and affected URLs from the data.
 - If CVE data is present, cite CVE IDs with CVSS scores (e.g. "CVE-2024-XXXX, CVSS 9.8").
 - If EPSS data is present, mention exploitation probability (e.g. "EPSS 0.87 = 87% probability of exploitation").
+- If cvss_vector is present on a finding, cite it for the most critical findings.
+- If cwes are present on findings, reference them alongside CVE IDs.
+- Each finding in the data includes a "confidence" field (Confirmed/Likely/Possible). Note confidence for the top 2-3 findings.
 - Correlate related findings: if both SQL injection and weak auth are found, note the compounding risk.
 - Remediation must be actionable — never say "review" or "consider" without a concrete step.
 - If fewer than 3 findings exist, keep the summary proportionally brief.
 - If there are no high/critical findings, the risk_score MUST be below 4.0.
 - If only informational findings, risk_score MUST be below 2.0.
+- If tool_coverage data shows tools timed out or errored, note this as a scan limitation.
 
 CRITICAL ANTI-HALLUCINATION RULES:
 - DO NOT mention technologies, frameworks, or software that do not appear in the "Technology stack:" field of the scan data.

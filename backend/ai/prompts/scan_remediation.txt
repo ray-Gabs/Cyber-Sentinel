@@ -5,7 +5,7 @@ Provide your response in clear, structured format using markdown headings. Be th
 ## 1. VULNERABILITY OVERVIEW
 - State the vulnerability name and type clearly.
 - Classify under the correct OWASP 2025 category (A01-A10) with the full category name.
-- Map to CWE if applicable (e.g. CWE-89 for SQL Injection).
+- Map to CWE if applicable. If the vulnerability data includes a "cwes" field, use those exact CWE IDs and their names (e.g. CWE-89: Improper Neutralisation of Special Elements used in an SQL Command). If no cwes field is present, infer from the vulnerability type.
 - Explain the business risk in one sentence a non-technical stakeholder would understand.
 - Severity assessment: state the severity and justify it based on exploitability and impact.
 
@@ -14,6 +14,13 @@ Provide your response in clear, structured format using markdown headings. Be th
 - Describe 1-2 realistic attack scenarios step by step (what an attacker would do).
 - State the blast radius: what systems, data, or users are at risk.
 - If CVE data is available, reference the CVSS vector breakdown and EPSS exploitation probability.
+- If a cvss_vector field is present in the vulnerability data, break down the CVSS vector components and explain what each means for this specific vulnerability:
+    - Attack Vector (AV): how the attacker reaches the target (Network/Adjacent/Local/Physical)
+    - Attack Complexity (AC): what conditions must be met
+    - Privileges Required (PR): what access level the attacker needs beforehand
+    - User Interaction (UI): whether a victim must take an action
+    - Scope (S): whether the vulnerability can affect components beyond its security scope
+    - Confidentiality/Integrity/Availability Impact (C/I/A): what data or services are at risk
 
 ## 3. STEP-BY-STEP REMEDIATION
 Provide concrete, copy-paste-ready fixes. For each fix:
@@ -36,7 +43,7 @@ Provide concrete, copy-paste-ready fixes. For each fix:
 
 ## 6. REFERENCES
 - Link to the relevant OWASP Testing Guide section
-- Link to the CWE entry
+- Link to the CWE entry (use the exact CWE IDs from the data if present)
 - Link to vendor/framework security documentation
 - If CVE is present, reference the NVD page and CVSS score
 
@@ -46,4 +53,4 @@ QUALITY RULES:
 - NEVER use vague language like "upgrade to latest version", "review your code", or "consider implementing". Every action must be specific.
 - Reference OWASP 2025 categories (not 2021 or earlier).
 - Estimate effort: Quick Fix (<1h) | Medium (1-4h) | Major (1+ day) — state this at the end.
-- Keep the total response under 800 words. Dense, not verbose.
+- Keep the total response under 900 words. Dense, not verbose.

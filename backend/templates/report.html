@@ -4,7 +4,15 @@
 <meta charset="utf-8">
 <title>Penetration Test Report — {{ scan.target }}</title>
 <style>
-  @page { size: A4; margin: 2.2cm 2cm; }
+  @page {
+    size: A4;
+    margin: 2.2cm 2cm;
+    @bottom-right {
+      content: "Page " counter(page);
+      font-size: 9px;
+      color: #9ca3af;
+    }
+  }
   * { box-sizing: border-box; }
   body {
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -123,7 +131,8 @@
   {% if owasp_distribution %}<a class="toc-item" href="#owasp">4. OWASP Top 10:2025 Coverage</a>{% endif %}
   {% if technologies %}<a class="toc-item" href="#tech">5. Technology Stack</a>{% endif %}
   <a class="toc-item" href="#ai">6. AI Analysis Report</a>
-  <a class="toc-item" href="#findings">7. Detailed Findings</a>
+  {% if tool_coverage %}<a class="toc-item" href="#coverage">7. Tool Coverage Matrix</a>{% endif %}
+  <a class="toc-item" href="#findings">8. Detailed Findings</a>
 </div>
 
 <!-- 1. Scan Details -->
@@ -136,6 +145,9 @@
   <tr><td>Completed</td><td>{{ scan.completed_at.strftime('%d %b %Y, %H:%M UTC') if scan.completed_at else 'N/A' }}</td></tr>
   <tr><td>Total Findings</td><td>{{ findings | length }} ({{ findings | selectattr('severity', 'ne', 'info') | list | length }} actionable)</td></tr>
   <tr><td>Tools Executed</td><td>{{ scan.completed_tools | join(', ') if scan.completed_tools else 'N/A' }}</td></tr>
+  {% if scan_duration and scan_duration != 'N/A' %}
+  <tr><td>Duration</td><td>{{ scan_duration }}</td></tr>
+  {% endif %}
   {% if scan.auth_config and scan.auth_config.auth_type != 'none' %}
   <tr><td>Authentication</td><td>{{ scan.auth_config.auth_type | title }} — Authenticated scan</td></tr>
   {% endif %}
@@ -230,12 +242,14 @@
       <div class="ai-section">
         <div class="ai-section-title">
           {% if "ENGAGEMENT" in sec_title | upper %}📋{% endif %}
-          {% if "RISK" in sec_title | upper and "PER" not in sec_title | upper %}🛡{% endif %}
+          {% if "RISK" in sec_title | upper and "PER" not in sec_title | upper and "ATTACK" not in sec_title | upper %}🛡{% endif %}
           {% if "KEY FIND" in sec_title | upper %}⚠{% endif %}
           {% if "OWASP" in sec_title | upper %}📊{% endif %}
+          {% if "ATTACK CHAIN" in sec_title | upper %}🔗{% endif %}
           {% if "ATTACK SURFACE" in sec_title | upper %}🔍{% endif %}
           {% if "PER-FINDING" in sec_title | upper or "REMEDIATION GUIDE" in sec_title | upper %}🔧{% endif %}
           {% if "STRATEGIC" in sec_title | upper %}✅{% endif %}
+          {% if "TOOL COVERAGE" in sec_title | upper %}🛠{% endif %}
           {{ sec_title }}
         </div>
         {% for para in sec_content.split('\n\n') %}
@@ -298,14 +312,51 @@
 <p style="color:#6b7280;font-size:12px">AI analysis was not available for this scan.</p>
 {% endif %}
 
-<!-- 7. Detailed Findings -->
-<h2 id="findings" class="page-break">7. Detailed Findings ({{ findings | selectattr('severity', 'ne', 'info') | list | length }} Actionable + {{ counts.info }} Informational)</h2>
+{% if tool_coverage %}
+<!-- Tool Coverage Matrix -->
+<h2 id="coverage">7. Tool Coverage Matrix</h2>
+<p style="font-size:12px;color:#6b7280;margin-bottom:8px">Status of each security tool during the scan.</p>
+<table class="owasp-table">
+  <thead>
+    <tr>
+      <th style="width:180px">Tool</th>
+      <th style="width:110px">Status</th>
+      <th style="width:90px">Findings</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for tc in tool_coverage %}
+    <tr>
+      <td>{{ tc.label }}</td>
+      <td>
+        {% if tc.status == 'success' %}
+          <span style="color:#16a34a;font-weight:600">✓ Completed</span>
+        {% elif tc.status == 'timeout' %}
+          <span style="color:#ca8a04;font-weight:600">⏱ Timed Out</span>
+        {% elif tc.status == 'error' %}
+          <span style="color:#dc2626;font-weight:600">✗ Error</span>
+        {% else %}
+          <span style="color:#9ca3af">— Not Run</span>
+        {% endif %}
+      </td>
+      <td style="font-weight:600;color:#374151">{{ tc.finding_count if tc.finding_count > 0 else '—' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
 
-{% set actionable = findings | selectattr('severity', 'ne', 'info') | sort(attribute='severity') | list %}
+<!-- 8. Detailed Findings -->
+<h2 id="findings" class="page-break">8. Detailed Findings ({{ findings | selectattr('severity', 'ne', 'info') | list | length }} Actionable + {{ counts.info }} Informational)</h2>
+
+{# findings is pre-sorted by SEVERITY_ORDER in report_service._prepare_context — do NOT re-sort here
+   as that would break the confidence_map index alignment #}
+{% set actionable = findings | selectattr('severity', 'ne', 'info') | list %}
 {% set info_findings = findings | selectattr('severity', 'equalto', 'info') | list %}
 
 {% if actionable %}
 {% for f in actionable %}
+{% set conf = confidence_map.get(loop.index0, 'Possible') if confidence_map else 'Possible' %}
 <div class="finding-card">
   <div class="finding-header">
     <div style="flex:1">
@@ -313,6 +364,13 @@
         <span class="sev-badge sev-{{ f.severity }}">{{ f.severity | upper }}</span>
         {% if f.remediation_priority == 'immediate' %}
           <span style="font-size:10px;font-weight:700;background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:999px;border:1px solid #fecaca">FIX IMMEDIATELY</span>
+        {% endif %}
+        {% if conf == 'Confirmed' %}
+          <span style="font-size:10px;font-weight:700;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:999px">CONFIRMED</span>
+        {% elif conf == 'Likely' %}
+          <span style="font-size:10px;font-weight:700;background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:999px">LIKELY</span>
+        {% else %}
+          <span style="font-size:10px;font-weight:700;background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:999px">POSSIBLE</span>
         {% endif %}
         {% if f.owasp_category %}
           <span class="tag tag-owasp">{{ f.owasp_category }}</span>
@@ -413,6 +471,9 @@
             {% if cve.epss_score %}
               <span style="color:#6b7280;font-size:11px">EPSS {{ (cve.epss_score * 100) | round(1) }}% exploitation probability</span>
             {% endif %}
+            {% if cve.cvss_vector %}
+              <div style="font-size:10px;color:#78350f;font-family:'Courier New',monospace;margin-top:3px;word-break:break-all">{{ cve.cvss_vector }}</div>
+            {% endif %}
             {% if cve.description %}
               <p style="margin:5px 0 0;color:#78350f;font-size:11.5px;line-height:1.6">{{ cve.description[:300] }}</p>
             {% endif %}
@@ -460,7 +521,9 @@
 {% endif %}
 
 <div class="footer">
-  Generated by Cyber Sentinel &mdash; {{ generated_at }} &nbsp;|&nbsp; CONFIDENTIAL &mdash; For authorised recipients only
+  Report ID: {{ scan.id or 'N/A' }} &nbsp;|&nbsp;
+  Generated by Cyber Sentinel &mdash; {{ generated_at }} &nbsp;|&nbsp;
+  CONFIDENTIAL &mdash; For authorised recipients only
 </div>
 
 </body>
