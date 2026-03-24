@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Penetration Test Report — {{ scan.target }}</title>
+<style>
+  @page { size: A4; margin: 2cm 1.8cm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Arial', sans-serif; color: #1f2937; font-size: 12px; line-height: 1.6; }
+
+  h1 { font-size: 24px; color: #0e4da4; margin: 0 0 4px; font-weight: bold; }
+  h2 { font-size: 14px; color: #1e40af; border-bottom: 2px solid #bfdbfe; padding-bottom: 4px;
+       margin: 24px 0 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em; }
+  h3 { font-size: 12px; margin: 12px 0 5px; color: #1f2937; font-weight: bold; }
+  p  { margin: 0 0 8px; }
+
+  .subtitle    { color: #6b7280; font-size: 11px; margin-bottom: 4px; }
+  .confidential { color: #dc2626; font-size: 10px; font-weight: bold; letter-spacing: 0.06em;
+                  text-transform: uppercase; margin-bottom: 16px; }
+
+  /* Metadata table */
+  .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; }
+  .meta-table td { padding: 5px 10px; border: 1px solid #e5e7eb; }
+  .meta-table td:first-child { font-weight: bold; width: 150px; background: #f0f7ff; color: #1e40af; }
+
+  /* Risk score — table-based layout */
+  .risk-table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; }
+  .risk-table td { padding: 4px 8px; vertical-align: middle; }
+  .risk-score-cell { font-size: 22px; font-weight: bold; width: 70px; text-align: right; }
+  .risk-word-cell  { font-size: 11px; font-weight: bold; color: #6b7280; width: 100px; }
+  .risk-bar-cell   { }
+  .risk-bar-outer  { width: 100%; height: 12px; background: #e5e7eb; }
+  .risk-bar-inner  { height: 12px; }
+  .col-critical { color: #dc2626; } .col-high { color: #ea580c; }
+  .col-moderate { color: #ca8a04; } .col-low  { color: #16a34a; } .col-minimal { color: #6b7280; }
+  .bar-critical { background: #dc2626; } .bar-high { background: #ea580c; }
+  .bar-moderate { background: #ca8a04; } .bar-low  { background: #16a34a; } .bar-minimal { background: #9ca3af; }
+
+  /* Severity summary — table */
+  .sev-summary-table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; }
+  .sev-summary-table td { border: 1px solid #e5e7eb; text-align: center; padding: 8px 4px;
+                           background: #fafafa; }
+  .sev-count { font-size: 22px; font-weight: bold; line-height: 1; display: block; }
+  .sev-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #9ca3af;
+               margin-top: 3px; display: block; }
+  .c-critical { color: #dc2626; } .c-high { color: #ea580c; }
+  .c-medium   { color: #ca8a04; } .c-low  { color: #16a34a; } .c-info { color: #6b7280; }
+
+  /* OWASP table */
+  .owasp-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0 14px; }
+  .owasp-table th { text-align: left; padding: 6px 8px; background: #eff6ff;
+                    border-bottom: 2px solid #bfdbfe; font-size: 9px; text-transform: uppercase;
+                    letter-spacing: 0.05em; color: #1e40af; }
+  .owasp-table td { padding: 5px 8px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+  .sev-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+
+  /* AI sections */
+  .ai-box { background: #f8faff; border: 1px solid #dbeafe; padding: 12px 14px; margin-bottom: 12px; }
+  .ai-box-title { font-size: 9px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em;
+                  color: #1d4ed8; margin-bottom: 8px; border-bottom: 1px solid #dbeafe; padding-bottom: 5px; }
+  .ai-box p { font-size: 11.5px; line-height: 1.65; margin: 0 0 6px; color: #1f2937; }
+
+  /* Remediation items */
+  .remed-table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+  .remed-table td { padding: 7px 10px; border: 1px solid #e5e7eb; background: #fafafa;
+                    font-size: 11.5px; line-height: 1.55; }
+  .remed-num  { font-size: 10px; font-weight: bold; color: #9ca3af; width: 24px; text-align: center;
+                vertical-align: top; }
+  .remed-sev  { font-size: 9px; font-weight: bold; padding: 2px 7px; white-space: nowrap;
+                vertical-align: top; width: 65px; text-align: center; }
+  .remed-sev-critical { background: #fee2e2; color: #dc2626; }
+  .remed-sev-high     { background: #ffedd5; color: #ea580c; }
+  .remed-sev-medium   { background: #fef9c3; color: #ca8a04; }
+  .remed-sev-low      { background: #dcfce7; color: #16a34a; }
+
+  /* Finding cards */
+  .finding-card { border: 1px solid #e5e7eb; margin-bottom: 12px; page-break-inside: avoid; }
+  .finding-header-table { width: 100%; border-collapse: collapse; background: #f9fafb;
+                          border-bottom: 1px solid #e5e7eb; }
+  .finding-header-table td { padding: 8px 10px; vertical-align: top; }
+  .sev-badge { display: inline-block; padding: 2px 8px; font-size: 9px; font-weight: bold;
+               color: #fff; white-space: nowrap; }
+  .sev-critical { background: #dc2626; } .sev-high { background: #ea580c; }
+  .sev-medium   { background: #ca8a04; } .sev-low  { background: #16a34a; } .sev-info { background: #6b7280; }
+  .conf-confirmed { background: #dcfce7; color: #166534; font-size: 9px; font-weight: bold;
+                    padding: 2px 6px; display: inline-block; }
+  .conf-likely    { background: #fef9c3; color: #854d0e; font-size: 9px; font-weight: bold;
+                    padding: 2px 6px; display: inline-block; }
+  .conf-possible  { background: #f3f4f6; color: #6b7280; font-size: 9px; font-weight: bold;
+                    padding: 2px 6px; display: inline-block; }
+  .finding-name   { font-size: 12px; font-weight: bold; color: #111827; }
+  .finding-meta   { font-size: 10px; color: #6b7280; margin-top: 2px; }
+  .finding-body   { padding: 10px 12px; }
+  .label-sm       { font-size: 9px; font-weight: bold; text-transform: uppercase;
+                    letter-spacing: 0.06em; color: #6b7280; margin-bottom: 3px; }
+  .code-block     { background: #1e293b; color: #93c5fd; font-family: 'Courier New', monospace;
+                    font-size: 10px; padding: 8px 10px; white-space: pre-wrap; word-break: break-all;
+                    margin-bottom: 8px; line-height: 1.4; }
+  .tag-owasp { background: #dbeafe; color: #1e40af; font-size: 9px; font-weight: bold;
+               padding: 1px 6px; margin-right: 3px; }
+  .tag-cve   { background: #fef3c7; color: #92400e; font-size: 9px; font-weight: bold;
+               padding: 1px 6px; margin-right: 3px; }
+
+  /* Tech table */
+  .tech-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0 14px; }
+  .tech-table th { text-align: left; padding: 5px 8px; background: #f0fdf4;
+                   border-bottom: 2px solid #a7f3d0; font-size: 9px; text-transform: uppercase; color: #065f46; }
+  .tech-table td { padding: 4px 8px; border-bottom: 1px solid #f3f4f6; }
+
+  /* Tool coverage table */
+  .cov-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0 14px; }
+  .cov-table th { text-align: left; padding: 5px 8px; background: #eff6ff;
+                  border-bottom: 2px solid #bfdbfe; font-size: 9px; text-transform: uppercase; color: #1e40af; }
+  .cov-table td { padding: 4px 8px; border-bottom: 1px solid #f3f4f6; }
+  .status-success { color: #16a34a; font-weight: bold; }
+  .status-timeout { color: #ea580c; font-weight: bold; }
+  .status-error   { color: #dc2626; font-weight: bold; }
+  .status-skipped { color: #9ca3af; }
+
+  /* Misc */
+  .disclaimer { background: #fff7ed; border: 1px solid #fed7aa; padding: 8px 12px;
+                font-size: 10px; color: #9a3412; margin: 10px 0; }
+  .footer     { margin-top: 24px; text-align: center; color: #9ca3af; font-size: 9px;
+                border-top: 1px solid #e5e7eb; padding-top: 10px; }
+  .info-row   { color: #9ca3af; }
+  .page-break { page-break-before: always; }
+  .toc-row    { font-size: 11px; color: #1d4ed8; padding: 2px 0; display: block; }
+</style>
+</head>
+<body>
+
+<h1>Cyber Sentinel</h1>
+<p class="subtitle">Automated Penetration Test Report</p>
+<p class="confidential">CONFIDENTIAL — Authorised Recipients Only</p>
+
+<!-- Table of Contents -->
+<div style="background:#f8faff;border:1px solid #dbeafe;padding:10px 16px;margin:12px 0;">
+  <strong style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280">Contents</strong><br>
+  <span class="toc-row">1. Scan Details</span>
+  <span class="toc-row">2. Risk Assessment</span>
+  <span class="toc-row">3. Severity Summary</span>
+  {% if owasp_distribution %}<span class="toc-row">4. OWASP Top 10:2025 Coverage</span>{% endif %}
+  {% if technologies %}<span class="toc-row">5. Technology Stack</span>{% endif %}
+  <span class="toc-row">6. AI Analysis Report</span>
+  {% if tool_coverage %}<span class="toc-row">7. Tool Coverage Matrix</span>{% endif %}
+  <span class="toc-row">8. Detailed Findings</span>
+</div>
+
+<!-- 1. Scan Details -->
+<h2>1. Scan Details</h2>
+<table class="meta-table">
+  <tr><td>Target</td><td><strong>{{ scan.target }}</strong></td></tr>
+  <tr><td>Scan Type</td><td>{{ scan.scan_type | title }}</td></tr>
+  <tr><td>Status</td><td>{{ scan.status | title }}</td></tr>
+  <tr><td>Started</td><td>{{ scan.started_at.strftime('%d %b %Y, %H:%M UTC') if scan.started_at else 'N/A' }}</td></tr>
+  <tr><td>Completed</td><td>{{ scan.completed_at.strftime('%d %b %Y, %H:%M UTC') if scan.completed_at else 'N/A' }}</td></tr>
+  <tr><td>Total Findings</td><td>{{ findings | length }} ({{ findings | selectattr('severity', 'ne', 'info') | list | length }} actionable)</td></tr>
+  <tr><td>Tools Executed</td><td>{{ scan.completed_tools | join(', ') if scan.completed_tools else 'N/A' }}</td></tr>
+  {% if scan_duration and scan_duration != 'N/A' %}
+  <tr><td>Duration</td><td>{{ scan_duration }}</td></tr>
+  {% endif %}
+  <tr><td>Report Generated</td><td>{{ generated_at }}</td></tr>
+  <tr><td>Report ID</td><td style="font-family:monospace;font-size:10px;">{{ scan.id }}</td></tr>
+</table>
+
+<!-- 2. Risk Assessment -->
+<h2>2. Risk Assessment</h2>
+{% set rs = scan.risk_score or 0.0 %}
+{% if rs >= 8.0 %}{% set risk_cls = "col-critical" %}{% set bar_cls = "bar-critical" %}{% set risk_txt = "CRITICAL RISK" %}
+{% elif rs >= 6.0 %}{% set risk_cls = "col-high" %}{% set bar_cls = "bar-high" %}{% set risk_txt = "HIGH RISK" %}
+{% elif rs >= 4.0 %}{% set risk_cls = "col-moderate" %}{% set bar_cls = "bar-moderate" %}{% set risk_txt = "MODERATE RISK" %}
+{% elif rs >= 2.0 %}{% set risk_cls = "col-low" %}{% set bar_cls = "bar-low" %}{% set risk_txt = "LOW RISK" %}
+{% else %}{% set risk_cls = "col-minimal" %}{% set bar_cls = "bar-minimal" %}{% set risk_txt = "MINIMAL RISK" %}{% endif %}
+
+<table class="risk-table">
+  <tr>
+    <td class="risk-bar-cell">
+      <div class="risk-bar-outer">
+        <div class="risk-bar-inner {{ bar_cls }}" style="width:{{ [rs * 10, 100] | min | int }}%;"></div>
+      </div>
+    </td>
+    <td class="risk-score-cell {{ risk_cls }}">{{ '%.1f' | format(rs) }}</td>
+    <td class="risk-word-cell {{ risk_cls }}">{{ risk_txt }}</td>
+  </tr>
+</table>
+
+<div class="disclaimer">
+  <strong>Disclaimer:</strong> This report was generated by automated security scanning tools augmented with AI analysis.
+  It should be reviewed by a qualified security professional before taking remediation action.
+  Automated scans may produce false positives — verify each finding before treating it as confirmed.
+</div>
+
+<!-- 3. Severity Summary -->
+<h2>3. Severity Summary</h2>
+<table class="sev-summary-table">
+  <tr>
+    <td><span class="sev-count c-critical">{{ counts.critical }}</span><span class="sev-label">Critical</span></td>
+    <td><span class="sev-count c-high">{{ counts.high }}</span><span class="sev-label">High</span></td>
+    <td><span class="sev-count c-medium">{{ counts.medium }}</span><span class="sev-label">Medium</span></td>
+    <td><span class="sev-count c-low">{{ counts.low }}</span><span class="sev-label">Low</span></td>
+    <td><span class="sev-count c-info">{{ counts.info }}</span><span class="sev-label">Info</span></td>
+  </tr>
+</table>
+
+{% if owasp_distribution %}
+<!-- 4. OWASP Coverage -->
+<h2>4. OWASP Top 10:2025 Coverage</h2>
+<table class="owasp-table">
+  <tr>
+    <th>Category</th>
+    <th>Name</th>
+    <th>Findings</th>
+    <th>Max Severity</th>
+  </tr>
+  {% for item in owasp_distribution %}
+  <tr>
+    <td>{{ item.code }}</td>
+    <td>{{ item.name }}</td>
+    <td>{{ item.count }}</td>
+    <td>
+      <span class="sev-badge sev-{{ item.max_sev }}">{{ item.max_sev | upper }}</span>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if technologies %}
+<!-- 5. Technology Stack -->
+<h2>5. Technology Stack</h2>
+<table class="tech-table">
+  <tr><th>Technology</th><th>Type</th><th>Version</th></tr>
+  {% for tech in technologies %}
+  <tr>
+    <td><strong>{{ tech.name }}</strong></td>
+    <td>{{ tech.type }}</td>
+    <td>{{ tech.version if tech.version else '—' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<!-- 6. AI Analysis -->
+{% if scan.ai_summary %}
+<h2>6. AI Analysis Report</h2>
+{% set sections = scan.ai_summary.split('---') %}
+{% for section in sections %}
+  {% set section = section.strip() %}
+  {% if section %}
+  <div class="ai-box">
+    {% set lines = section.split('\n') %}
+    {% set title = lines[0].strip() %}
+    {% set body_lines = lines[1:] %}
+    <div class="ai-box-title">
+      {% if '🔒' in title %}&#x1F512;{% endif %}
+      {% if '⚠' in title %}&#x26A0;{% endif %}
+      {% if '🔗' in title %}&#x1F517;{% endif %}
+      {% if '🛡' in title %}&#x1F6E1;{% endif %}
+      {% if '🛠' in title %}&#x1F6E0;{% endif %}
+      {{ title | replace('🔒','') | replace('⚠','') | replace('🔗','') | replace('🛡','') | replace('🛠','') | replace('📋','') | trim }}
+    </div>
+    {% for line in body_lines %}
+      {% if line.strip() %}
+        <p>{{ line | e }}</p>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endfor %}
+
+{% if scan.ai_remediation %}
+<div class="ai-box">
+  <div class="ai-box-title">Prioritised Remediation Plan</div>
+  {% for line in scan.ai_remediation.split('\n') %}
+    {% set line = line.strip() %}
+    {% if line %}
+      {% if line[0].isdigit() and '. ' in line %}
+        {% set parts = line.split('. ', 1) %}
+        {% set num = parts[0] %}
+        {% set text = parts[1] if parts | length > 1 else line %}
+        {% set sev_class = "remed-sev-medium" %}
+        {% if '[CRITICAL]' in text %}{% set sev_class = "remed-sev-critical" %}{% endif %}
+        {% if '[HIGH]' in text %}{% set sev_class = "remed-sev-high" %}{% endif %}
+        {% if '[LOW]' in text %}{% set sev_class = "remed-sev-low" %}{% endif %}
+        <table class="remed-table" style="margin-bottom:4px;">
+          <tr>
+            <td class="remed-num">{{ num }}</td>
+            <td>{{ text | e }}</td>
+          </tr>
+        </table>
+      {% else %}
+        <p>{{ line | e }}</p>
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+
+{% if tool_coverage %}
+<!-- 7. Tool Coverage Matrix -->
+<h2>7. Tool Coverage Matrix</h2>
+<table class="cov-table">
+  <tr><th>Tool</th><th>Label</th><th>Status</th><th>Findings</th></tr>
+  {% for tc in tool_coverage %}
+  <tr>
+    <td><code>{{ tc.tool }}</code></td>
+    <td>{{ tc.label }}</td>
+    <td class="status-{{ tc.status }}">{{ tc.status | upper }}</td>
+    <td>{{ tc.finding_count if tc.finding_count else '—' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<!-- 8. Detailed Findings -->
+<div class="page-break"></div>
+<h2>8. Detailed Findings</h2>
+{% set actionable = findings | rejectattr('severity', 'equalto', 'info') | list %}
+{% set info_findings = findings | selectattr('severity', 'equalto', 'info') | list %}
+
+{% if actionable %}
+<h3>Actionable Findings ({{ actionable | length }})</h3>
+{% for idx in range(actionable | length) %}
+  {% set f = actionable[idx] %}
+  {% set conf = confidence_map.get(idx, 'Possible') %}
+  <div class="finding-card">
+    <table class="finding-header-table">
+      <tr>
+        <td style="width:80px;">
+          <span class="sev-badge sev-{{ f.get('severity','info') if f is mapping else f.severity }}">
+            {{ (f.get('severity','info') if f is mapping else f.severity) | upper }}
+          </span>
+        </td>
+        <td>
+          <div class="finding-name">{{ f.get('name','') if f is mapping else f.name }}</div>
+          <div class="finding-meta">
+            {{ f.get('matched_at', '') if f is mapping else f.matched_at }}
+            &nbsp;|&nbsp; Tool: {{ f.get('tool', '') if f is mapping else f.tool }}
+            {% set owasp = f.get('owasp_category','') if f is mapping else f.owasp_category %}
+            {% if owasp %}&nbsp;|&nbsp;<span class="tag-owasp">{{ owasp }}</span>{% endif %}
+          </div>
+        </td>
+        <td style="width:80px;text-align:right;">
+          <span class="conf-{{ conf | lower }}">{{ conf }}</span>
+        </td>
+      </tr>
+    </table>
+    <div class="finding-body">
+      {% set desc = f.get('description','') if f is mapping else f.description %}
+      {% if desc %}<p style="font-size:11.5px;color:#374151;">{{ desc | e }}</p>{% endif %}
+
+      {% set evidence = f.get('evidence','') if f is mapping else (f.evidence if hasattr(f,'evidence') else '') %}
+      {% if evidence %}
+      <div class="label-sm">Evidence</div>
+      <div class="code-block">{{ evidence | e }}</div>
+      {% endif %}
+
+      {% set cve_list = f.get('cve_data',[]) if f is mapping else (f.cve_data if hasattr(f,'cve_data') else []) %}
+      {% for cve in cve_list %}
+        <span class="tag-cve">{{ cve.get('cve_id','') if cve is mapping else cve.cve_id }}</span>
+        CVSS {{ cve.get('cvss_score',0) if cve is mapping else cve.cvss_score }}
+        {% set vec = cve.get('cvss_vector','') if cve is mapping else (cve.cvss_vector if hasattr(cve,'cvss_vector') else '') %}
+        {% if vec %}<br><span style="font-family:monospace;font-size:9px;color:#6b7280;">{{ vec }}</span>{% endif %}
+      {% endfor %}
+    </div>
+  </div>
+{% endfor %}
+{% endif %}
+
+{% if info_findings %}
+<h3>Informational Findings ({{ info_findings | length }})</h3>
+<table style="width:100%;border-collapse:collapse;font-size:11px;">
+  <tr>
+    <th style="text-align:left;padding:5px 8px;background:#f9fafb;border-bottom:2px solid #e5e7eb;color:#6b7280;font-size:9px;text-transform:uppercase;">Finding</th>
+    <th style="text-align:left;padding:5px 8px;background:#f9fafb;border-bottom:2px solid #e5e7eb;color:#6b7280;font-size:9px;text-transform:uppercase;">Tool</th>
+    <th style="text-align:left;padding:5px 8px;background:#f9fafb;border-bottom:2px solid #e5e7eb;color:#6b7280;font-size:9px;text-transform:uppercase;">Location</th>
+  </tr>
+  {% for f in info_findings %}
+  <tr class="info-row">
+    <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;">{{ f.get('name','') if f is mapping else f.name }}</td>
+    <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;">{{ f.get('tool','') if f is mapping else f.tool }}</td>
+    <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;font-size:10px;word-break:break-all;">{{ f.get('matched_at','') if f is mapping else f.matched_at }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<div class="footer">
+  Cyber Sentinel — Automated Penetration Testing Platform &nbsp;|&nbsp;
+  Generated {{ generated_at }} &nbsp;|&nbsp;
+  Report ID: {{ scan.id }}
+</div>
+
+</body>
+</html>
