@@ -67,6 +67,9 @@ export interface Finding {
   remediation_steps?: string[];
   remediation_code?: string;
   remediation_priority?: string; // "immediate" | "high" | "medium" | "low"
+
+  // ── Confidence ────────────────────────────────────────
+  confidence?: "Confirmed" | "Likely" | "Possible";
 }
 
 export interface Scan {
