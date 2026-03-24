@@ -14,9 +14,9 @@ FIELD REQUIREMENTS:
 
 executive_summary — A professional 4-6 sentence executive summary written for C-suite and board members.
   Sentence 1: State what was tested, when, and the scan type used.
-  Sentence 2: Quantify the findings clearly (e.g. "The assessment identified X findings: Y critical, Z high, W medium").
+  Sentence 2: Quantify the findings with exact numbers (e.g. "The assessment identified 14 findings: 2 critical, 4 high, 5 medium, 3 low — spanning 4 OWASP 2025 categories"). Use the actual counts from the scan data.
   Sentence 3-4: Highlight the 1-2 most business-impactful risks in plain language. Explain what an attacker could do, not just what was found. Note the confidence level (Confirmed/Likely/Possible) for top findings.
-  Sentence 5-6: Provide an overall security posture assessment and urgency level.
+  Sentence 5-6: Provide an overall security posture assessment and urgency level. Justify the urgency by referencing the specific combination of findings that drives it.
   Style: Measured, professional tone. No fear-mongering. No technical jargon without explanation.
   If CVSS vector strings (cvss_vector) are present, cite the most critical one (e.g. "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H").
   If CWE IDs (cwes) are present, reference them alongside CVEs (e.g. "CVE-2024-XXXX (CWE-89, SQL Injection)").
@@ -28,16 +28,34 @@ remediation — A prioritised remediation plan formatted as a numbered list (use
   Each item must answer: What exactly needs to change? Where? How?
   Minimum 5 items for any scan with findings. Maximum 15.
   Include estimated effort per item: Quick Fix (<1h), Medium (1-4h), Major (1+ day).
+  Stack-specific remediation: if the Technology stack field identifies a specific framework or server, provide configuration in that exact format:
+    - Next.js detected → show next.config.js headers() config
+    - Vercel detected → show vercel.json headers config
+    - Nginx detected → show nginx.conf add_header directives
+    - Apache detected → show .htaccess Header set directives
+    - Express.js detected → show helmet() middleware code
+    - Django detected → show SECURE_* settings.py options
+    - Laravel detected → show middleware PHP code
+    If no tech stack is detected, give generic but still actionable guidance.
 
 risk_score — A float from 0.0 to 10.0.
 
 attack_chain — Identify 1-2 multi-step attack chains where findings combine into compound risks.
   Format: 2-4 sentences describing how an attacker could chain findings together step by step.
-  Example pattern: "Directory listing exposure + server version disclosure + outdated library with CVE-XXXX = attacker enumerates the stack, discovers exposed files, then targets the known CVE for remote code execution."
-  Rate each chain as "High Impact" or "Medium Impact".
-  State likelihood based on finding confidence: "Likely" if multiple Confirmed findings form the chain, "Possible" if mixed confidence.
-  If no plausible multi-step chains exist in the scan data, state: "No multi-step attack chains identified from the scan data."
-  ONLY chain findings that actually appear in the provided scan data — never hypothesise additional steps.
+  You MUST always produce at least one chain. Even low-severity or informational findings can form meaningful chains.
+  Common chain patterns to look for (use these as starting points, but chain ONLY findings actually in the scan data):
+    - Missing CSP header + reflected user input = XSS with no browser mitigation → data exfiltration
+    - Server version disclosure + outdated component with CVE = passive recon → targeted exploit
+    - Missing HSTS + HTTP available = TLS downgrade/strip attack → credential interception
+    - CORS wildcard + missing SameSite cookie flag = cross-origin request forgery → session theft
+    - Directory listing + sensitive file exposure = information gathering → targeted follow-on attack
+    - Missing authentication headers + IDOR pattern = enumeration → unauthorised data access
+    - Error messages exposing stack traces + known framework CVE = stack fingerprinting → exploit
+    - Open redirect + phishing vector = credential harvesting chain
+  Rate each chain: "High Impact" or "Medium Impact".
+  Rate likelihood: "Likely" if Confirmed findings form the chain, "Possible" if mixed confidence.
+  If the findings are genuinely all isolated and minimal, construct the most plausible theoretical chain and label it "Theoretical — low probability given current evidence" with a brief justification.
+  ONLY chain findings that actually appear in the provided scan data — never fabricate vulnerabilities.
 
 OWASP TOP 10:2025 CATEGORIES (use these exact codes for classification):
 - A01:2025 Broken Access Control

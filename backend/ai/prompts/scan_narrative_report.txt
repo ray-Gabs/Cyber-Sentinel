@@ -17,7 +17,8 @@ Describe the assessment: target URL/IP, scan type (quick/standard/full/custom), 
 
 --- RISK ASSESSMENT ---
 State the overall risk rating: Critical / High / Medium / Low / Informational.
-Justify with evidence: total finding count, severity distribution, number of OWASP categories affected.
+Justify with evidence: state the EXACT finding counts (e.g. "The assessment identified 14 findings: 2 critical, 4 high, 5 medium, 3 low, 0 informational spanning 4 OWASP 2025 categories"). Use the actual numbers from the scan data.
+Explain WHY that specific combination of findings equals the stated risk rating — reference the most dangerous combination, not just the highest single severity.
 Compare the severity distribution (e.g. "The ratio of X critical to Y informational findings indicates...").
 If CVE data is present, highlight the most dangerous CVEs by CVSS score and EPSS exploitation probability.
 If cvss_vector is present on any CVE, cite the full vector string and briefly explain the key components (Attack Vector, Privileges Required).
@@ -64,9 +65,18 @@ For each chain:
 
 Example pattern: "Server version disclosure (Info, Confirmed) + directory listing (Low, Confirmed) + outdated library with CVE-2023-XXXX (High, Confirmed) = attacker passively reads the server banner, enumerates the file structure to locate the vulnerable component, then executes a public proof-of-concept exploit for remote code execution."
 
-If no plausible multi-step attack chains exist from the scan data, state this clearly and briefly explain why (e.g., "The identified findings are isolated and do not form exploitable chains given the current evidence").
+You MUST produce at least one chain. Even informational findings can form meaningful reconnaissance or defence-weakening chains.
+Common chain patterns to look for (only use findings actually present in this scan):
+  - Missing CSP + reflected input = XSS with no browser mitigation → data theft
+  - Server version disclosure + outdated software CVE = recon → targeted exploit
+  - Missing HSTS + HTTP endpoint = TLS downgrade → credential interception
+  - CORS wildcard + missing SameSite flag = CSRF → session theft
+  - Directory listing + sensitive file = information disclosure → targeted follow-on
+  - Error messages leaking stack trace + known CVE = fingerprint → exploit
 
-ONLY use findings present in the provided scan data — never add hypothetical steps or assume additional vulnerabilities.
+If the findings are all isolated and low-severity, construct the most plausible theoretical chain from what exists, clearly labelling it as "Theoretical chain (low probability given current evidence)" and briefly explaining why a higher-confidence chain could not be established.
+
+ONLY use findings present in the provided scan data — never add hypothetical vulnerabilities not in the data.
 
 --- OWASP TOP 10:2025 COVERAGE ---
 For each OWASP 2025 category that had findings:
@@ -100,14 +110,18 @@ Step-by-step fix:
 Code example: [if remediation_code is available, include it in a code block]
 
 Keep each fix guide concise but complete enough for a developer to implement without external research.
+Stack-specific configuration: if the "Detected technologies" field identifies a specific framework or server, provide configuration code in that exact format. If Next.js is detected, show next.config.js headers() config. If Vercel is detected, show vercel.json headers config. If Nginx is detected, show nginx.conf add_header directives. If Apache is detected, show .htaccess Header set syntax. If Express.js is detected, show helmet() middleware code. If Django is detected, show SECURE_* settings. If no tech stack is detected, give generic but actionable guidance.
 
 --- STRATEGIC RECOMMENDATIONS ---
-Provide 4-6 strategic recommendations that address root causes and systemic issues, not individual bugs. Examples:
-- Implementing a secure development lifecycle (SDL) if design flaws are prevalent
-- Deploying a Web Application Firewall if injection attacks are pervasive
-- Establishing a vulnerability management programme if outdated components are common
-- Improving security testing in CI/CD if basic issues were caught
-- Staff security training if OWASP Top 10 violations are widespread
+Provide 4-6 strategic recommendations that address root causes and systemic issues, not individual bugs.
+Each recommendation MUST reference at least one specific finding from this scan by name. Do not give generic advice disconnected from the actual findings.
+If detected technologies are available, tailor each recommendation to the specific stack (e.g. "Enable Next.js security headers in next.config.js to address the 3 missing header findings" not just "Add security headers").
+Examples of well-formed recommendations (adapt to actual findings):
+- Implementing a secure development lifecycle (SDL) — justified by the presence of [specific design-flaw finding]
+- Deploying a Web Application Firewall — justified by the injection/XSS findings found at [specific URL]
+- Establishing a vulnerability management programme — justified by the [specific outdated component] finding
+- Improving security testing in CI/CD — justified by the basic [specific finding] that should have been caught earlier
+- Staff security training — justified by the OWASP [specific category] violations present
 Each recommendation should include the expected impact and a rough implementation priority (Immediate / Short-term / Long-term).
 
 --- TOOL COVERAGE MATRIX ---
