@@ -7,6 +7,7 @@ from typing import Literal, Optional
 
 from beanie import Document
 from pydantic import Field
+from pymongo import ASCENDING, IndexModel
 
 
 NotificationType = Literal["scan_complete", "scan_failed", "critical_finding"]
@@ -29,3 +30,9 @@ class Notification(Document):
     class Settings:
         name = "notifications"
         use_state_management = True
+        indexes = [
+            IndexModel([("user_id", ASCENDING)]),
+            IndexModel([("is_read", ASCENDING)]),
+            IndexModel([("user_id", ASCENDING), ("is_read", ASCENDING)]),
+            IndexModel([("user_id", ASCENDING), ("created_at", ASCENDING)]),
+        ]
