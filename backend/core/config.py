@@ -101,10 +101,15 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        """All allowed CORS origins: primary frontend + any extras from env."""
-        origins = [self.frontend_url]
+        """All allowed CORS origins: primary frontend + any extras from env.
+        Wildcards are never permitted regardless of env var values."""
+        origins = [self.frontend_url] if self.frontend_url != "*" else []
         if self.cors_extra_origins:
-            extras = [o.strip() for o in self.cors_extra_origins.split(",") if o.strip()]
+            extras = [
+                o.strip()
+                for o in self.cors_extra_origins.split(",")
+                if o.strip() and o.strip() != "*"
+            ]
             origins.extend(extras)
         return origins
 
