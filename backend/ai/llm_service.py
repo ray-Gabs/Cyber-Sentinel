@@ -58,7 +58,7 @@ class LLMService:
         return ""
 
     async def _generate(self, prompt: str, use_cache: bool = True, max_tokens: int = 2048) -> str:
-        """Generate text via the configured provider, with caching."""
+        """Generate text via the configured provider, with caching and 429 retry backoff."""
         provider = self._provider
         if provider is None:
             raise RuntimeError(
@@ -71,13 +71,39 @@ class LLMService:
             if cached:
                 return cached
 
-        text = await provider.generate(prompt, max_tokens=max_tokens, temperature=0.2)
-        log.info("AI prompt chars: %d, response chars: %d", len(prompt), len(text))
+        # Truncate oversized prompts to avoid blowing the provider's context limit
+        if len(prompt) > 25000:
+            log.warning("AI prompt truncated from %d to 25000 chars", len(prompt))
+            prompt = prompt[:25000] + "\n[... findings truncated due to size limit ...]"
 
-        if use_cache:
-            await self.cache.set(prompt, text)
+        # Exponential backoff on 429 rate-limit responses
+        _retry_delays = [5, 15, 30, 60]  # seconds to wait before each successive retry
+        last_exc: Exception | None = None
 
-        return text
+        for attempt in range(len(_retry_delays) + 1):
+            if attempt > 0:
+                wait_secs = _retry_delays[attempt - 1]
+                log.warning(
+                    "AI provider 429 rate limit — waiting %ds before retry %d/%d",
+                    wait_secs, attempt, len(_retry_delays),
+                )
+                await asyncio.sleep(wait_secs)
+            try:
+                text = await provider.generate(prompt, max_tokens=max_tokens, temperature=0.2)
+                log.info("AI prompt chars: %d, response chars: %d", len(prompt), len(text))
+                if use_cache:
+                    await self.cache.set(prompt, text)
+                return text
+            except Exception as exc:
+                err_str = str(exc)
+                if "429" in err_str or "rate_limit" in err_str.lower() or "rate limit" in err_str.lower():
+                    last_exc = exc
+                    continue  # retry with backoff
+                raise  # non-429 error: propagate immediately
+
+        # All retries exhausted
+        log.error("AI provider 429 — all %d retries exhausted.", len(_retry_delays))
+        raise last_exc  # type: ignore[misc]
 
     # ======================== CONTEXT HELPERS ========================
 
@@ -704,11 +730,13 @@ class LLMService:
                     + "\n\nWrite sections: STRATEGIC RECOMMENDATIONS, TOOL COVERAGE MATRIX."
                 )
 
-                text1, text2 = await asyncio.wait_for(
-                    asyncio.gather(
-                        self._generate(prompt1, max_tokens=4000),
-                        self._generate(prompt2, max_tokens=2000),
-                    ),
+                text1 = await asyncio.wait_for(
+                    self._generate(prompt1, max_tokens=4000),
+                    timeout=_NARRATIVE_TIMEOUT,
+                )
+                await asyncio.sleep(3)  # Rate limit buffer between sequential AI calls
+                text2 = await asyncio.wait_for(
+                    self._generate(prompt2, max_tokens=2000),
                     timeout=_NARRATIVE_TIMEOUT,
                 )
                 return text1 + "\n\n" + text2
