@@ -31,9 +31,14 @@ export function useNotifications() {
     if (messages.length === 0) return;
     const newest = messages[0];
     if (newest?.type === "new_notification" && newest.data?.id) {
+      // If the user is already on the detail page for this scan, mark it read silently
+      const scanId = newest.data.scan_id;
+      const onScanPage = !!scanId && window.location.pathname.includes(`/${scanId}`);
+      const notif = onScanPage ? { ...newest.data, is_read: true } : newest.data;
+      if (onScanPage) markNotificationRead(newest.data.id).catch(() => { /* ignore */ });
       setNotifications((prev) => {
-        if (prev.some((n) => n.id === newest.data.id)) return prev;
-        return [newest.data, ...prev];
+        if (prev.some((n) => n.id === notif.id)) return prev;
+        return [notif, ...prev];
       });
     }
   }, [messages]);

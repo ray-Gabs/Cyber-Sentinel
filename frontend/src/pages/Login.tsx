@@ -35,7 +35,7 @@ export default function Login() {
 
   const justRegistered = (location.state as { registered?: boolean } | null)?.registered ?? false;
 
-  const [username,     setUsername]     = useState("");
+  const [identifier,   setIdentifier]   = useState("");
   const [password,     setPassword]     = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error,        setError]        = useState("");
@@ -46,7 +46,7 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await login({ username, password });
+      await login({ identifier, password });
       navigate(ROUTES.DASHBOARD);
     } catch (err: unknown) {
       setError(
@@ -218,7 +218,7 @@ export default function Login() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="username" className="label">Username</label>
+              <label htmlFor="identifier" className="label">Username or Email</label>
               <div className="relative">
                 <User
                   size={14}
@@ -226,12 +226,12 @@ export default function Login() {
                   style={{ color: "var(--text-subtle)" }}
                 />
                 <input
-                  id="username"
+                  id="identifier"
                   type="text"
                   className="input pl-9"
-                  placeholder="Enter your username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Enter your username or email"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   autoComplete="username"
                   required
                 />

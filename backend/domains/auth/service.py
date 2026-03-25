@@ -67,11 +67,13 @@ async def authenticate_user(data: LoginRequest) -> TokenResponse:
     Verify credentials and return a JWT.
     Raises 401 on bad username or password.
     """
-    user = await User.find_one({"username": data.username})
+    user = await User.find_one(
+        {"$or": [{"username": data.identifier}, {"email": data.identifier}]}
+    )
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
+            detail="Invalid credentials",
         )
 
     # Update last_login timestamp

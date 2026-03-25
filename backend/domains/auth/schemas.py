@@ -20,7 +20,7 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     """Accepts either username or email + password."""
-    username: str
+    identifier: str = Field(..., min_length=1, description="Username or email address")
     password: str
 
 
