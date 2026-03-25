@@ -39,15 +39,20 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
   const retryCount = useRef(0);
+  // Guards against React StrictMode double-invocation: when the effect cleanup
+  // runs, this flag prevents the onclose handler from scheduling a reconnect.
+  const isUnmounted = useRef(false);
 
   const connect = useCallback(() => {
-    // Build the WebSocket URL — e.g., ws://localhost:5173/ws/alerts
+    if (isUnmounted.current) return;
+
     const url = `${WS_BASE}/${channel}`;
     const ws = new WebSocket(url);
 
     ws.onopen = () => {
+      if (isUnmounted.current) { ws.close(); return; }
       setConnected(true);
-      retryCount.current = 0; // reset backoff on successful connection
+      retryCount.current = 0;
       console.log(`[WS] Connected to ${channel}`);
     };
 
@@ -56,7 +61,6 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions) {
         const msg = JSON.parse(event.data) as WebSocketMessage<T>;
         setMessages((prev) => {
           const updated = [msg, ...prev];
-          // Cap the message array to avoid unbounded memory growth
           return updated.length > maxMessages ? updated.slice(0, maxMessages) : updated;
         });
       } catch {
@@ -66,16 +70,17 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions) {
 
     ws.onclose = () => {
       setConnected(false);
-      console.log(`[WS] Disconnected from ${channel}`);
+      // Don't reconnect if the component has unmounted (StrictMode or real unmount)
+      if (isUnmounted.current) return;
 
+      console.log(`[WS] Disconnected from ${channel}`);
       if (autoReconnect && retryCount.current < maxRetries) {
-        // Exponential backoff: 1s, 2s, 4s, 8s, … capped at 30s
         const delay = Math.min(BASE_DELAY_MS * 2 ** retryCount.current, MAX_DELAY_MS);
         retryCount.current += 1;
         console.log(`[WS] Reconnecting in ${delay}ms (attempt ${retryCount.current}/${maxRetries})`);
         reconnectTimer.current = setTimeout(connect, delay);
       } else if (retryCount.current >= maxRetries) {
-        console.warn(`[WS] Max retries (${maxRetries}) reached for channel "${channel}". Giving up.`);
+        console.warn(`[WS] Max retries (${maxRetries}) reached for "${channel}". Giving up.`);
       }
     };
 
@@ -87,11 +92,15 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions) {
   }, [channel, autoReconnect, maxRetries, maxMessages]);
 
   useEffect(() => {
+    isUnmounted.current = false;
+    retryCount.current = 0;
     connect();
+
     return () => {
-      // Cleanup on unmount
+      isUnmounted.current = true;
       clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
+      wsRef.current = null;
     };
   }, [connect]);
 
