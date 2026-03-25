@@ -2,15 +2,16 @@
 # backend/domains/auth/service.py — Auth Business Logic
 # ============================================================
 
+import hashlib
 import logging
+import secrets
 from datetime import datetime, timezone, timedelta
 
 from fastapi import HTTPException, status
-from jose import JWTError
 
 from core.config import settings
 from core.email_service import send_email
-from core.security import hash_password, verify_password, create_access_token, decode_access_token
+from core.security import hash_password, verify_password, create_access_token
 from domains.auth.models import User
 from domains.auth.schemas import RegisterRequest, LoginRequest, TokenResponse
 
@@ -83,19 +84,30 @@ async def authenticate_user(data: LoginRequest) -> TokenResponse:
 
 # --------------- Password Reset ---------------
 
-def _create_reset_token(user_id: str) -> str:
-    """Create a short-lived JWT for password reset (15 min)."""
-    return create_access_token(
-        data={"sub": user_id, "purpose": "password_reset"},
-        expires_delta=timedelta(minutes=15),
-    )
+_RESET_TOKEN_EXPIRY_MINUTES = 30
+
+_INVALID_RESET_LINK_EXC = HTTPException(
+    status_code=status.HTTP_400_BAD_REQUEST,
+    detail="Invalid or expired reset link. Please request a new one.",
+)
+
+
+def _generate_reset_token() -> tuple[str, str]:
+    """
+    Generate a cryptographically random reset token.
+    Returns (raw_token, sha256_hash). Only raw_token goes in the email URL.
+    The hash is stored in MongoDB so the raw token is never persisted.
+    """
+    raw = secrets.token_urlsafe(32)
+    hashed = hashlib.sha256(raw.encode()).hexdigest()
+    return raw, hashed
 
 
 async def _send_reset_email(to_email: str, username: str, reset_url: str) -> None:
     """Send the password reset email. Raises HTTP 503/502 on failure."""
     plain_text = (
         f"Hi {username},\n\n"
-        f"Reset your Cyber Sentinel password (expires in 15 minutes):\n{reset_url}\n\n"
+        f"Reset your Cyber Sentinel password (expires in {_RESET_TOKEN_EXPIRY_MINUTES} minutes):\n{reset_url}\n\n"
         f"If you didn't request this, ignore this email — your password is unchanged.\n\n"
         f"— Cyber Sentinel"
     )
@@ -122,41 +134,51 @@ async def _send_reset_email(to_email: str, username: str, reset_url: str) -> Non
 
 async def request_password_reset(email: str) -> None:
     """
-    Generate a reset token and email it.
+    Generate a single-use reset token, store its hash in MongoDB, and email the raw token.
     Always returns success (even if email not found) to prevent user enumeration.
+    Any existing unused token is invalidated before creating a new one.
     """
     user = await User.find_one({"email": email})
     if not user:
         return  # Silent — don't reveal whether email exists
 
-    token = _create_reset_token(str(user.id))
-    reset_url = f"{settings.frontend_url}/reset-password?token={token}"
+    raw_token, token_hash = _generate_reset_token()
+
+    # Invalidate any existing token and set the new one
+    user.password_reset_token_hash = token_hash
+    user.password_reset_expires = datetime.now(timezone.utc) + timedelta(minutes=_RESET_TOKEN_EXPIRY_MINUTES)
+    await user.save()
+
+    reset_url = f"{settings.frontend_url}/reset-password?token={raw_token}"
     await _send_reset_email(user.email, user.username, reset_url)
 
 
 async def reset_password(token: str, new_password: str) -> None:
-    """Validate the reset token and update the user's password."""
-    try:
-        payload = decode_access_token(token)
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired reset link. Please request a new one.",
-        )
+    """
+    Validate the reset token, update the password, and immediately invalidate the token.
+    Token is single-use — a second attempt with the same token will fail.
+    """
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
 
-    if payload.get("purpose") != "password_reset":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid reset token.",
-        )
-
-    user = await User.get(payload["sub"])
+    user = await User.find_one({"password_reset_token_hash": token_hash})
     if not user:
+        # Either never existed, already used, or wrong token — same generic error
+        raise _INVALID_RESET_LINK_EXC
+
+    # Check expiry
+    if not user.password_reset_expires or datetime.now(timezone.utc) > user.password_reset_expires:
+        # Clear the expired token
+        user.password_reset_token_hash = None
+        user.password_reset_expires = None
+        await user.save()
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset link has expired. Please request a new one.",
         )
 
+    # Invalidate token immediately (single-use) and update password atomically
+    user.password_reset_token_hash = None
+    user.password_reset_expires = None
     user.hashed_password = hash_password(new_password)
     await user.save()
 
