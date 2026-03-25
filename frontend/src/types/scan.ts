@@ -72,6 +72,15 @@ export interface Finding {
   confidence?: "Confirmed" | "Likely" | "Possible";
 }
 
+export interface ToolEvent {
+  tool: string;
+  status: "completed" | "failed" | "timeout" | "skipped";
+  findings_count: number;
+  elapsed_seconds: number;
+  error: string | null;
+  timestamp: string;
+}
+
 export interface Scan {
   id: string;
   target: string;
@@ -82,6 +91,9 @@ export interface Scan {
   risk_score?: number;
   current_stage?: string;
   completed_tools?: string[];
+  failed_tools?: string[];
+  tool_events?: ToolEvent[];
+  scan_coverage?: number;
   created_at: string;
   started_at?: string;
   completed_at?: string;

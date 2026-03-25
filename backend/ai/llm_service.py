@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-_MAX_FINDINGS_FOR_AI = 25
+_MAX_FINDINGS_FOR_AI = 50
 _MAX_DESC_LEN = 350
 _SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
@@ -357,12 +357,16 @@ class LLMService:
         }
 
         prompt = template or (
-            "You are a senior cybersecurity consultant. Analyse the following "
-            "penetration test results and provide:\n"
-            "1. executive_summary (3-5 sentences for non-technical stakeholders)\n"
-            "2. remediation (numbered prioritised fixes grouped by OWASP 2025 category)\n"
-            "3. risk_score (float 0.0 – 10.0)\n"
-            "4. attack_chain (1-2 multi-step attack chains from combined findings)\n\n"
+            "You are a senior penetration tester writing a professional security assessment report.\n"
+            "Analyse all scan data provided and produce a comprehensive report with:\n"
+            "1. executive_summary: 4-6 sentences for executive/non-technical audience covering what was found, "
+            "what risks it poses, and the overall security posture\n"
+            "2. remediation: Numbered prioritised fixes grouped by OWASP 2025 category, with specific "
+            "technical steps for each issue. Include code examples where relevant.\n"
+            "3. risk_score: float 0.0–10.0 based on severity/count of findings AND scan coverage. "
+            "If scan coverage is low, bias score higher to account for unknown exposure.\n"
+            "4. attack_chain: 1-3 realistic multi-step attack scenarios combining the findings found.\n\n"
+            "IMPORTANT: Account for tools that failed — missing data means unknown risk, not no risk.\n"
             "Respond ONLY in valid JSON with keys: executive_summary, remediation, risk_score, attack_chain.\n\n"
         )
         prompt += (
@@ -383,9 +387,39 @@ class LLMService:
         if tool_cov:
             prompt += f"Tool coverage: {json.dumps(tool_cov)}\n"
 
+        # Failed tools context — critical for accurate AI analysis
+        failed_tools = getattr(scan, "failed_tools", []) or []
+        scan_coverage = getattr(scan, "scan_coverage", None)
+        if failed_tools:
+            prompt += f"IMPORTANT — Tools that failed or timed out: {', '.join(failed_tools)}\n"
+            prompt += "Note: Findings from these tools are missing. The actual risk may be higher than reported.\n"
+        if scan_coverage is not None:
+            pct = int(scan_coverage * 100)
+            prompt += f"Scan coverage: {pct}% of planned tools completed successfully\n"
+            if pct < 70:
+                prompt += f"WARNING: Low scan coverage ({pct}%). Risk score may underestimate actual exposure.\n"
+
         # Nmap and SSL context
         prompt += self._extract_nmap_context(scan)
         prompt += self._extract_ssl_context(scan)
+
+        # ZAP DAST findings summary
+        zap_raw = getattr(scan, "zap_raw", None)
+        if zap_raw and isinstance(zap_raw, list) and len(zap_raw) > 0:
+            zap_summary = f"ZAP DAST found {len(zap_raw)} alerts (included in findings above)\n"
+            prompt += zap_summary
+        elif "zap" in failed_tools:
+            prompt += "ZAP DAST: Did not run (timed out or daemon unavailable) — dynamic analysis missing\n"
+
+        # WhatWeb technology fingerprint
+        whatweb_raw = getattr(scan, "whatweb_raw", None)
+        if whatweb_raw and isinstance(whatweb_raw, dict):
+            techs = whatweb_raw.get("technologies", [])
+            method = whatweb_raw.get("method", "")
+            if techs:
+                tech_names = [t.get("name", "") for t in techs if isinstance(t, dict) and t.get("name")]
+                if tech_names:
+                    prompt += f"WhatWeb fingerprint ({method}): {', '.join(tech_names[:20])}\n"
 
         if getattr(scan, "auth_config", None) and scan.auth_config.auth_type != "none":
             prompt += f"Authentication: {scan.auth_config.auth_type} (authenticated scan)\n"
@@ -582,6 +616,36 @@ class LLMService:
         tool_cov = self._build_tool_coverage(scan)
         duration = self._compute_scan_duration(scan)
 
+        # Failed tools context for narrative
+        failed_tools = getattr(scan, "failed_tools", []) or []
+        scan_coverage = getattr(scan, "scan_coverage", None)
+        failed_tools_ctx = ""
+        if failed_tools:
+            failed_tools_ctx = f"Failed/skipped tools: {', '.join(failed_tools)}\n"
+            failed_tools_ctx += "These tools did not produce results — actual risk may be higher.\n"
+        coverage_ctx = ""
+        if scan_coverage is not None:
+            pct = int(scan_coverage * 100)
+            coverage_ctx = f"Scan coverage: {pct}%\n"
+
+        # ZAP context for narrative
+        zap_raw = getattr(scan, "zap_raw", None)
+        zap_ctx = ""
+        if zap_raw and isinstance(zap_raw, list):
+            zap_ctx = f"ZAP DAST: {len(zap_raw)} alerts (included in findings)\n"
+        elif "zap" in failed_tools:
+            zap_ctx = "ZAP DAST: Did not complete — dynamic scan results unavailable\n"
+
+        # WhatWeb context for narrative
+        whatweb_raw = getattr(scan, "whatweb_raw", None)
+        whatweb_ctx = ""
+        if whatweb_raw and isinstance(whatweb_raw, dict):
+            techs = whatweb_raw.get("technologies", [])
+            if techs:
+                tech_names = [t.get("name", "") for t in techs if isinstance(t, dict) and t.get("name")]
+                if tech_names:
+                    whatweb_ctx = f"WhatWeb ({whatweb_raw.get('method', '')}): {', '.join(tech_names[:15])}\n"
+
         # Build base header (reused by both single and batched calls)
         header = template + (
             f"\n\n=== SCAN DATA ===\n"
@@ -595,6 +659,8 @@ class LLMService:
             f"Medium={counts['medium']}, Low={counts['low']}, Info={counts['info']}\n"
             f"{tech_info}{crawler_info}"
             f"{nmap_ctx}{ssl_ctx}"
+            f"{zap_ctx}{whatweb_ctx}"
+            f"{failed_tools_ctx}{coverage_ctx}"
             f"OWASP 2025 category names: {json.dumps(owasp_names)}\n"
             f"\nOWASP 2025 Category Distribution:\n"
         )
@@ -640,8 +706,8 @@ class LLMService:
 
                 text1, text2 = await asyncio.wait_for(
                     asyncio.gather(
-                        self._generate(prompt1, max_tokens=3000),
-                        self._generate(prompt2, max_tokens=1500),
+                        self._generate(prompt1, max_tokens=4000),
+                        self._generate(prompt2, max_tokens=2000),
                     ),
                     timeout=_NARRATIVE_TIMEOUT,
                 )
@@ -649,7 +715,7 @@ class LLMService:
             else:
                 prompt = header + f"\nTop Findings (by severity):\n{json.dumps([_build_finding_entry(f) for f in top], indent=1, separators=(',', ':'))}"
                 return await asyncio.wait_for(
-                    self._generate(prompt, max_tokens=4096),
+                    self._generate(prompt, max_tokens=6000),
                     timeout=_NARRATIVE_TIMEOUT,
                 )
 

@@ -29,6 +29,7 @@ export type {
   CVEData,
   AuthType,
   AuthConfig,
+  ToolEvent,
 } from "./scan";
 export type {
   Alert,
