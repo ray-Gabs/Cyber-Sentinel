@@ -83,39 +83,50 @@ class LLMService:
 
     @staticmethod
     def _extract_nmap_context(scan) -> str:
-        """Extract open ports/services summary from nmap_raw."""
+        """Extract open ports/services summary from nmap_raw.
+
+        nmap_raw is keyed by host IP: {ip_str: {"hostname": ..., "state": ...,
+        "protocols": {"tcp": {port_int: port_info, ...}, ...}}}
+        """
         nmap_raw = getattr(scan, "nmap_raw", None)
         if not nmap_raw or not isinstance(nmap_raw, dict):
             return "Nmap: No data available\n"
 
-        hosts = nmap_raw.get("hosts", [])
-        if not hosts or not isinstance(hosts, list):
-            return "Nmap: No host data available\n"
-
         lines = ["Open ports/services (from Nmap):"]
         found_any = False
-        for host in hosts[:3]:  # cap at 3 hosts
-            if not isinstance(host, dict):
+        host_count = 0
+        for host_addr, host_data in nmap_raw.items():
+            if not isinstance(host_data, dict):
                 continue
-            host_addr = host.get("host", host.get("address", "unknown"))
-            ports = host.get("ports", [])
-            if not isinstance(ports, list):
+            host_count += 1
+            if host_count > 3:  # cap at 3 hosts
+                break
+            protocols = host_data.get("protocols", {})
+            if not isinstance(protocols, dict):
                 continue
-            for port in ports[:20]:  # cap at 20 ports per host
-                if not isinstance(port, dict):
+            for proto, port_map in protocols.items():
+                if not isinstance(port_map, dict):
                     continue
-                state = port.get("state", "")
-                if state != "open":
-                    continue
-                portnum = port.get("port", port.get("portid", "?"))
-                proto = port.get("protocol", port.get("proto", "tcp"))
-                service = port.get("service", port.get("name", "unknown"))
-                version = port.get("version", port.get("product", ""))
-                entry = f"  - {portnum}/{proto}: {service}"
-                if version:
-                    entry += f" ({version})"
-                lines.append(entry)
-                found_any = True
+                port_count = 0
+                for portnum in sorted(port_map.keys()):
+                    if port_count >= 20:  # cap at 20 ports per host
+                        break
+                    port_info = port_map[portnum]
+                    if not isinstance(port_info, dict):
+                        continue
+                    state = port_info.get("state", "")
+                    if state != "open":
+                        continue
+                    service = port_info.get("name", "unknown")
+                    product = port_info.get("product", "")
+                    version = port_info.get("version", "")
+                    version_str = f"{product} {version}".strip()
+                    entry = f"  - {portnum}/{proto}: {service}"
+                    if version_str:
+                        entry += f" ({version_str})"
+                    lines.append(entry)
+                    found_any = True
+                    port_count += 1
 
         if not found_any:
             return "Nmap: No open ports detected\n"

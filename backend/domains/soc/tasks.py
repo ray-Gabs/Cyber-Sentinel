@@ -5,7 +5,10 @@
 # ============================================================
 
 import asyncio
+import logging
 from core.celery_app import celery
+
+log = logging.getLogger(__name__)
 
 
 def _get_event_loop():
@@ -42,7 +45,7 @@ async def _poll_async():
     try:
         raw_alerts = await wazuh_client.get_alerts(limit=100)
     except Exception as e:
-        print(f"[SOC Polling] Wazuh API error: {e}")
+        log.warning("[SOC Polling] Wazuh API error: %s", e)
         return
 
     for raw in raw_alerts:
@@ -52,9 +55,9 @@ async def _poll_async():
         # 2. Apply MITRE ATT&CK mapping
         if not alert.mitre_techniques:
             try:
-                await apply_mitre_mapping(alert)
+                alert = await apply_mitre_mapping(alert)
             except Exception as e:
-                print(f"[SOC Polling] MITRE mapping failed for alert {alert.wazuh_id}: {e}")
+                log.warning("[SOC Polling] MITRE mapping failed for alert %s: %s", alert.wazuh_id, e)
 
         # 3. Only run AI analysis on alerts that:
         #    - Haven't been analysed yet
@@ -81,10 +84,11 @@ async def _poll_async():
                     },
                     context=context,
                 )
-                await apply_ai_verdict(str(alert.id), verdict)
+                # Capture return value so the updated ai_verdict is visible below
+                alert = await apply_ai_verdict(str(alert.id), verdict)
 
             except Exception as e:
-                print(f"[SOC Polling] AI analysis failed for alert {alert.wazuh_id}: {e}")
+                log.warning("[SOC Polling] AI analysis failed for alert %s: %s", alert.wazuh_id, e)
 
         # 4. Run automated playbook for high-severity alerts with AI verdict
         if alert.ai_verdict == "TRUE_POSITIVE" and alert.ai_action == "ESCALATE":
@@ -94,7 +98,7 @@ async def _poll_async():
                 if pb_id:
                     await playbook_engine.execute_playbook(alert, pb_id)
             except Exception as e:
-                print(f"[SOC Polling] Playbook execution failed for alert {alert.wazuh_id}: {e}")
+                log.warning("[SOC Polling] Playbook execution failed for alert %s: %s", alert.wazuh_id, e)
 
         # 5. Threat intel enrichment for high-severity alerts
         if alert.rule_level >= 10 and not alert.threat_intel:
@@ -105,4 +109,4 @@ async def _poll_async():
                     alert.threat_intel = results
                     await alert.save()
             except Exception as e:
-                print(f"[SOC Polling] Threat intel failed for alert {alert.wazuh_id}: {e}")
+                log.warning("[SOC Polling] Threat intel failed for alert %s: %s", alert.wazuh_id, e)

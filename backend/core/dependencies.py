@@ -2,6 +2,7 @@
 # backend/core/dependencies.py — FastAPI Dependency Injection
 # ============================================================
 
+from beanie import PydanticObjectId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
@@ -34,7 +35,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     except Exception:
         raise credentials_exception
 
-    user = await User.get(user_id)
+    try:
+        user = await User.get(PydanticObjectId(user_id))
+    except Exception:
+        raise credentials_exception
     if user is None:
         raise credentials_exception
     return user

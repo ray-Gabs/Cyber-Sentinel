@@ -21,9 +21,12 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem(TOKEN_KEY);
-      // Redirect to login unless already there
-      if (!window.location.pathname.includes("/login")) {
+      const token = localStorage.getItem(TOKEN_KEY);
+      // Only clear token and redirect when a stored token was rejected.
+      // If there is no token (e.g. login page returning "bad credentials"),
+      // do nothing — the caller handles the error in its own catch block.
+      if (token && !window.location.pathname.includes("/login")) {
+        localStorage.removeItem(TOKEN_KEY);
         window.location.href = "/login";
       }
     }

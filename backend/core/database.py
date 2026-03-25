@@ -15,9 +15,12 @@ _client: AsyncIOMotorClient | None = None
 async def init_db() -> None:
     """
     Initialise the MongoDB connection and register all Beanie document models.
-    Call this once during FastAPI lifespan startup.
+    Safe to call multiple times — subsequent calls are no-ops if already initialised.
     """
     global _client
+    if _client is not None:
+        return  # Already initialised — Beanie document models are already registered
+
     # Only use TLS/SSL certifi bundle for Atlas (mongodb+srv) connections
     if settings.mongodb_uri.startswith("mongodb+srv"):
         _client = AsyncIOMotorClient(settings.mongodb_uri, tlsCAFile=certifi.where())

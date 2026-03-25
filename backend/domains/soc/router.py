@@ -78,6 +78,27 @@ async def list_alerts(
     return [_to_summary(a) for a in alerts]
 
 
+# Static paths must be registered BEFORE /{alert_id} — FastAPI matches in order.
+@router.get("/stats/summary")
+async def alert_stats(user: User = Depends(get_current_user)):
+    """Get aggregated alert statistics for the analytics dashboard."""
+    return await service.get_alert_stats()
+
+
+@router.get("/rules/custom")
+async def get_custom_rules(user: User = Depends(get_current_user)):
+    """Get custom SIEM rule definitions."""
+    from domains.soc.wazuh_rules import get_custom_rules
+    return get_custom_rules()
+
+
+@router.post("/rules/deploy")
+async def deploy_custom_rules(user: User = Depends(get_current_user)):
+    """Deploy custom SIEM rules to Wazuh."""
+    from domains.soc.wazuh_rules import deploy_rules_to_wazuh
+    return await deploy_rules_to_wazuh()
+
+
 @router.get("/{alert_id}", response_model=AlertDetailResponse)
 async def get_alert(alert_id: str, user: User = Depends(get_current_user)):
     """Get full details for a single alert including AI verdict."""
@@ -101,23 +122,3 @@ async def enrich_alert(alert_id: str, user: User = Depends(get_current_user)):
     """Run threat intelligence enrichment (VT + AbuseIPDB) for an alert."""
     a = await service.enrich_alert_threat_intel(alert_id)
     return _to_detail(a)
-
-
-@router.get("/stats/summary")
-async def alert_stats(user: User = Depends(get_current_user)):
-    """Get aggregated alert statistics for the analytics dashboard."""
-    return await service.get_alert_stats()
-
-
-@router.get("/rules/custom")
-async def get_custom_rules(user: User = Depends(get_current_user)):
-    """Get custom SIEM rule definitions."""
-    from domains.soc.wazuh_rules import get_custom_rules
-    return get_custom_rules()
-
-
-@router.post("/rules/deploy")
-async def deploy_custom_rules(user: User = Depends(get_current_user)):
-    """Deploy custom SIEM rules to Wazuh."""
-    from domains.soc.wazuh_rules import deploy_rules_to_wazuh
-    return await deploy_rules_to_wazuh()

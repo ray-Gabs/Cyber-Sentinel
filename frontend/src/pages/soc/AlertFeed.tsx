@@ -103,7 +103,7 @@ export default function AlertFeed() {
         setLiveCount((n) => n + 1);
       }
     }
-  }, [messages]);
+  }, [messages, alerts, page]);
 
   const uniqueAgents = [...new Set(alerts.map((a) => a.agent_name).filter(Boolean))];
 

@@ -111,10 +111,9 @@ async def override_verdict(alert_id: str, data: AnalystOverrideRequest) -> Alert
     await alert.save()
 
     # Update the AI verdict audit trail
-    latest = await AiVerdict.find_one(
-        {"alert_id": str(alert.id)},
-        sort=[("created_at", -1)],
-    )
+    latest = await AiVerdict.find(
+        {"alert_id": str(alert.id)}
+    ).sort("-created_at").first_or_none()
     if latest:
         latest.analyst_agreed = (latest.verdict == data.override)
         await latest.save()

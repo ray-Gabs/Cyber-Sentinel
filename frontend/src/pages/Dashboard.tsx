@@ -3,7 +3,7 @@
  * Layout: greeting header → stat cards → scan grid + quick actions.
  * Visual direction: GitHub data-density × Instagram visual polish.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { getScans } from "@/services/scanService";
@@ -254,7 +254,7 @@ export default function Dashboard() {
   const [alertStats, setAlertStats] = useState<AlertStats | null>(null);
   const [loading, setLoading]       = useState(true);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [scanData, statsData] = await Promise.allSettled([
         getScans(1, 50),
@@ -264,13 +264,13 @@ export default function Dashboard() {
       if (statsData.status === "fulfilled") setAlertStats(statsData.value);
     } catch { /* silently ignore */ }
     finally { setLoading(false); }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchData]);
 
   const activeScans      = scans.filter((s) => s.status === "running" || s.status === "pending");
   const completedScans   = scans.filter((s) => s.status === "completed");

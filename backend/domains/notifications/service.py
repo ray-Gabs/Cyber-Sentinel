@@ -96,4 +96,4 @@ async def mark_all_read(user_id: str) -> int:
         Notification.user_id == user_id,
         Notification.is_read == False,  # noqa: E712
     ).update({"$set": {"is_read": True}})
-    return result.modified_count if result else 0
+    return getattr(result, "modified_count", 0) if result else 0
