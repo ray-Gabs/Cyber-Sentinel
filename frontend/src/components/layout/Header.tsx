@@ -5,7 +5,7 @@
 import { useRef, useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useTheme } from "@/contexts/ThemeContext";
+import { useTheme } from "@/providers/ThemeProvider";
 import { useNotifications } from "@/hooks/useNotifications";
 import { AnimatePresence } from "framer-motion";
 import NotificationPanel, { NotificationBell } from "@/components/layout/NotificationPanel";

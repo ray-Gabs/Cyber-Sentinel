@@ -1,0 +1,105 @@
+/* ══════════════════════════════════════════════════════
+   DESIGN SYSTEM TOKENS
+   Extends index.css theme variables.
+   Import at the top of index.css.
+   ══════════════════════════════════════════════════════ */
+
+:root {
+
+  /* ── Spacing Scale (8px grid) ─────────────────────── */
+  --space-1:  0.25rem;   /* 4px   — tight internal padding */
+  --space-2:  0.5rem;    /* 8px   — base unit             */
+  --space-3:  0.75rem;   /* 12px  — small gaps            */
+  --space-4:  1rem;      /* 16px  — standard padding      */
+  --space-5:  1.5rem;    /* 24px  — component spacing     */
+  --space-6:  2rem;      /* 32px  — section spacing       */
+  --space-7:  3rem;      /* 48px  — large gaps            */
+  --space-8:  4rem;      /* 64px  — page sections         */
+  --space-9:  6rem;      /* 96px  — hero spacing          */
+  --space-10: 8rem;      /* 128px — max spacing           */
+
+  /* ── Border Radius Scale ──────────────────────────── */
+  --radius-sm:   0.25rem;  /* 4px    — tags, badges, chips  */
+  --radius-md:   0.5rem;   /* 8px    — buttons, inputs      */
+  --radius-lg:   0.75rem;  /* 12px   — cards, panels        */
+  --radius-xl:   1rem;     /* 16px   — large cards, sheets  */
+  --radius-full: 9999px;   /* pills, avatars, toggles       */
+
+  /* ── Type Scale (Major Third — ratio 1.25) ────────── */
+  --text-xs:   0.64rem;    /* 10.24px — labels, badges      */
+  --text-sm:   0.8rem;     /* 12.8px  — secondary text      */
+  --text-base: 1rem;       /* 16px    — body                */
+  --text-md:   1.25rem;    /* 20px    — lead text           */
+  --text-lg:   1.5625rem;  /* 25px    — section headers     */
+  --text-xl:   1.953rem;   /* 31.25px — page titles         */
+  --text-2xl:  2.441rem;   /* 39px    — hero numbers        */
+  --text-3xl:  3.052rem;   /* 48.8px  — display             */
+
+  /* ── Font Tokens ──────────────────────────────────── */
+  --font-display: "Syne", system-ui, sans-serif;
+  --font-heading: "Space Grotesk", "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-body:    "Inter", "Plus Jakarta Sans", "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", "Fira Code", monospace;
+
+  /* ── Layout Constants ─────────────────────────────── */
+  --navbar-height:        4rem;   /* 64px  */
+  --sidebar-width:        15rem;  /* 240px */
+  --sidebar-collapsed:    4rem;   /* 64px  */
+
+  /* ── Component Size Tokens ────────────────────────── */
+  --btn-height-sm:   2rem;    /* 32px */
+  --btn-height-md:   2.5rem;  /* 40px */
+  --btn-height-lg:   3rem;    /* 48px */
+  --input-height:    2.5rem;  /* 40px */
+  --input-height-lg: 3rem;    /* 48px */
+
+  /* Icon sizes: 16 24 32 40 48px */
+  --icon-xs: 1rem;      /* 16px */
+  --icon-sm: 1.5rem;    /* 24px */
+  --icon-md: 2rem;      /* 32px */
+  --icon-lg: 2.5rem;    /* 40px */
+  --icon-xl: 3rem;      /* 48px */
+
+  /* ── Easing Tokens ────────────────────────────────── */
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out:    cubic-bezier(0.0, 0, 0.2, 1);
+  --ease-in:     cubic-bezier(0.4, 0, 1, 1);
+
+  /* ── Palette A defaults (Monochromatic — Electric Blue 220°) ── */
+  --color-accent:           hsl(220, 90%, 60%);
+  --color-accent-dim:       hsla(220, 90%, 60%, 0.15);
+  --color-accent-glow:      hsla(220, 90%, 60%, 0.25);
+  --color-accent-hover:     hsl(220, 90%, 67%);
+
+  /* Palette B/C extra tokens — undefined by default */
+  --color-complement:       transparent;
+  --color-complement-dim:   transparent;
+  --color-secondary:        transparent;
+  --color-secondary-dim:    transparent;
+  --color-tertiary:         transparent;
+  --color-tertiary-dim:     transparent;
+}
+
+/* ── Palette B: Complementary (Electric Blue + Amber) ── */
+[data-palette="B"] {
+  --color-accent:         hsl(220, 90%, 60%);
+  --color-accent-dim:     hsla(220, 90%, 60%, 0.15);
+  --color-complement:     hsl(40, 90%, 55%);
+  --color-complement-dim: hsla(40, 90%, 55%, 0.15);
+  /* Amber for focus rings, CTAs */
+  --border-focus: hsl(40, 90%, 55%);
+}
+
+/* ── Palette C: Analogous (Blue + Cyan + Purple) ──────── */
+[data-palette="C"] {
+  --color-accent:         hsl(220, 90%, 60%);
+  --color-accent-dim:     hsla(220, 90%, 60%, 0.15);
+  --color-secondary:      hsl(190, 80%, 55%);
+  --color-secondary-dim:  hsla(190, 80%, 55%, 0.15);
+  --color-tertiary:       hsl(270, 70%, 65%);
+  --color-tertiary-dim:   hsla(270, 70%, 65%, 0.15);
+  /* Override purple tokens to use the analogous tertiary */
+  --color-purple-text:    hsl(270, 70%, 65%);
+  --color-purple-dim:     hsla(270, 70%, 65%, 0.1);
+  --color-purple-border:  hsla(270, 70%, 65%, 0.2);
+}

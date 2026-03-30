@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
-import { useTheme } from "@/contexts/ThemeContext";
+import { useTheme } from "@/providers/ThemeProvider";
 import {
   ShieldCheck, UserPlus, AlertCircle, Eye, EyeOff,
   Lock, Mail, User, Sun, Moon, Check, X,

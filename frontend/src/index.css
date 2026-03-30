@@ -1,3 +1,8 @@
+/* Design system tokens — spacing, radius, type scale, palettes */
+@import "./styles/design-tokens.css";
+/* Typography hierarchy — semantic classes, font assignments */
+@import "./styles/typography.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

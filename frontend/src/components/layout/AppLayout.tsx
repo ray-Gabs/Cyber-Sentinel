@@ -4,9 +4,9 @@
  * Sidebar state is persisted in localStorage.
  */
 import { useState, useEffect } from "react";
-import { Outlet, useLocation } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
-import { useTheme } from "@/contexts/ThemeContext";
+import { Outlet } from "react-router-dom";
+import { useTheme } from "@/providers/ThemeProvider";
+import { TransitionProvider } from "@/components/transitions/TransitionProvider";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import { AnimatedGridPattern } from "@/components/ui/AnimatedGridPattern";
@@ -14,14 +14,7 @@ import { cn } from "@/lib/utils";
 
 const SIDEBAR_KEY = "cs_sidebar_open";
 
-const pageVariants = {
-  initial: { opacity: 0, y: 8 },
-  enter:   { opacity: 1, y: 0, transition: { duration: 0.22, ease: "easeOut" as const } },
-  exit:    { opacity: 0, y: -4, transition: { duration: 0.14, ease: "easeIn" as const } },
-};
-
 export default function AppLayout() {
-  const location   = useLocation();
   const { isDark } = useTheme();
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
@@ -80,18 +73,9 @@ export default function AppLayout() {
         <Header onToggleSidebar={toggleSidebar} sidebarOpen={sidebarOpen} />
 
         <main className="flex-1 p-6">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={location.pathname}
-              variants={pageVariants}
-              initial="initial"
-              animate="enter"
-              exit="exit"
-              className="page-wrapper h-full"
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+          <TransitionProvider>
+            <Outlet />
+          </TransitionProvider>
         </main>
       </div>
     </div>

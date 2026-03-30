@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useTheme } from "@/contexts/ThemeContext";
+import { useTheme } from "@/providers/ThemeProvider";
 import { Shield, Lock, Eye, EyeOff, AlertCircle, CheckCircle, Sun, Moon } from "lucide-react";
 import { ROUTES } from "@/lib/constants";
 import { resetPassword } from "@/services/authService";

@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useTheme } from "@/contexts/ThemeContext";
+import { useTheme } from "@/providers/ThemeProvider";
 import { Shield, Mail, ArrowLeft, AlertCircle, CheckCircle, Sun, Moon, Send } from "lucide-react";
 import { ROUTES } from "@/lib/constants";
 import { forgotPassword } from "@/services/authService";

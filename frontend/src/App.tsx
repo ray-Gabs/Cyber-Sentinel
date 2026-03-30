@@ -16,7 +16,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
-import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ThemeProvider } from "@/providers/ThemeProvider";
 import AppLayout from "@/components/layout/AppLayout";
 import { PageLoader } from "@/components/common/LoadingSpinner";
 
