@@ -97,3 +97,18 @@ async def mark_all_read(user_id: str) -> int:
         Notification.is_read == False,  # noqa: E712
     ).update({"$set": {"is_read": True}})
     return getattr(result, "modified_count", 0) if result else 0
+
+
+async def delete_notification(notification_id: str, user_id: str) -> bool:
+    """Delete a single notification. Returns True if deleted, False if not found/not owned."""
+    notif = await Notification.get(PydanticObjectId(notification_id))
+    if not notif or notif.user_id != user_id:
+        return False
+    await notif.delete()
+    return True
+
+
+async def clear_all_notifications(user_id: str) -> int:
+    """Delete all notifications for a user. Returns count deleted."""
+    result = await Notification.find(Notification.user_id == user_id).delete()
+    return getattr(result, "deleted_count", 0) if result else 0

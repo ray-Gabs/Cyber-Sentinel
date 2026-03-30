@@ -1,6 +1,8 @@
 /**
  * useNotifications — manages notification state, WebSocket feed, and API calls.
  * Combines REST fetch with real-time WebSocket updates on the "notifications" channel.
+ *
+ * Changes: added deleteNotification, clearAll, and a 50-item cap.
  */
 import { useEffect, useState, useCallback } from "react";
 import { useWebSocket } from "./useWebSocket";
@@ -8,8 +10,12 @@ import {
   getNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  deleteNotification as apiDeleteNotification,
+  clearAllNotifications as apiClearAll,
 } from "@/services/notificationService";
 import type { Notification } from "@/types/notification";
+
+const MAX_NOTIFICATIONS = 50;
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -19,26 +25,26 @@ export function useNotifications() {
 
   const fetch = useCallback(async () => {
     const data = await getNotifications();
-    setNotifications(data);
+    setNotifications(data.slice(0, MAX_NOTIFICATIONS));
     setLoading(false);
   }, []);
 
   // Initial load
   useEffect(() => { fetch(); }, [fetch]);
 
-  // Merge real-time WebSocket notifications
+  // Merge real-time WebSocket notifications — deduplicate and cap at MAX
   useEffect(() => {
     if (messages.length === 0) return;
     const newest = messages[0];
     if (newest?.type === "new_notification" && newest.data?.id) {
-      // If the user is already on the detail page for this scan, mark it read silently
       const scanId = newest.data.scan_id;
       const onScanPage = !!scanId && window.location.pathname.includes(`/${scanId}`);
       const notif = onScanPage ? { ...newest.data, is_read: true } : newest.data;
       if (onScanPage) markNotificationRead(newest.data.id).catch(() => { /* ignore */ });
       setNotifications((prev) => {
         if (prev.some((n) => n.id === notif.id)) return prev;
-        return [notif, ...prev];
+        // Prepend and trim to cap
+        return [notif, ...prev].slice(0, MAX_NOTIFICATIONS);
       });
     }
   }, [messages]);
@@ -57,5 +63,24 @@ export function useNotifications() {
     await markAllNotificationsRead();
   }, []);
 
-  return { notifications, unreadCount, loading, markRead, markAllRead, refetch: fetch };
+  const deleteNotification = useCallback(async (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    await apiDeleteNotification(id);
+  }, []);
+
+  const clearAll = useCallback(async () => {
+    setNotifications([]);
+    await apiClearAll();
+  }, []);
+
+  return {
+    notifications,
+    unreadCount,
+    loading,
+    markRead,
+    markAllRead,
+    deleteNotification,
+    clearAll,
+    refetch: fetch,
+  };
 }

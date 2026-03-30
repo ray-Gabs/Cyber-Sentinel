@@ -1,17 +1,18 @@
 /**
  * NotificationPanel — popout notification list attached to the bell icon.
  * Opens/closes with Framer Motion. Shows unread badge count on bell.
+ * Each row has an X delete button. Header has "Mark all read" + "Clear all".
  */
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bell, CheckCheck, ShieldAlert, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Bell, CheckCheck, ShieldAlert, CheckCircle2, AlertTriangle, X, Trash2 } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import type { Notification, NotificationType } from "@/types/notification";
 
 // ── Icon per notification type ────────────────────────────────────────────
 function NotifIcon({ type }: { type: NotificationType }) {
-  if (type === "scan_complete")  return <CheckCircle2 size={14} style={{ color: "var(--sev-low-text)" }} />;
-  if (type === "scan_failed")    return <AlertTriangle size={14} style={{ color: "var(--sev-critical-text)" }} />;
+  if (type === "scan_complete")    return <CheckCircle2 size={14} style={{ color: "var(--sev-low-text)" }} />;
+  if (type === "scan_failed")      return <AlertTriangle size={14} style={{ color: "var(--sev-critical-text)" }} />;
   if (type === "critical_finding") return <ShieldAlert size={14} style={{ color: "var(--sev-critical-text)" }} />;
   return <Bell size={14} style={{ color: "var(--text-muted)" }} />;
 }
@@ -51,9 +52,11 @@ function SeveritySummary({ summary }: { summary: Record<string, number> }) {
 function NotifRow({
   notif,
   onRead,
+  onDelete,
 }: {
   notif: Notification;
   onRead: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const navigate = useNavigate();
 
@@ -62,15 +65,20 @@ function NotifRow({
     if (notif.scan_id) navigate(`/scans/${notif.scan_id}`);
   };
 
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete(notif.id);
+  };
+
   return (
     <motion.div
       layout
       initial={{ opacity: 0, x: 12 }}
       animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 12 }}
+      exit={{ opacity: 0, x: 12, height: 0, paddingTop: 0, paddingBottom: 0 }}
       transition={{ duration: 0.2 }}
       onClick={handleClick}
-      className="flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors"
+      className="group flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors relative"
       style={{
         backgroundColor: notif.is_read ? "transparent" : "rgba(59,130,246,0.04)",
         borderLeft: notif.is_read ? "2px solid transparent" : "2px solid var(--accent)",
@@ -93,7 +101,7 @@ function NotifRow({
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 pr-5">
         <p
           className="text-xs font-medium leading-snug"
           style={{ color: notif.is_read ? "var(--text-muted)" : "var(--text-base)" }}
@@ -114,10 +122,29 @@ function NotifRow({
         </p>
       </div>
 
-      {/* Unread dot */}
+      {/* Delete button — visible on row hover */}
+      <button
+        onClick={handleDelete}
+        title="Delete notification"
+        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded flex items-center justify-center
+                   opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{ color: "var(--text-subtle)" }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLElement).style.color = "var(--sev-critical-text)";
+          (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(239,68,68,0.1)";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLElement).style.color = "var(--text-subtle)";
+          (e.currentTarget as HTMLElement).style.backgroundColor = "";
+        }}
+      >
+        <X size={11} />
+      </button>
+
+      {/* Unread dot (hidden when delete button is shown on hover) */}
       {!notif.is_read && (
         <span
-          className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5"
+          className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 group-hover:opacity-0 transition-opacity"
           style={{ backgroundColor: "var(--accent)" }}
         />
       )}
@@ -132,6 +159,8 @@ interface NotificationPanelProps {
   loading: boolean;
   onMarkRead: (id: string) => void;
   onMarkAllRead: () => void;
+  onDelete: (id: string) => void;
+  onClearAll: () => void;
 }
 
 export default function NotificationPanel({
@@ -140,6 +169,8 @@ export default function NotificationPanel({
   loading,
   onMarkRead,
   onMarkAllRead,
+  onDelete,
+  onClearAll,
 }: NotificationPanelProps) {
   return (
     <>
@@ -183,16 +214,29 @@ export default function NotificationPanel({
             )}
           </div>
 
-          {unreadCount > 0 && (
-            <button
-              onClick={onMarkAllRead}
-              className="flex items-center gap-1 text-[10px] font-medium transition-opacity hover:opacity-70"
-              style={{ color: "var(--accent)" }}
-            >
-              <CheckCheck size={11} />
-              Mark all read
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <button
+                onClick={onMarkAllRead}
+                className="flex items-center gap-1 text-[10px] font-medium transition-opacity hover:opacity-70"
+                style={{ color: "var(--accent)" }}
+              >
+                <CheckCheck size={11} />
+                Mark all read
+              </button>
+            )}
+            {notifications.length > 0 && (
+              <button
+                onClick={onClearAll}
+                className="flex items-center gap-1 text-[10px] font-medium transition-opacity hover:opacity-70"
+                style={{ color: "var(--text-subtle)" }}
+                title="Delete all notifications"
+              >
+                <Trash2 size={11} />
+                Clear all
+              </button>
+            )}
+          </div>
         </div>
 
         {/* List */}
@@ -224,7 +268,12 @@ export default function NotificationPanel({
             <div className="divide-y" style={{ borderColor: "var(--border)" }}>
               <AnimatePresence>
                 {notifications.map((n) => (
-                  <NotifRow key={n.id} notif={n} onRead={onMarkRead} />
+                  <NotifRow
+                    key={n.id}
+                    notif={n}
+                    onRead={onMarkRead}
+                    onDelete={onDelete}
+                  />
                 ))}
               </AnimatePresence>
             </div>

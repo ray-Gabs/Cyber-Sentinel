@@ -20,7 +20,7 @@ export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
-  const { notifications, unreadCount, loading, markRead, markAllRead } = useNotifications();
+  const { notifications, unreadCount, loading, markRead, markAllRead, deleteNotification, clearAll } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -127,6 +127,8 @@ export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
                 loading={loading}
                 onMarkRead={markRead}
                 onMarkAllRead={markAllRead}
+                onDelete={deleteNotification}
+                onClearAll={clearAll}
               />
             )}
           </AnimatePresence>
