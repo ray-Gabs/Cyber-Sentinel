@@ -2,9 +2,10 @@
 # backend/domains/soc/router.py — SOC REST Endpoints
 # ============================================================
 
-from fastapi import APIRouter, Depends, Query, HTTPException, Header, status
-from typing import Optional
+from fastapi import APIRouter, Depends, Query, HTTPException, Header, Request, status
+from typing import Any, Optional
 
+from core.config import settings
 from core.dependencies import get_current_user
 from domains.auth.models import User
 from domains.soc.models import Alert
@@ -112,6 +113,54 @@ async def deploy_custom_rules(
         wazuh_user=x_wazuh_username,
         wazuh_password=x_wazuh_password,
     )
+
+
+@router.post("/webhook")
+async def wazuh_webhook(
+    request: Request,
+    x_wazuh_token: Optional[str] = Header(None, alias="X-Wazuh-Token"),
+):
+    """
+    Wazuh push webhook — receives alert events from Wazuh integration.
+
+    Configure in Wazuh's ossec.conf:
+      <integration>
+        <name>custom-webhook</name>
+        <hook_url>http://<server>:8000/api/alerts/webhook</hook_url>
+        <level>7</level>
+        <alert_format>json</alert_format>
+      </integration>
+
+    Security: if WAZUH_WEBHOOK_TOKEN is set, the X-Wazuh-Token header must match.
+    On isolated lab networks it is acceptable to leave the token empty.
+    """
+    # Verify shared secret when configured
+    if settings.wazuh_webhook_token and x_wazuh_token != settings.wazuh_webhook_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook token")
+
+    body: Any = await request.json()
+
+    # Wazuh can send a single alert object or a batch {"alerts": [...]}
+    if isinstance(body, list):
+        raw_alerts = body
+    elif isinstance(body, dict) and "alerts" in body:
+        raw_alerts = body["alerts"]
+    else:
+        raw_alerts = [body]
+
+    ingested = []
+    for raw in raw_alerts:
+        try:
+            alert = await service.ingest_wazuh_alert(raw)
+            # Dispatch background triage for newly ingested alerts
+            from domains.soc.tasks import triage_single_alert
+            triage_single_alert.delay(str(alert.id))
+            ingested.append({"alert_id": str(alert.id), "wazuh_id": alert.wazuh_id})
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("[webhook] Failed to ingest alert: %s", exc)
+
+    return {"status": "ok", "ingested": len(ingested), "alerts": ingested}
 
 
 @router.get("/{alert_id}", response_model=AlertDetailResponse)

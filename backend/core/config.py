@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     wazuh_api_user: str = "wazuh-wui"
     wazuh_api_password: str = ""
     wazuh_verify_ssl: bool = False
+    # Shared secret for the incoming Wazuh webhook. Leave empty to skip verification
+    # (acceptable on isolated lab networks). Set to a random token in production.
+    wazuh_webhook_token: str = ""
 
     # ---- ZAP ----
     zap_api_url: str = "http://localhost:8080"
