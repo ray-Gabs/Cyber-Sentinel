@@ -88,6 +88,12 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     smtp_use_tls: bool = True
 
+    # ---- Lab / Dev Mode ----
+    # Set to true only in controlled lab environments where scanning private IPs
+    # (e.g. DVWA, Juice Shop on local network) is intentional.
+    # NEVER set this to true on a production or internet-facing deployment.
+    allow_private_targets: bool = False
+
     # ---- Rate limiting (slowapi format: "N/period") ----
     # These protect against brute-force and abuse on public endpoints.
     # Period: second | minute | hour | day
