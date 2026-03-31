@@ -157,7 +157,7 @@ export default function AgentsMonitor() {
   };
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="space-y-5">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
