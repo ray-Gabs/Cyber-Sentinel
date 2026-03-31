@@ -32,10 +32,7 @@ const navItems: NavItem[] = [
     to: ROUTES.DASHBOARD,    label: "Dashboard",  icon: LayoutDashboard,
     section: null,             color: "#3B82F6", iconBg: "rgba(59,130,246,0.18)",
   },
-  {
-    to: ROUTES.SCANS,        label: "Scans",       icon: Crosshair,
-    section: "Pentest Engine", color: "#F59E0B", iconBg: "rgba(245,158,11,0.18)",
-  },
+  // ── SOC Platform first ──
   {
     to: ROUTES.ALERTS,       label: "SOC Alerts",  icon: ShieldAlert,
     section: "SOC Platform",   color: "#EF4444", iconBg: "rgba(239,68,68,0.18)",
@@ -44,9 +41,14 @@ const navItems: NavItem[] = [
     to: ROUTES.ANALYTICS,    label: "Analytics",   icon: BarChart3,
     section: null,             color: "#A855F7", iconBg: "rgba(168,85,247,0.18)",
   },
+  // ── Pentest Engine second ──
+  {
+    to: ROUTES.SCANS,        label: "Scans",       icon: Crosshair,
+    section: "Pentest Engine", color: "#F59E0B", iconBg: "rgba(245,158,11,0.18)",
+  },
   {
     to: ROUTES.CORRELATIONS, label: "Correlation", icon: Link2,
-    section: null,             color: "#22C55E", iconBg: "rgba(34,197,94,0.18)",
+    section: "Intelligence",   color: "#22C55E", iconBg: "rgba(34,197,94,0.18)",
   },
   {
     to: ROUTES.SETTINGS,     label: "Settings",    icon: Settings,

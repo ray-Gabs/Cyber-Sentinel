@@ -2,7 +2,7 @@
 # backend/domains/soc/router.py — SOC REST Endpoints
 # ============================================================
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, HTTPException, Header, status
 from typing import Optional
 
 from core.dependencies import get_current_user
@@ -93,12 +93,25 @@ async def get_custom_rules(user: User = Depends(get_current_user)):
 
 
 @router.post("/rules/deploy")
-async def deploy_custom_rules(user: User = Depends(get_current_user)):
-    """Deploy custom SIEM rules to Wazuh. Admin role required."""
-    if user.role != "admin":
+async def deploy_custom_rules(
+    user: User = Depends(get_current_user),
+    x_wazuh_url: Optional[str] = Header(None, alias="X-Wazuh-Url"),
+    x_wazuh_username: Optional[str] = Header(None, alias="X-Wazuh-Username"),
+    x_wazuh_password: Optional[str] = Header(None, alias="X-Wazuh-Password"),
+):
+    """Deploy custom SIEM rules to Wazuh.
+    Admin role required, unless the user supplies their own Wazuh credentials
+    via X-Wazuh-* headers (lab mode — each student deploys to their own instance).
+    """
+    has_user_credentials = bool(x_wazuh_url)
+    if not has_user_credentials and user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin role required to deploy SIEM rules")
     from domains.soc.wazuh_rules import deploy_rules_to_wazuh
-    return await deploy_rules_to_wazuh()
+    return await deploy_rules_to_wazuh(
+        wazuh_url=x_wazuh_url,
+        wazuh_user=x_wazuh_username,
+        wazuh_password=x_wazuh_password,
+    )
 
 
 @router.get("/{alert_id}", response_model=AlertDetailResponse)

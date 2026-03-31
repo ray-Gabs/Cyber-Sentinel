@@ -2,7 +2,22 @@
  * Alert API service — SOC / Wazuh alert operations.
  */
 import api from "./api";
+import { getWazuhConfig } from "@/hooks/useWazuhConfig";
 import type { Alert, AlertSummary, AlertFilterParams, AlertStats, AnalystOverrideRequest } from "@/types";
+
+/**
+ * Build the Wazuh credential headers from the user's saved config.
+ * Only non-empty values are included so the backend can fall back to
+ * its own .env when the user hasn't configured a personal connection.
+ */
+function wazuhHeaders(): Record<string, string> {
+  const cfg = getWazuhConfig();
+  if (!cfg || !cfg.apiUrl.trim()) return {};
+  const headers: Record<string, string> = { "X-Wazuh-Url": cfg.apiUrl.trim() };
+  if (cfg.username.trim()) headers["X-Wazuh-Username"] = cfg.username.trim();
+  if (cfg.password)        headers["X-Wazuh-Password"] = cfg.password;
+  return headers;
+}
 
 /** GET /api/alerts/ → list alerts with optional filters */
 export async function getAlerts(
@@ -53,6 +68,10 @@ export async function getCustomRules(): Promise<string> {
 
 /** POST /api/alerts/rules/deploy → deploy custom rules to Wazuh */
 export async function deployRules(): Promise<{ message: string }> {
-  const res = await api.post<{ message: string }>("/alerts/rules/deploy");
+  // Forward the user's personal Wazuh credentials so the backend can deploy
+  // to their specific Wazuh instance rather than the server default.
+  const res = await api.post<{ message: string }>("/alerts/rules/deploy", undefined, {
+    headers: wazuhHeaders(),
+  });
   return res.data;
 }

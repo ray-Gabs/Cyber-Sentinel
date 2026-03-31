@@ -22,10 +22,15 @@ class WazuhClient:
         alerts = await client.get_alerts(limit=100)
     """
 
-    def __init__(self):
-        self.base_url = settings.wazuh_api_url
-        self.user = settings.wazuh_api_user
-        self.password = settings.wazuh_api_password
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        user: Optional[str] = None,
+        password: Optional[str] = None,
+    ):
+        self.base_url = base_url or settings.wazuh_api_url
+        self.user = user or settings.wazuh_api_user
+        self.password = password or settings.wazuh_api_password
         self.verify_ssl = settings.wazuh_verify_ssl
         self._token: Optional[str] = None
         self._token_expires: Optional[datetime] = None

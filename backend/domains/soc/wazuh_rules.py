@@ -132,17 +132,31 @@ def get_rules_xml() -> str:
     return "\n\n".join(rules_xml)
 
 
-async def deploy_rules_to_wazuh() -> dict[str, Any]:
+async def deploy_rules_to_wazuh(
+    wazuh_url: str | None = None,
+    wazuh_user: str | None = None,
+    wazuh_password: str | None = None,
+) -> dict[str, Any]:
     """
     Deploy custom rules to Wazuh via its API.
     Uploads the rules as a custom rule file.
+
+    If wazuh_url/user/password are provided (per-user lab credentials from the
+    frontend), a fresh WazuhClient is created with those credentials instead of
+    the server-wide .env defaults.
     """
-    from domains.soc.wazuh_client import wazuh_client
+    from domains.soc.wazuh_client import WazuhClient, wazuh_client
+
+    client = (
+        WazuhClient(base_url=wazuh_url, user=wazuh_user, password=wazuh_password)
+        if wazuh_url
+        else wazuh_client
+    )
 
     rules_content = get_rules_xml()
 
     try:
-        result = await wazuh_client._request(
+        result = await client._request(
             "PUT",
             "/rules/files/cyber_sentinel_rules.xml",
             params={"overwrite": "true"},
