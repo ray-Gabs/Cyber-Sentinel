@@ -15,14 +15,19 @@ import {
   AlertTriangle, Activity,
 } from "lucide-react";
 
-// ── Chart tooltip style matching dark theme ────────────────────────────
+// ── Chart tooltip style ────────────────────────────────────────────────
+// recharts tooltip renders as HTML, so CSS vars resolve correctly here.
 const tooltipStyle: React.CSSProperties = {
-  backgroundColor: "var(--bg-surface)",
-  border: "1px solid var(--border)",
+  backgroundColor: "#111118",   // --bg-surface resolved value
+  border: "1px solid #1e1e2e", // --border resolved value
   borderRadius: 8,
-  color: "var(--text-base)",
+  color: "#e2e8f0",             // --text-base resolved value
   fontSize: 12,
 };
+
+// recharts tick uses SVG <text> elements. CSS vars do NOT resolve on SVG
+// attributes in all browsers — use literal color values instead.
+const TICK_STYLE = { fontSize: 10, fill: "#475569" } as const;
 
 const VERDICT_COLORS: Record<string, string> = {
   TRUE_POSITIVE:  "#ef4444",
@@ -266,16 +271,16 @@ export default function Analytics() {
                 {stats.daily_counts && stats.daily_counts.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={stats.daily_counts}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
                       <XAxis
                         dataKey="date"
-                        tick={{ fontSize: 10, fill: "var(--text-subtle)" } as React.SVGProps<SVGTextElement>}
-                        axisLine={{ stroke: "var(--border)" }}
+                        tick={TICK_STYLE}
+                        axisLine={{ stroke: "#1e1e2e" }}
                         tickLine={false}
                       />
                       <YAxis
-                        tick={{ fontSize: 10, fill: "var(--text-subtle)" } as React.SVGProps<SVGTextElement>}
-                        axisLine={{ stroke: "var(--border)" }}
+                        tick={TICK_STYLE}
+                        axisLine={{ stroke: "#1e1e2e" }}
                         tickLine={false}
                       />
                       <Tooltip contentStyle={tooltipStyle} />
@@ -359,16 +364,16 @@ export default function Analytics() {
                     <BarChart
                       data={Object.entries(stats.by_severity).map(([name, value]) => ({ name, value }))}
                     >
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
                       <XAxis
                         dataKey="name"
-                        tick={{ fontSize: 10, fill: "var(--text-subtle)" } as React.SVGProps<SVGTextElement>}
-                        axisLine={{ stroke: "var(--border)" }}
+                        tick={TICK_STYLE}
+                        axisLine={{ stroke: "#1e1e2e" }}
                         tickLine={false}
                       />
                       <YAxis
-                        tick={{ fontSize: 10, fill: "var(--text-subtle)" } as React.SVGProps<SVGTextElement>}
-                        axisLine={{ stroke: "var(--border)" }}
+                        tick={TICK_STYLE}
+                        axisLine={{ stroke: "#1e1e2e" }}
                         tickLine={false}
                       />
                       <Tooltip contentStyle={tooltipStyle} />
@@ -505,18 +510,18 @@ export default function Analytics() {
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={stats.top_agents} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
                     <XAxis
                       type="number"
-                      tick={{ fontSize: 10, fill: "var(--text-subtle)" } as React.SVGProps<SVGTextElement>}
-                      axisLine={{ stroke: "var(--border)" }}
+                      tick={TICK_STYLE}
+                      axisLine={{ stroke: "#1e1e2e" }}
                       tickLine={false}
                     />
                     <YAxis
                       type="category"
                       dataKey="_id"
-                      tick={{ fontSize: 10, fill: "var(--text-subtle)" } as React.SVGProps<SVGTextElement>}
-                      axisLine={{ stroke: "var(--border)" }}
+                      tick={TICK_STYLE}
+                      axisLine={{ stroke: "#1e1e2e" }}
                       tickLine={false}
                       width={130}
                     />
