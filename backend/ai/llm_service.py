@@ -103,7 +103,7 @@ class LLMService:
 
         # All retries exhausted
         log.error("AI provider 429 — all %d retries exhausted.", len(_retry_delays))
-        raise last_exc  # type: ignore[misc]
+        raise last_exc if last_exc is not None else RuntimeError("AI rate limit retries exhausted")
 
     # ======================== CONTEXT HELPERS ========================
 
