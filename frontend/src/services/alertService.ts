@@ -75,3 +75,22 @@ export async function deployRules(): Promise<{ message: string }> {
   });
   return res.data;
 }
+
+export interface WazuhAgent {
+  id: string;
+  name: string;
+  ip?: string;
+  status: string;
+  os?: { name?: string; platform?: string; version?: string };
+  version?: string;
+  lastKeepAlive?: string;
+  dateAdd?: string;
+  group?: string[];
+  node_name?: string;
+}
+
+/** GET /api/alerts/agents → list all registered Wazuh agents */
+export async function getWazuhAgents(): Promise<{ agents: WazuhAgent[]; total: number }> {
+  const res = await api.get<{ agents: WazuhAgent[]; total: number }>("/alerts/agents");
+  return res.data;
+}

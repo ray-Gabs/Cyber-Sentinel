@@ -86,6 +86,20 @@ async def alert_stats(user: User = Depends(get_current_user)):
     return await service.get_alert_stats()
 
 
+@router.get("/agents")
+async def list_agents(user: User = Depends(get_current_user)):
+    """List all registered Wazuh agents with their status and metadata."""
+    from domains.soc.wazuh_client import wazuh_client
+    try:
+        agents = await wazuh_client.get_agents(limit=500)
+        return {"agents": agents, "total": len(agents)}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Wazuh API unavailable: {exc}",
+        )
+
+
 @router.get("/rules/custom")
 async def get_custom_rules(user: User = Depends(get_current_user)):
     """Get custom SIEM rule definitions."""

@@ -252,39 +252,15 @@ export default function Settings() {
         </div>
       </motion.div>
 
-      {/* ── Info banner ─────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15, duration: 0.25 }}
-        className="flex items-start gap-3 rounded-xl px-4 py-3"
-        style={{ backgroundColor: "var(--accent-dim)", border: "1px solid rgba(59,130,246,0.15)" }}
-      >
-        <ChevronRight size={14} className="mt-0.5 shrink-0" style={{ color: "var(--accent)" }} />
-        <p className="text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>
-          Rules are stored in Wazuh's{" "}
-          <code className="font-mono text-[10px] px-1 rounded" style={{ backgroundColor: "var(--bg-muted)", color: "var(--accent)" }}>
-            custom_rules.xml
-          </code>
-          . Click <strong style={{ color: "var(--text-base)" }}>Load</strong> to fetch the current ruleset.
-          Edit rules in the XML editor below, then click{" "}
-          <strong style={{ color: "var(--text-base)" }}>Deploy</strong> to push to the manager.
-          Uses the Wazuh connection configured above (or falls back to server{" "}
-          <code className="font-mono text-[10px] px-1 rounded" style={{ backgroundColor: "var(--bg-muted)", color: "var(--accent)" }}>
-            WAZUH_API_URL
-          </code>).
-        </p>
-      </motion.div>
-
       {/* ── Rule manager card ────────────────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2, duration: 0.25 }}
+        transition={{ delay: 0.15, duration: 0.25 }}
         className="card"
       >
         {/* Card header + action buttons */}
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <div
               className="flex items-center justify-center w-8 h-8 rounded-lg"
@@ -309,13 +285,9 @@ export default function Settings() {
               className="btn-secondary gap-1.5"
               style={{ fontSize: "0.8125rem", padding: "0.4rem 0.875rem" }}
             >
-              {loadingRules
-                ? <LoadingSpinner size="sm" />
-                : <RefreshCw size={13} />
-              }
+              {loadingRules ? <LoadingSpinner size="sm" /> : <RefreshCw size={13} />}
               {rulesXml ? "Refresh" : "Load Rules"}
             </button>
-
             <button
               onClick={handleDeploy}
               disabled={deploying || !rulesXml}
@@ -328,12 +300,21 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Inline hint */}
+        <p className="text-[11px] mb-3" style={{ color: "var(--text-subtle)" }}>
+          Load to fetch{" "}
+          <code className="font-mono px-1 rounded" style={{ backgroundColor: "var(--bg-muted)", color: "var(--accent)" }}>
+            custom_rules.xml
+          </code>
+          {" "}from Wazuh, edit inline, then Deploy to push changes. Uses the connection configured above.
+        </p>
+
         {/* Deploy status message */}
         {deployMsg && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
-            className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm mb-4"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs mb-3"
             style={{
               backgroundColor: deployError ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)",
               border: `1px solid ${deployError ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.2)"}`,
@@ -341,8 +322,8 @@ export default function Settings() {
             }}
           >
             {deployError
-              ? <AlertCircle size={13} className="shrink-0" />
-              : <CheckCircle size={13} className="shrink-0" />
+              ? <AlertCircle size={12} className="shrink-0" />
+              : <CheckCircle size={12} className="shrink-0" />
             }
             {deployMsg}
           </motion.div>
@@ -364,24 +345,14 @@ export default function Settings() {
           </pre>
         ) : (
           <div
-            className="flex flex-col items-center justify-center py-16 rounded-xl"
+            className="flex flex-col items-center justify-center py-8 rounded-lg"
             style={{ border: "1px dashed var(--border)", backgroundColor: "var(--bg-muted)" }}
           >
-            <FileCode2 size={28} className="mb-3" style={{ color: "var(--text-subtle)" }} />
-            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>
-              No rules loaded
-            </p>
-            <p className="text-xs mt-1" style={{ color: "var(--text-subtle)" }}>
+            <FileCode2 size={22} className="mb-2" style={{ color: "var(--text-subtle)" }} />
+            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>No rules loaded</p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-subtle)" }}>
               Click Load Rules to fetch from Wazuh
             </p>
-            <button
-              onClick={handleLoadRules}
-              className="btn-secondary mt-4 gap-1.5"
-              style={{ fontSize: "0.8125rem" }}
-            >
-              <RefreshCw size={13} />
-              Load Rules
-            </button>
           </div>
         )}
       </motion.div>

@@ -86,6 +86,7 @@ export const ROUTES = {
   ALERTS: "/alerts",
   ALERT_DETAIL: "/alerts/:id",
   ANALYTICS: "/analytics",
+  AGENTS: "/agents",
   CORRELATIONS: "/correlations",
   SETTINGS: "/settings",
   FORGOT_PASSWORD: "/forgot-password",
