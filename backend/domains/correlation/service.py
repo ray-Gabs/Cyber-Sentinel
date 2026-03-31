@@ -102,8 +102,20 @@ async def get_correlation(scan_id: str) -> Optional[Correlation]:
     return await Correlation.find_one({"scan_id": scan_id})
 
 
-async def list_correlations(page: int = 1, size: int = 20) -> list[Correlation]:
-    """List all correlations, newest first."""
+async def list_correlations(
+    page: int = 1, size: int = 20, user_id: Optional[str] = None
+) -> list[Correlation]:
+    """List correlations newest first. If user_id given, scope to that user's scans."""
+    if user_id is not None:
+        user_scans = await Scan.find({"user_id": user_id}).to_list()
+        scan_ids = [str(s.id) for s in user_scans]
+        return (
+            await Correlation.find({"scan_id": {"$in": scan_ids}})
+            .sort("-created_at")
+            .skip((page - 1) * size)
+            .limit(size)
+            .to_list()
+        )
     return (
         await Correlation.find()
         .sort("-created_at")

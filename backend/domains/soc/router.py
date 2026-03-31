@@ -94,7 +94,9 @@ async def get_custom_rules(user: User = Depends(get_current_user)):
 
 @router.post("/rules/deploy")
 async def deploy_custom_rules(user: User = Depends(get_current_user)):
-    """Deploy custom SIEM rules to Wazuh."""
+    """Deploy custom SIEM rules to Wazuh. Admin role required."""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required to deploy SIEM rules")
     from domains.soc.wazuh_rules import deploy_rules_to_wazuh
     return await deploy_rules_to_wazuh()
 

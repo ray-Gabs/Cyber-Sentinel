@@ -7,6 +7,7 @@
 
 import asyncio
 import logging
+import re
 import time as _time
 from contextlib import asynccontextmanager
 
@@ -65,16 +66,21 @@ app.state.limiter = limiter
 
 
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
-    """Return a JSON 429 with Retry-After header."""
+    """Return a JSON 429 with Retry-After and X-RateLimit headers."""
+    detail_str = str(exc.detail)
+    limit_match = re.match(r"(\d+)", detail_str)
+    limit_value = limit_match.group(1) if limit_match else "unknown"
     response = JSONResponse(
         status_code=429,
         content={
             "error": "Rate limit exceeded",
             "code": "RATE_LIMITED",
-            "detail": str(exc.detail),
+            "detail": detail_str,
         },
     )
     response.headers["Retry-After"] = "60"
+    response.headers["X-RateLimit-Limit"] = limit_value
+    response.headers["X-RateLimit-Remaining"] = "0"
     return response
 
 
