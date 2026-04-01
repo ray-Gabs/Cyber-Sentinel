@@ -27,6 +27,7 @@ import Dashboard from "@/pages/Dashboard";
 import ScanList from "@/pages/pentest/ScanList";
 import ScanConfig from "@/pages/pentest/ScanConfig";
 import ScanDetail from "@/pages/pentest/ScanDetail";
+import ScanDiff from "@/pages/pentest/ScanDiff";
 import AlertFeed from "@/pages/soc/AlertFeed";
 import AlertDetail from "@/pages/soc/AlertDetail";
 import Analytics from "@/pages/soc/Analytics";
@@ -84,6 +85,7 @@ function AppRoutes() {
         <Route path="/scans" element={<ScanList />} />
         <Route path="/scans/new" element={<ScanConfig />} />
         <Route path="/scans/:id" element={<ScanDetail />} />
+        <Route path="/scans/:id/diff" element={<ScanDiff />} />
         <Route path="/alerts" element={<AlertFeed />} />
         <Route path="/alerts/:id" element={<AlertDetail />} />
         <Route path="/agents" element={<AgentsMonitor />} />

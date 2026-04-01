@@ -30,6 +30,8 @@ export type {
   AuthType,
   AuthConfig,
   ToolEvent,
+  ScanDiff,
+  ScanDiffSummary,
 } from "./scan";
 export type {
   Alert,

@@ -5,7 +5,7 @@
  * When you see `ScanCreateRequest`, it means "an object with target and scan_type fields."
  */
 import api from "./api";
-import type { Scan, ScanSummary, ScanCreateRequest } from "@/types";
+import type { Scan, ScanSummary, ScanCreateRequest, ScanDiff } from "@/types";
 
 /** POST /api/scans/ → start a new scan */
 export async function createScan(data: ScanCreateRequest): Promise<Scan> {
@@ -63,4 +63,10 @@ export async function exportPdfReport(id: string): Promise<Blob> {
     responseType: "blob",
   });
   return res.data as Blob;
+}
+
+/** GET /api/scans/:id/diff/:baselineId → compare two completed scans */
+export async function diffScans(scanId: string, baselineId: string): Promise<ScanDiff> {
+  const res = await api.get<ScanDiff>(`/scans/${scanId}/diff/${baselineId}`);
+  return res.data;
 }

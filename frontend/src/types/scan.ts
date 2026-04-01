@@ -107,6 +107,8 @@ export interface Scan {
   zap_raw?: Record<string, unknown>;
   sslyze_raw?: Record<string, unknown>;
   whatweb_raw?: Record<string, unknown>;
+  subdomain_raw?: Record<string, unknown>;
+  dirbust_raw?: Record<string, unknown>;
   error_message?: string;
   auth_config?: AuthConfig;
 }
@@ -123,6 +125,27 @@ export interface ScanSummary {
   completed_tools?: string[];
   created_at: string;
   completed_at?: string;
+}
+
+export interface ScanDiffSummary {
+  new_count: number;
+  fixed_count: number;
+  unchanged_count: number;
+  new_severity: Record<string, number>;
+  fixed_severity: Record<string, number>;
+}
+
+export interface ScanDiff {
+  scan_id: string;
+  baseline_id: string;
+  scan_target: string;
+  baseline_target: string;
+  scan_date?: string;
+  baseline_date?: string;
+  summary: ScanDiffSummary;
+  new: Finding[];
+  fixed: Finding[];
+  unchanged: Finding[];
 }
 
 export interface ScanCreateRequest {
