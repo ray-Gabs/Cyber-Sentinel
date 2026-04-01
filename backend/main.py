@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Cyber Sentinel API",
     description="Unified Pentesting & SOC Platform",
-    version="1.0.0",
+    version="1.0.1",
     lifespan=lifespan,
 )
 
@@ -169,7 +169,7 @@ async def health():
         content={
             "status": "ok" if all_ok else "degraded",
             "service": "Cyber Sentinel",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "uptime_seconds": int(_time.time() - _start_time),
             **dep_status,
         },
@@ -191,7 +191,7 @@ async def version():
     except Exception:
         commit = "unknown"
 
-    version_str = "1.0.0"
+    version_str = "1.0.1"
     try:
         import pathlib
         version_file = pathlib.Path(__file__).parent.parent / "VERSION"

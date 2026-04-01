@@ -190,7 +190,11 @@ class GeminiProvider(BaseLLMProvider):
                 self._model.generate_content_async(prompt, generation_config=config),
                 timeout=_LLM_TIMEOUT,
             )
-            return response.text
+            try:
+                return response.text
+            except ValueError as e:
+                # Gemini's safety filters may block the response, making .text inaccessible
+                raise RuntimeError(f"Gemini response blocked or empty (safety filter): {e}") from e
         except asyncio.TimeoutError:
             raise TimeoutError(f"Gemini did not respond within {_LLM_TIMEOUT}s")
 
