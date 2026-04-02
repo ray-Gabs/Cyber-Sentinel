@@ -5,6 +5,7 @@ import { TOKEN_KEY, API_BASE } from "@/lib/constants";
 const api = axios.create({
   baseURL: API_BASE,
   headers: { "Content-Type": "application/json" },
+  timeout: 30000,
 });
 
 // ── Request interceptor: attach JWT ──

@@ -141,7 +141,7 @@ async def list_alerts(
     if ai_verdict:
         query["ai_verdict"] = ai_verdict
     if agent_name:
-        query["agent_name"] = {"$regex": agent_name, "$options": "i"}
+        query["agent_name"] = {"$regex": re.escape(agent_name), "$options": "i"}
 
     return (
         await Alert.find(query)

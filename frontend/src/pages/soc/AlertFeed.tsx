@@ -3,7 +3,7 @@
  * Fully themed with CSS variables. GitHub issue-list meets SOC dashboard.
  */
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ShieldAlert, RefreshCw, ChevronRight } from "lucide-react";
 import { getAlerts } from "@/services/alertService";
@@ -68,17 +68,22 @@ const rowVariants = {
 // ── Component ──────────────────────────────────────────────────────────────
 export default function AlertFeed() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [alerts, setAlerts]             = useState<AlertSummary[]>([]);
   const [loading, setLoading]           = useState(true);
+  const [isFetching, setIsFetching]     = useState(false);
+  const [fetchError, setFetchError]     = useState("");
   const [page, setPage]                 = useState(1);
   const [filterVerdict, setFilterVerdict] = useState("");
   const [filterLevel, setFilterLevel]   = useState(0);
-  const [filterAgent, setFilterAgent]   = useState("");
+  const [filterAgent, setFilterAgent]   = useState(searchParams.get("agent_name") ?? "");
   const [liveCount, setLiveCount]       = useState(0);
 
   const { messages } = useWebSocket<AlertSummary>({ channel: "alerts" });
 
   const fetchAlerts = useCallback(async () => {
+    setFetchError("");
+    setIsFetching(true);
     try {
       const data = await getAlerts({
         page,
@@ -88,8 +93,12 @@ export default function AlertFeed() {
         agent_name: filterAgent || undefined,
       });
       setAlerts(data);
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
+    } catch {
+      setFetchError("Failed to load alerts. Check that the backend is running.");
+    } finally {
+      setLoading(false);
+      setIsFetching(false);
+    }
   }, [page, filterVerdict, filterLevel, filterAgent]);
 
   useEffect(() => { fetchAlerts(); }, [fetchAlerts]);
@@ -119,6 +128,22 @@ export default function AlertFeed() {
   return (
     <div className="space-y-5">
 
+      {/* ── Error banner ────────────────────────────────────────── */}
+      {fetchError && (
+        <div
+          className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg text-sm"
+          style={{ backgroundColor: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.25)", color: "var(--sev-medium-text)" }}
+        >
+          <span>{fetchError}</span>
+          <button
+            onClick={() => { setLoading(true); fetchAlerts(); }}
+            className="shrink-0 font-medium underline underline-offset-2"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* ── Header ──────────────────────────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
@@ -145,10 +170,11 @@ export default function AlertFeed() {
         </div>
         <button
           onClick={() => { setLoading(true); fetchAlerts(); }}
+          disabled={isFetching}
           className="btn-secondary shrink-0 gap-1.5"
         >
-          <RefreshCw size={13} />
-          Refresh
+          <RefreshCw size={13} className={isFetching ? "animate-spin" : ""} />
+          {isFetching ? "Loading…" : "Refresh"}
         </button>
       </motion.div>
 
@@ -200,7 +226,7 @@ export default function AlertFeed() {
             );
           })}
 
-          {uniqueAgents.length > 0 && (
+          {(uniqueAgents.length > 0 || filterAgent) && (
             <select
               className="input text-xs py-1.5 w-auto"
               style={{ maxWidth: "160px" }}
@@ -208,6 +234,10 @@ export default function AlertFeed() {
               onChange={(e) => { setFilterAgent(e.target.value); setPage(1); }}
             >
               <option value="">All Agents</option>
+              {/* Ensure URL-preselected agent appears even before results load */}
+              {filterAgent && !uniqueAgents.includes(filterAgent) && (
+                <option value={filterAgent}>{filterAgent}</option>
+              )}
               {uniqueAgents.map((a) => (
                 <option key={a} value={a}>{a}</option>
               ))}
