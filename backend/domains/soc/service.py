@@ -7,8 +7,10 @@ from typing import Optional
 
 from fastapi import HTTPException, status
 
-from domains.soc.models import Alert, AiVerdict
-from domains.soc.schemas import AnalystOverrideRequest
+import re
+
+from domains.soc.models import Alert, AiVerdict, CustomDetectionRule
+from domains.soc.schemas import AnalystOverrideRequest, CustomRuleCreate, CustomRuleUpdate
 
 
 async def ingest_wazuh_alert(raw: dict) -> Alert:
@@ -25,6 +27,13 @@ async def ingest_wazuh_alert(raw: dict) -> Alert:
     rule = raw.get("rule", {})
     agent = raw.get("agent", {})
 
+    # Run custom rule matching
+    from domains.soc.rule_matcher import match_alert
+    all_rules = await CustomDetectionRule.find(
+        CustomDetectionRule.enabled == True  # noqa: E712
+    ).to_list()
+    matched_rules = match_alert(raw, all_rules)
+
     alert = Alert(
         wazuh_id=str(wazuh_id),
         timestamp=raw.get("timestamp", datetime.now(timezone.utc)),
@@ -37,9 +46,78 @@ async def ingest_wazuh_alert(raw: dict) -> Alert:
         rule_groups=rule.get("groups", []),
         full_log=raw.get("full_log", ""),
         data=raw.get("data"),
+        matched_rules=matched_rules,
     )
     await alert.insert()
     return alert
+
+
+# ── Custom Detection Rules CRUD ──────────────────────────────────────────────
+
+def _validate_regex(pattern: str) -> None:
+    """Raise ValueError if pattern is not a valid regex."""
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"Invalid regex pattern: {exc}") from exc
+
+
+async def get_rules(user_id: str) -> list[CustomDetectionRule]:
+    """Return all custom rules for a user (includes system defaults)."""
+    return await CustomDetectionRule.find(
+        {"user_id": {"$in": [user_id, "system"]}}
+    ).sort(-CustomDetectionRule.created_at).to_list()
+
+
+async def create_rule(user_id: str, data: CustomRuleCreate) -> CustomDetectionRule:
+    _validate_regex(data.pattern)
+    rule = CustomDetectionRule(
+        user_id=user_id,
+        name=data.name,
+        description=data.description,
+        pattern=data.pattern,
+        severity=data.severity,
+        enabled=data.enabled,
+    )
+    await rule.insert()
+    return rule
+
+
+async def update_rule(rule_id: str, user_id: str, data: CustomRuleUpdate) -> CustomDetectionRule:
+    from bson import ObjectId
+    rule = await CustomDetectionRule.get(ObjectId(rule_id))
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    if rule.user_id not in (user_id, "system"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if data.pattern is not None:
+        _validate_regex(data.pattern)
+    update_data = data.model_dump(exclude_none=True)
+    for field, value in update_data.items():
+        setattr(rule, field, value)
+    await rule.save()
+    return rule
+
+
+async def delete_rule(rule_id: str, user_id: str) -> None:
+    from bson import ObjectId
+    rule = await CustomDetectionRule.get(ObjectId(rule_id))
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    if rule.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot delete system default rules")
+    await rule.delete()
+
+
+async def delete_all_rules(user_id: str) -> int:
+    """Delete all user-owned rules (not system defaults)."""
+    rules = await CustomDetectionRule.find(
+        CustomDetectionRule.user_id == user_id
+    ).to_list()
+    count = len(rules)
+    for r in rules:
+        await r.delete()
+    return count
 
 
 async def get_alert(alert_id: str) -> Alert:

@@ -48,6 +48,9 @@ class Alert(Document):
     analyst_override: Optional[str] = None     # TRUE_POSITIVE | FALSE_POSITIVE
     analyst_notes: Optional[str] = None
 
+    # Custom rule matches (populated at ingestion time)
+    matched_rules: list[str] = []
+
     # Meta
     ingested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     analysed_at: Optional[datetime] = None
@@ -55,6 +58,23 @@ class Alert(Document):
     class Settings:
         name = "alerts"
         use_state_management = True
+
+
+class CustomDetectionRule(Document):
+    """
+    User-defined detection rules that are matched against incoming Wazuh alerts.
+    Stored in the 'custom_detection_rules' collection.
+    """
+    user_id: str
+    name: str
+    description: str
+    pattern: str                               # Regex pattern
+    severity: str                              # Low | Medium | High | Critical
+    enabled: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    class Settings:
+        name = "custom_detection_rules"
 
 
 class AiVerdict(Document):

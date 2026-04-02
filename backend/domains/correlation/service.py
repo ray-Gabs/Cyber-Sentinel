@@ -125,6 +125,33 @@ async def list_correlations(
     )
 
 
+async def delete_correlation(correlation_id: str, user_id: str) -> None:
+    """Delete a single correlation, verifying the user owns the related scan."""
+    from beanie import PydanticObjectId
+    from fastapi import HTTPException
+    try:
+        corr = await Correlation.get(PydanticObjectId(correlation_id))
+    except Exception:
+        corr = None
+    if not corr:
+        raise HTTPException(status_code=404, detail="Correlation not found")
+    scan = await Scan.find_one({"_id": corr.scan_id})
+    if not scan or (scan.user_id != user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    await corr.delete()
+
+
+async def delete_all_correlations(user_id: str) -> int:
+    """Delete all correlations for a user's scans. Returns count deleted."""
+    user_scans = await Scan.find({"user_id": user_id}).to_list()
+    scan_ids = [str(s.id) for s in user_scans]
+    correlations = await Correlation.find({"scan_id": {"$in": scan_ids}}).to_list()
+    count = len(correlations)
+    for c in correlations:
+        await c.delete()
+    return count
+
+
 def _extract_host(target: str) -> str:
     """Extract hostname/IP from a target URL."""
     try:

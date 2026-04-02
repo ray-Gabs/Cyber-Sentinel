@@ -31,7 +31,7 @@ async def init_db() -> None:
     # Import all document models here so Beanie registers them.
     from domains.auth.models import User
     from domains.pentesting.models import Scan
-    from domains.soc.models import Alert, AiVerdict
+    from domains.soc.models import Alert, AiVerdict, CustomDetectionRule
     from domains.correlation.models import Correlation
     from domains.soc.playbook import PlaybookExecution
     from domains.notifications.models import Notification
@@ -43,6 +43,7 @@ async def init_db() -> None:
             Scan,
             Alert,
             AiVerdict,
+            CustomDetectionRule,
             Correlation,
             PlaybookExecution,
             Notification,

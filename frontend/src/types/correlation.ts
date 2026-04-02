@@ -5,8 +5,8 @@ export interface CorrelationLink {
   finding_name: string;
   finding_severity: string;
   alert_wazuh_id: string;
-  alert_rule_desc: string;
-  alert_level: number;
+  alert_rule_description: string;  // was: alert_rule_desc (field name mismatch fix)
+  alert_rule_level: number;        // was: alert_level (field name mismatch fix)
   correlation_type: string; // "ip_match" | "attack_pattern" | "cve_match" | "port_match" | "keyword"
   confidence: number;       // 0-1
 }

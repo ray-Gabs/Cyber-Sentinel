@@ -44,6 +44,10 @@ async def lifespan(app: FastAPI):
     from ai.cache import AiCache
     await AiCache().ensure_indexes()
 
+    # Seed default detection rules if none exist
+    from domains.soc.rule_matcher import seed_default_rules
+    await seed_default_rules()
+
     yield
 
     # Shutdown
@@ -123,12 +127,14 @@ from domains.pentesting.router import router as pentest_router
 from domains.soc.router import router as soc_router
 from domains.correlation.router import router as correlation_router
 from domains.notifications.router import router as notifications_router
+from domains.analytics.router import router as analytics_router
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 app.include_router(pentest_router, prefix="/api/scans", tags=["Pentesting"])
 app.include_router(soc_router, prefix="/api/alerts", tags=["SOC"])
 app.include_router(correlation_router, prefix="/api/correlations", tags=["Correlation"])
 app.include_router(notifications_router, prefix="/api/notifications", tags=["Notifications"])
+app.include_router(analytics_router, tags=["Analytics"])
 
 # --------------- Health Check ---------------
 

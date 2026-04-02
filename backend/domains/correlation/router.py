@@ -80,3 +80,20 @@ async def list_correlations(
     scoped_user_id = None if user.role == "admin" else str(user.id)
     results = await service.list_correlations(page, size, user_id=scoped_user_id)
     return [_to_response(c) for c in results]
+
+
+@router.delete("/", status_code=200)
+async def delete_all_user_correlations(user: User = Depends(get_current_user)):
+    """Delete all correlations for the current user."""
+    count = await service.delete_all_correlations(str(user.id))
+    return {"deleted": count, "message": f"Deleted {count} correlation(s)"}
+
+
+@router.delete("/{correlation_id}", status_code=200)
+async def delete_single_correlation(
+    correlation_id: str,
+    user: User = Depends(get_current_user),
+):
+    """Delete a single correlation by ID."""
+    await service.delete_correlation(correlation_id, str(user.id))
+    return {"deleted": correlation_id}

@@ -5,14 +5,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { getCorrelations, runCorrelation } from "@/services/correlationService";
+import { getCorrelations, runCorrelation, deleteCorrelation, deleteAllCorrelations } from "@/services/correlationService";
 import { getScans } from "@/services/scanService";
 import { formatDate } from "@/lib/utils";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import StatusBadge from "@/components/common/StatusBadge";
 import {
   Link2, Sparkles, Play, Info, ChevronDown, ChevronUp,
-  Shield, AlertTriangle, Target, ExternalLink,
+  Shield, AlertTriangle, Target, ExternalLink, Trash2,
 } from "lucide-react";
 import type { Correlation, ScanSummary } from "@/types";
 
@@ -57,6 +57,8 @@ export default function CorrelationPage() {
   const [error, setError]               = useState("");
   const [selectedScan, setSelectedScan] = useState("");
   const [expanded, setExpanded]         = useState<string | null>(null);
+  const [deleting, setDeleting]         = useState<string | null>(null);
+  const [clearingAll, setClearingAll]   = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -74,6 +76,33 @@ export default function CorrelationPage() {
       }
     })();
   }, []);
+
+  const handleDelete = async (id: string) => {
+    setDeleting(id);
+    try {
+      await deleteCorrelation(id);
+      setCorrelations((prev) => prev.filter((c) => c.id !== id));
+      if (expanded === id) setExpanded(null);
+    } catch {
+      // silently ignore
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!window.confirm(`Delete all ${correlations.length} correlation run${correlations.length !== 1 ? "s" : ""}?`)) return;
+    setClearingAll(true);
+    try {
+      await deleteAllCorrelations();
+      setCorrelations([]);
+      setExpanded(null);
+    } catch {
+      setError("Failed to clear correlations. Try again.");
+    } finally {
+      setClearingAll(false);
+    }
+  };
 
   const handleRun = async () => {
     if (!selectedScan) return;
@@ -128,6 +157,18 @@ export default function CorrelationPage() {
             </p>
           </div>
         </div>
+
+        {correlations.length > 0 && (
+          <button
+            className="btn-secondary gap-1.5 text-red-400 border-red-500/30 hover:bg-red-500/10"
+            style={{ fontSize: "0.8125rem" }}
+            disabled={clearingAll}
+            onClick={handleClearAll}
+          >
+            {clearingAll ? <LoadingSpinner size="sm" /> : <Trash2 size={13} />}
+            Clear All
+          </button>
+        )}
       </motion.div>
 
       {/* ── How it works explainer ──────────────────────────── */}
@@ -333,6 +374,18 @@ export default function CorrelationPage() {
                       <span className="text-xs hidden sm:block" style={{ color: "var(--text-subtle)" }}>
                         {formatDate(corr.created_at)}
                       </span>
+                      <button
+                        className="p-1.5 rounded-lg transition-colors hover:bg-red-500/10"
+                        style={{ color: "var(--text-subtle)" }}
+                        disabled={deleting === corr.id}
+                        onClick={(e) => { e.stopPropagation(); handleDelete(corr.id); }}
+                        title="Delete this correlation"
+                      >
+                        {deleting === corr.id
+                          ? <LoadingSpinner size="sm" />
+                          : <Trash2 size={13} className="text-red-400" />
+                        }
+                      </button>
                       {isOpen
                         ? <ChevronUp size={14} style={{ color: "var(--text-subtle)" }} />
                         : <ChevronDown size={14} style={{ color: "var(--text-subtle)" }} />
@@ -438,10 +491,10 @@ export default function CorrelationPage() {
                                             className="truncate max-w-[200px] text-sm"
                                             style={{ color: "var(--text-muted)" }}
                                           >
-                                            {link.alert_rule_desc}
+                                            {link.alert_rule_description}
                                           </p>
                                           <p className="text-[10px] mt-0.5" style={{ color: "var(--text-subtle)" }}>
-                                            Wazuh level {link.alert_level}
+                                            Wazuh level {link.alert_rule_level}
                                           </p>
                                         </td>
                                         <td className="px-4 py-3">

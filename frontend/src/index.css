@@ -532,4 +532,25 @@
   .row-medium   { border-left: 2px solid var(--sev-medium); }
   .row-low      { border-left: 2px solid var(--sev-low); }
   .row-info     { border-left: 2px solid var(--sev-info); }
+
+  /* ── Responsive layout (AppLayout) ──────────────────────── */
+  /* Mobile: no left margin (sidebar is overlay) */
+  .layout-main { margin-left: 0; }
+
+  /* Desktop: left margin tracks sidebar width CSS variable */
+  @media (min-width: 768px) {
+    .layout-main {
+      margin-left: var(--sidebar-current-width, 240px);
+      transition: margin-left 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  }
+
+  /* Mobile: extra bottom padding for the BottomNav bar */
+  .layout-main-content { padding-bottom: 1.5rem; }
+
+  @media (max-width: 767px) {
+    .layout-main-content {
+      padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+    }
+  }
 }

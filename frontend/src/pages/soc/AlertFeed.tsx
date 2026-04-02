@@ -301,7 +301,7 @@ export default function AlertFeed() {
                           {alert.agent_name}
                         </span>
                       )}
-                      <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                      <span className="text-xs font-mono" style={{ color: "var(--text-subtle)" }}>
                         {timeAgo(alert.timestamp)}
                       </span>
                       <span

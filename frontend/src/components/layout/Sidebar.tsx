@@ -1,14 +1,13 @@
 /**
  * Sidebar — collapsible left navigation.
- * Expanded: 240px — colored icon nav + section labels.
- * Collapsed: 64px — icon-only.
- * User identity and logout live in the Header, not here.
+ * Desktop (md+): persistent collapsible sidebar, expanded 240px / collapsed 64px.
+ * Mobile (<md): overlay drawer triggered by mobileOpen prop.
  */
 import { NavLink } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Crosshair, ShieldAlert, BarChart3,
-  Settings, ShieldCheck, Link2, Monitor,
+  Settings, ShieldCheck, Link2, Monitor, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
@@ -16,6 +15,8 @@ import { ROUTES } from "@/lib/constants";
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
 }
 
 interface NavItem {
@@ -72,154 +73,214 @@ const sectionVariants = {
   exit:   { opacity: 0, height: 0, marginTop: 0, transition: { duration: 0.12 } },
 };
 
-export default function Sidebar({ collapsed }: SidebarProps) {
+/** Shared nav content — used by both desktop and mobile drawers */
+function SidebarNav({
+  collapsed,
+  onNavClick,
+}: {
+  collapsed: boolean;
+  onNavClick?: () => void;
+}) {
   const renderedSections = new Set<string>();
 
   return (
-    <motion.aside
-      animate={{ width: collapsed ? 64 : 240 }}
-      transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-      className="fixed left-0 top-0 z-40 h-screen flex flex-col overflow-hidden border-r"
-      style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border)" }}
+    <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2.5 space-y-0.5">
+      {navItems.map(({ to, label, icon: Icon, section, color, iconBg }) => {
+        const showSection = section && !renderedSections.has(section);
+        if (section) renderedSections.add(section);
+
+        return (
+          <div key={to}>
+            <AnimatePresence mode="wait">
+              {showSection && !collapsed && (
+                <motion.p
+                  initial="hidden" animate="show" exit="exit"
+                  variants={sectionVariants}
+                  className="px-2 pb-1 text-[9px] uppercase tracking-[0.18em] font-semibold overflow-hidden whitespace-nowrap"
+                  style={{ color: "var(--text-subtle)" }}
+                >
+                  {section}
+                </motion.p>
+              )}
+              {showSection && collapsed && (
+                <motion.div
+                  key={`div-${section}`}
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="mx-2 my-2 h-px"
+                  style={{ backgroundColor: "var(--border)" }}
+                />
+              )}
+            </AnimatePresence>
+
+            <NavLink
+              to={to}
+              title={collapsed ? label : undefined}
+              onClick={onNavClick}
+              className={({ isActive }) =>
+                cn(
+                  "group relative flex items-center rounded-lg overflow-hidden transition-colors duration-150",
+                  collapsed ? "justify-center p-2 mx-0.5" : "gap-2.5 px-2 py-2",
+                  isActive
+                    ? "bg-[var(--bg-muted)]"
+                    : "text-[var(--text-muted)] hover:bg-[var(--bg-muted)] hover:text-[var(--text-base)]"
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && !collapsed && (
+                    <motion.span
+                      layoutId="sidebar-active-bar"
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full"
+                      style={{ backgroundColor: color }}
+                      transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                    />
+                  )}
+
+                  <div
+                    className="nav-icon"
+                    style={{
+                      backgroundColor: isActive ? iconBg : "transparent",
+                      marginLeft: isActive && !collapsed ? "2px" : undefined,
+                    }}
+                  >
+                    <Icon
+                      size={15}
+                      style={{ color: isActive ? color : "currentColor" }}
+                      className="transition-colors duration-150"
+                    />
+                  </div>
+
+                  <AnimatePresence mode="wait">
+                    {!collapsed && (
+                      <motion.span
+                        key={`label-${to}`}
+                        initial="hidden" animate="show" exit="exit"
+                        variants={labelVariants}
+                        className="text-sm font-medium whitespace-nowrap overflow-hidden"
+                        style={{ color: isActive ? "var(--text-base)" : "inherit" }}
+                      >
+                        {label}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </>
+              )}
+            </NavLink>
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** Logo header — shared between desktop and mobile */
+function SidebarLogo({ collapsed, showClose, onClose }: { collapsed: boolean; showClose?: boolean; onClose?: () => void }) {
+  return (
+    <div
+      className="flex items-center gap-3 border-b shrink-0 overflow-hidden"
+      style={{
+        borderColor: "var(--border)",
+        padding: collapsed ? "1.125rem 0" : "1rem 1.125rem",
+        justifyContent: collapsed ? "center" : "flex-start",
+        transition: "padding 0.22s ease",
+      }}
     >
-      {/* ── Logo ─────────────────────────────────── */}
       <div
-        className="flex items-center gap-3 border-b shrink-0 overflow-hidden"
+        className="relative flex items-center justify-center w-9 h-9 rounded-xl shrink-0"
         style={{
-          borderColor: "var(--border)",
-          padding: collapsed ? "1.125rem 0" : "1rem 1.125rem",
-          justifyContent: collapsed ? "center" : "flex-start",
-          transition: "padding 0.22s ease",
+          background: "linear-gradient(135deg, rgba(59,130,246,0.25) 0%, rgba(168,85,247,0.2) 100%)",
+          border: "1px solid rgba(59,130,246,0.35)",
+          boxShadow: "0 0 16px rgba(59,130,246,0.2), inset 0 1px 0 rgba(255,255,255,0.05)",
         }}
       >
-        <div
-          className="relative flex items-center justify-center w-9 h-9 rounded-xl shrink-0"
-          style={{
-            background: "linear-gradient(135deg, rgba(59,130,246,0.25) 0%, rgba(168,85,247,0.2) 100%)",
-            border: "1px solid rgba(59,130,246,0.35)",
-            boxShadow: "0 0 16px rgba(59,130,246,0.2), inset 0 1px 0 rgba(255,255,255,0.05)",
-          }}
-        >
-          <ShieldCheck size={18} style={{ color: "var(--accent)" }} />
-        </div>
-
-        <AnimatePresence mode="wait">
-          {!collapsed && (
-            <motion.div
-              key="logo-text"
-              initial="hidden" animate="show" exit="exit"
-              variants={labelVariants}
-              className="overflow-hidden whitespace-nowrap"
-            >
-              <h1
-                className="text-sm font-bold leading-tight"
-                style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.02em" }}
-              >
-                Cyber Sentinel
-              </h1>
-              <p
-                className="text-[9px] uppercase tracking-[0.2em] font-semibold mt-0.5"
-                style={{ color: "var(--accent)", opacity: 0.65 }}
-              >
-                Pentest · SOC
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <ShieldCheck size={18} style={{ color: "var(--accent)" }} />
       </div>
 
-      {/* ── Navigation ───────────────────────────── */}
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2.5 space-y-0.5">
-        {navItems.map(({ to, label, icon: Icon, section, color, iconBg }) => {
-          const showSection = section && !renderedSections.has(section);
-          if (section) renderedSections.add(section);
+      <AnimatePresence mode="wait">
+        {!collapsed && (
+          <motion.div
+            key="logo-text"
+            initial="hidden" animate="show" exit="exit"
+            variants={labelVariants}
+            className="overflow-hidden whitespace-nowrap flex-1"
+          >
+            <h1
+              className="text-sm font-bold leading-tight"
+              style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.02em" }}
+            >
+              Cyber Sentinel
+            </h1>
+            <p
+              className="text-[9px] uppercase tracking-[0.2em] font-semibold mt-0.5"
+              style={{ color: "var(--accent)", opacity: 0.65 }}
+            >
+              Pentest · SOC
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          return (
-            <div key={to}>
-              {/* Section label / divider */}
-              <AnimatePresence mode="wait">
-                {showSection && !collapsed && (
-                  <motion.p
-                    initial="hidden" animate="show" exit="exit"
-                    variants={sectionVariants}
-                    className="px-2 pb-1 text-[9px] uppercase tracking-[0.18em] font-semibold overflow-hidden whitespace-nowrap"
-                    style={{ color: "var(--text-subtle)" }}
-                  >
-                    {section}
-                  </motion.p>
-                )}
-                {showSection && collapsed && (
-                  <motion.div
-                    key={`div-${section}`}
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="mx-2 my-2 h-px"
-                    style={{ backgroundColor: "var(--border)" }}
-                  />
-                )}
-              </AnimatePresence>
+      {showClose && (
+        <button
+          onClick={onClose}
+          className="ml-auto p-1 rounded-lg transition-colors hover:bg-[var(--bg-muted)]"
+          style={{ color: "var(--text-muted)" }}
+          aria-label="Close sidebar"
+        >
+          <X size={16} />
+        </button>
+      )}
+    </div>
+  );
+}
 
-              {/* Nav link */}
-              <NavLink
-                to={to}
-                title={collapsed ? label : undefined}
-                className={({ isActive }) =>
-                  cn(
-                    "group relative flex items-center rounded-lg overflow-hidden transition-colors duration-150",
-                    collapsed ? "justify-center p-2 mx-0.5" : "gap-2.5 px-2 py-2",
-                    isActive
-                      ? "bg-[var(--bg-muted)]"
-                      : "text-[var(--text-muted)] hover:bg-[var(--bg-muted)] hover:text-[var(--text-base)]"
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {/* Colored active indicator bar */}
-                    {isActive && !collapsed && (
-                      <motion.span
-                        layoutId="sidebar-active-bar"
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full"
-                        style={{ backgroundColor: color }}
-                        transition={{ type: "spring", stiffness: 500, damping: 35 }}
-                      />
-                    )}
+export default function Sidebar({ collapsed, onToggle: _onToggle, mobileOpen, onMobileClose }: SidebarProps) {
+  return (
+    <>
+      {/* ── Desktop sidebar (md+) ─────────────────────────────── */}
+      <motion.aside
+        animate={{ width: collapsed ? 64 : 240 }}
+        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+        className="fixed left-0 top-0 z-40 h-screen flex-col overflow-hidden border-r hidden md:flex"
+        style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border)" }}
+      >
+        <SidebarLogo collapsed={collapsed} />
+        <SidebarNav collapsed={collapsed} />
+      </motion.aside>
 
-                    {/* Icon with colored background when active */}
-                    <div
-                      className="nav-icon"
-                      style={{
-                        backgroundColor: isActive ? iconBg : "transparent",
-                        marginLeft: isActive && !collapsed ? "2px" : undefined,
-                      }}
-                    >
-                      <Icon
-                        size={15}
-                        style={{ color: isActive ? color : "currentColor" }}
-                        className="transition-colors duration-150"
-                      />
-                    </div>
+      {/* ── Mobile overlay backdrop ───────────────────────────── */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            key="mobile-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-40 bg-black/60 md:hidden"
+            onClick={onMobileClose}
+          />
+        )}
+      </AnimatePresence>
 
-                    <AnimatePresence mode="wait">
-                      {!collapsed && (
-                        <motion.span
-                          key={`label-${to}`}
-                          initial="hidden" animate="show" exit="exit"
-                          variants={labelVariants}
-                          className="text-sm font-medium whitespace-nowrap overflow-hidden"
-                          style={{ color: isActive ? "var(--text-base)" : "inherit" }}
-                        >
-                          {label}
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
-                  </>
-                )}
-              </NavLink>
-            </div>
-          );
-        })}
-      </nav>
-
-    </motion.aside>
+      {/* ── Mobile drawer ────────────────────────────────────── */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.aside
+            key="mobile-drawer"
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "-100%" }}
+            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+            className="fixed left-0 top-0 z-50 h-screen w-60 flex flex-col overflow-hidden border-r md:hidden"
+            style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border)" }}
+          >
+            <SidebarLogo collapsed={false} showClose onClose={onMobileClose} />
+            <SidebarNav collapsed={false} onNavClick={onMobileClose} />
+          </motion.aside>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

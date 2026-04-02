@@ -21,3 +21,14 @@ export async function getCorrelations(): Promise<Correlation[]> {
   const res = await api.get<Correlation[]>("/correlations/");
   return res.data;
 }
+
+/** DELETE /api/correlations/:id → delete a single correlation */
+export async function deleteCorrelation(id: string): Promise<void> {
+  await api.delete(`/correlations/${id}`);
+}
+
+/** DELETE /api/correlations/ → delete all correlations for the current user */
+export async function deleteAllCorrelations(): Promise<{ deleted: number }> {
+  const res = await api.delete<{ deleted: number }>("/correlations/");
+  return res.data;
+}

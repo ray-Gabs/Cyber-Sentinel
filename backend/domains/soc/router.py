@@ -13,6 +13,9 @@ from domains.soc.schemas import (
     AlertSummaryResponse,
     AlertDetailResponse,
     AnalystOverrideRequest,
+    CustomRuleCreate,
+    CustomRuleUpdate,
+    CustomRuleResponse,
 )
 from domains.soc import service
 
@@ -102,9 +105,67 @@ async def list_agents(user: User = Depends(get_current_user)):
 
 @router.get("/rules/custom")
 async def get_custom_rules(user: User = Depends(get_current_user)):
-    """Get custom SIEM rule definitions."""
+    """Get custom SIEM rule definitions (Wazuh XML)."""
     from domains.soc.wazuh_rules import get_custom_rules
     return get_custom_rules()
+
+
+# ── Custom Detection Rules CRUD ──────────────────────────────────────────────
+
+@router.get("/detection-rules", response_model=list[CustomRuleResponse])
+async def list_detection_rules(user: User = Depends(get_current_user)):
+    """List all custom detection rules for the current user (including system defaults)."""
+    rules = await service.get_rules(str(user.id))
+    return [
+        CustomRuleResponse(
+            id=str(r.id), user_id=r.user_id, name=r.name,
+            description=r.description, pattern=r.pattern,
+            severity=r.severity, enabled=r.enabled, created_at=r.created_at,
+        )
+        for r in rules
+    ]
+
+
+@router.post("/detection-rules", response_model=CustomRuleResponse, status_code=201)
+async def create_detection_rule(data: CustomRuleCreate, user: User = Depends(get_current_user)):
+    """Create a new custom detection rule."""
+    try:
+        rule = await service.create_rule(str(user.id), data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return CustomRuleResponse(
+        id=str(rule.id), user_id=rule.user_id, name=rule.name,
+        description=rule.description, pattern=rule.pattern,
+        severity=rule.severity, enabled=rule.enabled, created_at=rule.created_at,
+    )
+
+
+@router.put("/detection-rules/{rule_id}", response_model=CustomRuleResponse)
+async def update_detection_rule(rule_id: str, data: CustomRuleUpdate, user: User = Depends(get_current_user)):
+    """Update an existing detection rule."""
+    try:
+        rule = await service.update_rule(rule_id, str(user.id), data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return CustomRuleResponse(
+        id=str(rule.id), user_id=rule.user_id, name=rule.name,
+        description=rule.description, pattern=rule.pattern,
+        severity=rule.severity, enabled=rule.enabled, created_at=rule.created_at,
+    )
+
+
+@router.delete("/detection-rules", status_code=200)
+async def delete_all_detection_rules(user: User = Depends(get_current_user)):
+    """Delete all user-owned detection rules (system defaults are preserved)."""
+    count = await service.delete_all_rules(str(user.id))
+    return {"deleted": count, "message": f"Deleted {count} rule(s)"}
+
+
+@router.delete("/detection-rules/{rule_id}", status_code=200)
+async def delete_detection_rule(rule_id: str, user: User = Depends(get_current_user)):
+    """Delete a single detection rule by ID."""
+    await service.delete_rule(rule_id, str(user.id))
+    return {"deleted": rule_id}
 
 
 @router.post("/rules/deploy")

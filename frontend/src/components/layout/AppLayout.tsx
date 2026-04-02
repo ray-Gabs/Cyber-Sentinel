@@ -1,14 +1,17 @@
 /**
  * AppLayout — main shell with collapsible sidebar, animated page transitions,
  * and AnimatedGridPattern background behind all content.
+ * Desktop: persistent collapsible sidebar.
+ * Mobile: overlay drawer triggered by hamburger in Header + bottom nav bar.
  * Sidebar state is persisted in localStorage.
  */
 import { useState, useEffect } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { useTheme } from "@/providers/ThemeProvider";
 import { TransitionProvider } from "@/components/transitions/TransitionProvider";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
+import BottomNav from "./BottomNav";
 import { AnimatedGridPattern } from "@/components/ui/AnimatedGridPattern";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +19,9 @@ const SIDEBAR_KEY = "cs_sidebar_open";
 
 export default function AppLayout() {
   const { isDark } = useTheme();
+  const location = useLocation();
 
+  // Desktop: collapsed vs expanded
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem(SIDEBAR_KEY);
@@ -26,6 +31,12 @@ export default function AppLayout() {
     }
   });
 
+  // Mobile: overlay drawer
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close mobile drawer on route change
+  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+
   useEffect(() => {
     try {
       localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen));
@@ -34,8 +45,15 @@ export default function AppLayout() {
     }
   }, [sidebarOpen]);
 
-  const toggleSidebar = () => setSidebarOpen((prev) => !prev);
-  const sidebarWidth  = sidebarOpen ? 240 : 64;
+  const toggleSidebar = () => {
+    if (window.innerWidth < 768) {
+      setMobileOpen((prev) => !prev);
+    } else {
+      setSidebarOpen((prev) => !prev);
+    }
+  };
+
+  const sidebarWidth = sidebarOpen ? 240 : 64;
 
   return (
     <div className="min-h-screen relative" style={{ backgroundColor: "var(--bg-base)" }}>
@@ -59,25 +77,34 @@ export default function AppLayout() {
         />
       </div>
 
-      {/* ── Sidebar ───────────────────────────────────────────────── */}
-      <Sidebar collapsed={!sidebarOpen} onToggle={toggleSidebar} />
+      {/* ── Sidebar (desktop fixed + mobile overlay drawer) ───────── */}
+      <Sidebar
+        collapsed={!sidebarOpen}
+        onToggle={toggleSidebar}
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
+      />
 
       {/* ── Main content ──────────────────────────────────────────── */}
+      {/*
+        Desktop (md+):  margin-left tracks sidebar width via CSS var
+        Mobile (<md):   no margin (sidebar is overlay), extra bottom padding for BottomNav
+      */}
       <div
-        className="relative z-10 flex flex-col min-h-screen"
-        style={{
-          marginLeft: sidebarWidth,
-          transition: "margin-left 0.22s cubic-bezier(0.4,0,0.2,1)",
-        }}
+        className="relative z-10 flex flex-col min-h-screen layout-main"
+        style={{ ["--sidebar-current-width" as string]: `${sidebarWidth}px` }}
       >
         <Header onToggleSidebar={toggleSidebar} sidebarOpen={sidebarOpen} />
 
-        <main className="flex-1 p-6">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 layout-main-content">
           <TransitionProvider>
             <Outlet />
           </TransitionProvider>
         </main>
       </div>
+
+      {/* ── Bottom navigation — mobile only ───────────────────────── */}
+      <BottomNav />
     </div>
   );
 }

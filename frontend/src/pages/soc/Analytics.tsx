@@ -1,9 +1,11 @@
 /**
- * Analytics — SOC alert statistics and trend charts.
+ * Analytics — SOC alert statistics + pentest scan metrics and trend charts.
  */
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { getAlertStats } from "@/services/alertService";
+import { getPentestAnalytics } from "@/services/analyticsService";
+import type { PentestAnalytics, AnalyticsRange } from "@/services/analyticsService";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import type { AlertStats } from "@/types";
 import {
@@ -12,7 +14,7 @@ import {
 } from "recharts";
 import {
   BarChart3, RefreshCw, Info, ShieldAlert, TrendingUp,
-  AlertTriangle, Activity,
+  AlertTriangle, Activity, Crosshair, Clock,
 } from "lucide-react";
 
 // ── Chart tooltip style ────────────────────────────────────────────────
@@ -80,11 +82,24 @@ function ChartHeader({ title, tooltip }: { title: string; tooltip?: string }) {
   );
 }
 
+const SEVERITY_PIE_COLORS: Record<string, string> = {
+  critical: "#ef4444",
+  high:     "#f97316",
+  medium:   "#eab308",
+  low:      "#22c55e",
+  info:     "#64748b",
+};
+
 export default function Analytics() {
   const [stats, setStats] = useState<AlertStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
+
+  const [pentest, setPentest]           = useState<PentestAnalytics | null>(null);
+  const [pentestLoading, setPentestLoading] = useState(true);
+  const [pentestError, setPentestError] = useState(false);
+  const [range, setRange]               = useState<AnalyticsRange>("30d");
 
   const load = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -101,7 +116,20 @@ export default function Analytics() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  const loadPentest = async (r: AnalyticsRange = range) => {
+    setPentestLoading(true);
+    setPentestError(false);
+    try {
+      const data = await getPentestAnalytics(r);
+      setPentest(data);
+    } catch {
+      setPentestError(true);
+    } finally {
+      setPentestLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); loadPentest(); }, []);
 
   if (loading) {
     return (
@@ -533,6 +561,249 @@ export default function Analytics() {
             </motion.div>
           )}
         </>
+      )}
+
+      {/* ══ Pentest Analytics Section ══════════════════════════════ */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.25 }}
+        className="flex items-center justify-between pt-2"
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="flex items-center justify-center w-9 h-9 rounded-xl"
+            style={{ backgroundColor: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.18)" }}
+          >
+            <Crosshair size={16} style={{ color: "#f59e0b" }} />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold" style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}>
+              Pentest Metrics
+            </h2>
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              {pentest ? `${pentest.total_scans} scan${pentest.total_scans !== 1 ? "s" : ""} in period` : "Scan trends and findings"}
+            </p>
+          </div>
+        </div>
+
+        {/* Date range selector */}
+        <div className="flex items-center gap-1 p-0.5 rounded-lg" style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}>
+          {(["7d", "30d", "90d"] as AnalyticsRange[]).map((r) => (
+            <button
+              key={r}
+              onClick={() => { setRange(r); loadPentest(r); }}
+              className="px-3 py-1 rounded-md text-xs font-medium transition-colors"
+              style={{
+                backgroundColor: range === r ? "var(--bg-surface)" : "transparent",
+                color: range === r ? "var(--text-base)" : "var(--text-muted)",
+                border: range === r ? "1px solid var(--border)" : "1px solid transparent",
+              }}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* Pentest KPI cards */}
+      {pentestLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="card animate-pulse" style={{ height: 80, backgroundColor: "var(--bg-muted)" }} />
+          ))}
+        </div>
+      ) : pentestError ? (
+        <div
+          className="card flex flex-col items-center py-10"
+          style={{ border: "1px solid rgba(239,68,68,0.2)", backgroundColor: "rgba(239,68,68,0.04)" }}
+        >
+          <AlertTriangle size={20} className="mb-2" style={{ color: "#ef4444" }} />
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>Could not load pentest analytics</p>
+          <button onClick={() => loadPentest()} className="btn-secondary mt-3 gap-1.5" style={{ fontSize: "0.8125rem" }}>
+            <RefreshCw size={12} /> Retry
+          </button>
+        </div>
+      ) : pentest && (
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
+
+          {/* KPI row */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              {
+                label: "Total Scans",
+                value: pentest.total_scans,
+                color: "#f59e0b",
+                bg: "rgba(245,158,11,0.08)",
+                border: "rgba(245,158,11,0.18)",
+                icon: Crosshair,
+              },
+              {
+                label: "Avg Scan Duration",
+                value: pentest.avg_scan_duration_seconds > 60
+                  ? `${Math.round(pentest.avg_scan_duration_seconds / 60)}m`
+                  : `${pentest.avg_scan_duration_seconds}s`,
+                color: "#3b82f6",
+                bg: "rgba(59,130,246,0.08)",
+                border: "rgba(59,130,246,0.18)",
+                icon: Clock,
+                tooltip: "Average time from scan start to completion.",
+              },
+              {
+                label: "Wazuh Alerts",
+                value: pentest.total_alerts,
+                color: "#ef4444",
+                bg: "rgba(239,68,68,0.08)",
+                border: "rgba(239,68,68,0.18)",
+                icon: ShieldAlert,
+              },
+            ].map(({ label, value, color, bg, border, icon: Icon, tooltip }) => (
+              <div key={label} className="card flex items-center gap-3" style={{ padding: "0.875rem 1rem" }}>
+                <div
+                  className="flex items-center justify-center w-10 h-10 rounded-xl shrink-0"
+                  style={{ backgroundColor: bg, border: `1px solid ${border}` }}
+                >
+                  <Icon size={16} style={{ color }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-2xl font-bold leading-none" style={{ color: "var(--text-base)" }}>{value}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
+                    {tooltip && <InfoTooltip text={tooltip} />}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Charts row */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* Scans over time */}
+            <div className="card">
+              <ChartHeader title="Scans Over Time" tooltip="Number of scans run per day in the selected period." />
+              <div className="h-56">
+                {pentest.scans_over_time.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={pentest.scans_over_time}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
+                      <XAxis dataKey="date" tick={TICK_STYLE} axisLine={{ stroke: "#1e1e2e" }} tickLine={false} />
+                      <YAxis tick={TICK_STYLE} axisLine={{ stroke: "#1e1e2e" }} tickLine={false} />
+                      <Tooltip contentStyle={tooltipStyle} />
+                      <Bar dataKey="count" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-sm" style={{ color: "var(--text-subtle)" }}>No scan data in this period</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Findings by severity */}
+            <div className="card">
+              <ChartHeader title="Findings by Severity" tooltip="Distribution of vulnerabilities found across all scans in the period." />
+              <div className="h-56">
+                {Object.values(pentest.findings_by_severity).some((v) => v > 0) ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={Object.entries(pentest.findings_by_severity)
+                          .filter(([, v]) => v > 0)
+                          .map(([name, value]) => ({ name, value }))}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={82}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {Object.keys(pentest.findings_by_severity)
+                          .filter((k) => (pentest.findings_by_severity as unknown as Record<string, number>)[k] > 0)
+                          .map((k) => (
+                            <Cell key={k} fill={SEVERITY_PIE_COLORS[k] ?? "#64748b"} stroke="transparent" />
+                          ))}
+                      </Pie>
+                      <Legend formatter={(v) => <span style={{ color: "var(--text-muted)", fontSize: 11 }}>{v}</span>} />
+                      <Tooltip contentStyle={tooltipStyle} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-sm" style={{ color: "var(--text-subtle)" }}>No findings in this period</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Scanner success rate + top targets */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* Scanner success rate */}
+            {pentest.scanner_success_rate.length > 0 && (
+              <div className="card">
+                <ChartHeader title="Scanner Success Rate" tooltip="Percentage of scans where each tool completed without error." />
+                <div className="space-y-3">
+                  {pentest.scanner_success_rate.map(({ scanner, rate, completed, failed }) => (
+                    <div key={scanner}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{scanner}</span>
+                        <span className="text-xs font-semibold" style={{ color: rate >= 0.8 ? "#22c55e" : rate >= 0.5 ? "#eab308" : "#ef4444" }}>
+                          {Math.round(rate * 100)}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "var(--bg-muted)" }}>
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${rate * 100}%`,
+                            backgroundColor: rate >= 0.8 ? "#22c55e" : rate >= 0.5 ? "#eab308" : "#ef4444",
+                          }}
+                        />
+                      </div>
+                      <p className="text-[10px] mt-0.5" style={{ color: "var(--text-subtle)" }}>
+                        {completed} completed · {failed} failed
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Top vulnerable targets */}
+            {pentest.top_vulnerable_targets.length > 0 && (
+              <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                <div
+                  className="px-5 py-3.5 border-b"
+                  style={{ borderColor: "var(--border)", backgroundColor: "var(--bg-muted)" }}
+                >
+                  <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-subtle)" }}>
+                    Top Vulnerable Targets
+                  </h2>
+                </div>
+                <div>
+                  {pentest.top_vulnerable_targets.slice(0, 5).map(({ target, findings }, i) => (
+                    <div
+                      key={target}
+                      className="flex items-center justify-between px-5 py-3"
+                      style={{ borderBottom: i < 4 ? "1px solid var(--border)" : undefined }}
+                    >
+                      <span className="text-sm font-mono truncate max-w-[200px]" style={{ color: "var(--text-muted)" }}>
+                        {target}
+                      </span>
+                      <span
+                        className="text-xs font-semibold px-2 py-0.5 rounded-full ml-3 shrink-0"
+                        style={{ backgroundColor: "rgba(239,68,68,0.1)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }}
+                      >
+                        {findings} finding{findings !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </motion.div>
       )}
     </div>
   );
