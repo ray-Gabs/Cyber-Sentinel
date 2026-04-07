@@ -2,15 +2,18 @@
 # backend/domains/soc/service.py — SOC Alert Business Logic
 # ============================================================
 
+import logging
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import HTTPException, status
 
-import re
-
+from domains.auth.models import User
 from domains.soc.models import Alert, AiVerdict, CustomDetectionRule
 from domains.soc.schemas import AnalystOverrideRequest, CustomRuleCreate, CustomRuleUpdate
+
+log = logging.getLogger(__name__)
 
 
 async def ingest_wazuh_alert(raw: dict) -> Alert:
@@ -49,6 +52,25 @@ async def ingest_wazuh_alert(raw: dict) -> Alert:
         matched_rules=matched_rules,
     )
     await alert.insert()
+
+    # ── Targeted notification ──────────────────────────────────────────────
+    # If this alert's agent_name matches a user's linked agent and it's
+    # medium+ severity (Wazuh level >= 7), notify that student in real time.
+    if alert.agent_name and alert.rule_level >= 7:
+        try:
+            owner = await User.find_one(User.wazuh_agent_name == alert.agent_name)
+            if owner:
+                from domains.notifications.service import create_notification
+                notif_type = "soc_critical" if alert.rule_level >= 12 else "soc_alert"
+                await create_notification(
+                    user_id=str(owner.id),
+                    type=notif_type,
+                    title=f"[{alert.agent_name}] {alert.rule_description}",
+                    body=f"Wazuh rule {alert.rule_id} · level {alert.rule_level} · {alert.full_log[:120]}",
+                )
+        except Exception as exc:
+            log.warning("[SOC] Agent-owner notification failed for %s: %s", alert.wazuh_id, exc)
+
     return alert
 
 
@@ -133,14 +155,29 @@ async def list_alerts(
     rule_level_min: Optional[int] = None,
     ai_verdict: Optional[str] = None,
     agent_name: Optional[str] = None,
+    current_user: Optional[User] = None,
 ) -> list[Alert]:
-    """List alerts with optional filters, newest first."""
+    """
+    List alerts with optional filters, newest first.
+
+    Scoping rules:
+    - Admin role: sees ALL alerts (instructor / SOC analyst view).
+    - Non-admin with a linked wazuh_agent_name: sees ONLY their agent's alerts.
+    - Non-admin without a linked agent: sees all alerts (fallback — student hasn't linked yet).
+    - The explicit agent_name filter param (from the request) always narrows further.
+    """
     query: dict = {}
+
+    # Agent-owner scoping for non-admin users
+    if current_user and current_user.role != "admin" and current_user.wazuh_agent_name:
+        query["agent_name"] = current_user.wazuh_agent_name
+
     if rule_level_min is not None:
         query["rule_level"] = {"$gte": rule_level_min}
     if ai_verdict:
         query["ai_verdict"] = ai_verdict
-    if agent_name:
+    # Explicit agent_name filter narrows on top of any scope already set
+    if agent_name and "agent_name" not in query:
         query["agent_name"] = {"$regex": re.escape(agent_name), "$options": "i"}
 
     return (

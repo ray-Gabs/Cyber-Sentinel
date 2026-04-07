@@ -91,11 +91,22 @@ services:
       - MONGODB_URI=mongodb://mongo:27017
       - REDIS_URL=redis://redis:6379/0
       - FRONTEND_URL=https://localhost
-      - CORS_EXTRA_ORIGINS=http://localhost:5173,http://localhost:3000,https://localhost
+      # Add the VM's LAN IP so students' browsers are not CORS-blocked.
+      # Replace 10.4.89.178 with this VM's actual IP if it changes.
+      - CORS_EXTRA_ORIGINS=http://localhost:5173,http://localhost:3000,https://localhost,http://10.4.89.178,http://10.4.89.178:8000
       - ZAP_API_URL=http://zap:8080
       # Python container settings
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
+      # Lab mode: allow scanning private IPs (student machines on local network)
+      - ALLOW_PRIVATE_TARGETS=true
+      # Wazuh Manager is on the HOST (not in Docker) — use host.docker.internal
+      # to reach it. host-gateway resolves to the Docker bridge gateway IP
+      # (the host VM's IP from inside the container). Wazuh runs on port 55000.
+      - WAZUH_API_URL=https://host.docker.internal:55000
+      - WAZUH_VERIFY_SSL=false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux Docker Engine 20.10+ required
     ports:
       - "8000:8000"         # exposed for Swagger UI / direct API testing
     depends_on:
@@ -129,6 +140,13 @@ services:
       - ZAP_API_URL=http://zap:8080
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
+      # Lab mode: allow scanning private IPs (student machines on local network).
+      # NEVER set true on internet-facing deployments.
+      - ALLOW_PRIVATE_TARGETS=true
+      - WAZUH_API_URL=https://host.docker.internal:55000
+      - WAZUH_VERIFY_SSL=false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       mongo:
         condition: service_healthy
@@ -137,6 +155,13 @@ services:
     volumes:
       - ./backend:/app
     restart: unless-stopped
+    # Celery workers don't serve HTTP — use inspect ping instead of HTTP healthcheck
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping --timeout 10 2>&1 | grep -q pong || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
 
   # ── Celery Beat Scheduler (periodic tasks — Wazuh polling every 30s) ────────
   # Beat must run as a single instance — never scale this service.
@@ -156,6 +181,11 @@ services:
       - ZAP_API_URL=http://zap:8080
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
+      - ALLOW_PRIVATE_TARGETS=true
+      - WAZUH_API_URL=https://host.docker.internal:55000
+      - WAZUH_VERIFY_SSL=false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       mongo:
         condition: service_healthy
@@ -164,6 +194,13 @@ services:
     volumes:
       - ./backend:/app
     restart: unless-stopped
+    # Beat doesn't serve HTTP — check that the process is alive
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'celery.*beat' > /dev/null && echo ok || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # ── React Frontend (nginx serving the Vite static build) ─────────────────
   frontend:

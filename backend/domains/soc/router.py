@@ -83,7 +83,7 @@ async def list_alerts(
     user: User = Depends(get_current_user),
 ):
     """List ingested Wazuh alerts (newest first) with optional filters."""
-    alerts = await service.list_alerts(page, size, rule_level_min, ai_verdict, agent_name)
+    alerts = await service.list_alerts(page, size, rule_level_min, ai_verdict, agent_name, current_user=user)
     return [_to_summary(a) for a in alerts]
 
 
@@ -92,6 +92,36 @@ async def list_alerts(
 async def alert_stats(user: User = Depends(get_current_user)):
     """Get aggregated alert statistics for the analytics dashboard."""
     return await service.get_alert_stats()
+
+
+@router.get("/health")
+async def wazuh_health(user: User = Depends(get_current_user)):
+    """
+    Test Wazuh Manager connectivity and return a structured status.
+
+    Useful for the SOC dashboard "connection indicator" and for debugging
+    the 2-VM lab setup where Wazuh runs on the host (not in Docker).
+
+    Returns:
+        status: "connected" | "disconnected"
+        wazuh_url: the URL Cyber Sentinel is trying to reach
+        error: human-readable error if disconnected
+    """
+    from domains.soc.wazuh_client import wazuh_client
+    try:
+        await wazuh_client.authenticate()
+        agents = await wazuh_client.get_agents(limit=1)
+        return {
+            "status": "connected",
+            "wazuh_url": settings.wazuh_api_url,
+            "agent_count": len(agents),
+        }
+    except Exception as exc:
+        return {
+            "status": "disconnected",
+            "wazuh_url": settings.wazuh_api_url,
+            "error": str(exc)[:200],
+        }
 
 
 @router.get("/agents")

@@ -13,6 +13,7 @@ from domains.auth.schemas import (
     LoginRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    UpdateProfileRequest,
     TokenResponse,
     UserResponse,
 )
@@ -60,9 +61,7 @@ async def reset_password(request: Request, data: ResetPasswordRequest):
     return {"detail": "Password updated successfully. You can now sign in."}
 
 
-@router.get("/me", response_model=UserResponse)
-async def get_me(user: User = Depends(get_current_user)):
-    """Return the currently authenticated user's profile."""
+def _user_response(user: User) -> UserResponse:
     return UserResponse(
         id=str(user.id),
         username=user.username,
@@ -71,4 +70,31 @@ async def get_me(user: User = Depends(get_current_user)):
         is_active=user.is_active,
         created_at=user.created_at,
         last_login=user.last_login,
+        wazuh_agent_name=user.wazuh_agent_name,
     )
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(user: User = Depends(get_current_user)):
+    """Return the currently authenticated user's profile."""
+    return _user_response(user)
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(data: UpdateProfileRequest, user: User = Depends(get_current_user)):
+    """
+    Update the current user's profile.
+
+    Link a Wazuh agent to personalise the SOC dashboard:
+      - Your alert list will scope to only that agent's alerts.
+      - You'll get notified when that agent triggers a medium+ alert.
+      - Send wazuh_agent_name="" to unlink.
+
+    The agent name must match exactly what Wazuh shows in its agent list
+    (GET /api/alerts/agents). Ask your instructor for your agent name if unsure.
+    """
+    if data.wazuh_agent_name is not None:
+        # Empty string means "unlink"
+        user.wazuh_agent_name = data.wazuh_agent_name.strip() or None
+        await user.save()
+    return _user_response(user)

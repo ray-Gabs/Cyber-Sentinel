@@ -33,6 +33,21 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=128)
 
 
+class UpdateProfileRequest(BaseModel):
+    """
+    Update mutable profile fields for the current user.
+
+    wazuh_agent_name: the exact agent name shown in Wazuh Manager
+    (e.g. 'alice-laptop'). Once set, your SOC view scopes to only
+    that agent's alerts. Clear by sending an empty string "".
+    """
+    wazuh_agent_name: Optional[str] = Field(
+        None,
+        max_length=128,
+        description="Wazuh agent name to link (matches 'name' in Wazuh agent list). Empty string unlinks.",
+    )
+
+
 # --------------- Responses ---------------
 
 class TokenResponse(BaseModel):
@@ -49,6 +64,7 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: datetime
     last_login: Optional[datetime] = None
+    wazuh_agent_name: Optional[str] = None
 
     class Config:
         from_attributes = True

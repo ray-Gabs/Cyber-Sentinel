@@ -25,6 +25,12 @@ class User(Document):
     password_reset_token_hash: Optional[str] = None
     password_reset_expires: Optional[datetime] = None
 
+    # Wazuh agent binding — links this user to a specific Wazuh agent so the SOC
+    # dashboard scopes to their alerts only. Set by the student via PATCH /api/auth/me.
+    # Matches the "name" field Wazuh uses when the agent registers (e.g. "alice-laptop").
+    # Admin role ignores this filter and always sees all alerts.
+    wazuh_agent_name: Optional[str] = None
+
     class Settings:
         name = "users"                     # MongoDB collection name
         use_state_management = True        # Track changes for .save()
@@ -32,6 +38,7 @@ class User(Document):
             IndexModel([("email", ASCENDING)], unique=True),
             IndexModel([("username", ASCENDING)], unique=True),
             IndexModel([("password_reset_token_hash", ASCENDING)], sparse=True),
+            IndexModel([("wazuh_agent_name", ASCENDING)], sparse=True),
         ]
 
     class Config:

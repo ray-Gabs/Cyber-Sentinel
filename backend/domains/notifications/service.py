@@ -13,7 +13,11 @@ from domains.notifications.models import Notification
 
 log = logging.getLogger(__name__)
 
-NotificationType = Literal["scan_complete", "scan_failed", "critical_finding"]
+NotificationType = Literal[
+    "scan_complete", "scan_failed", "critical_finding",
+    "soc_alert",    # medium+ Wazuh alert for this user's linked agent
+    "soc_critical", # high-severity Wazuh alert (level >= 12)
+]
 
 
 async def create_notification(
