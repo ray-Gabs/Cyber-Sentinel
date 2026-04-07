@@ -40,6 +40,7 @@ import Correlation from "@/pages/Correlation";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import Admin from "@/pages/Admin";
+import AuditLog from "@/pages/AuditLog";
 
 // React Query client — used for data fetching/caching (you'll use this later)
 const queryClient = new QueryClient();
@@ -68,6 +69,37 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * RoleRoute — redirects to /dashboard with state if user lacks required role.
+ * Role hierarchy: viewer (0) < analyst (1) < admin (2)
+ */
+function RoleRoute({
+  children,
+  requiredRole,
+}: {
+  children: React.ReactNode;
+  requiredRole: "analyst" | "admin";
+}) {
+  const { user, loading } = useAuth();
+  if (loading) return <PageLoader />;
+  if (!user) return <Navigate to="/login" replace />;
+
+  const roleLevel: Record<string, number> = { viewer: 0, analyst: 1, admin: 2 };
+  const userLevel = roleLevel[user.role] ?? 0;
+  const requiredLevel = roleLevel[requiredRole];
+
+  if (userLevel < requiredLevel) {
+    return (
+      <Navigate
+        to="/dashboard"
+        replace
+        state={{ roleBlocked: true, requiredRole }}
+      />
+    );
+  }
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -88,7 +120,7 @@ function AppRoutes() {
       >
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/scans" element={<ScanList />} />
-        <Route path="/scans/new" element={<ScanConfig />} />
+        <Route path="/scans/new" element={<RoleRoute requiredRole="analyst"><ScanConfig /></RoleRoute>} />
         <Route path="/scans/:id" element={<ScanDetail />} />
         <Route path="/scans/:id/diff" element={<ScanDiff />} />
         <Route path="/alerts" element={<AlertFeed />} />
@@ -97,7 +129,8 @@ function AppRoutes() {
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/correlations" element={<Correlation />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/admin" element={<Admin />} />
+        <Route path="/admin" element={<RoleRoute requiredRole="admin"><Admin /></RoleRoute>} />
+        <Route path="/audit" element={<RoleRoute requiredRole="admin"><AuditLog /></RoleRoute>} />
       </Route>
 
       {/* Default: redirect to landing */}

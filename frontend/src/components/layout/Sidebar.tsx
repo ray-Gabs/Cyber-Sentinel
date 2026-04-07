@@ -7,7 +7,7 @@ import { NavLink } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Crosshair, ShieldAlert, BarChart3,
-  Settings, ShieldCheck, Link2, Monitor, X, Users,
+  Settings, ShieldCheck, Link2, Monitor, X, Users, ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
@@ -63,7 +63,12 @@ const navItems: NavItem[] = [
   },
   {
     to: ROUTES.ADMIN,        label: "Users",       icon: Users,
-    section: null,             color: "#F87171", iconBg: "rgba(239,68,68,0.15)",
+    section: "Admin",          color: "#F87171", iconBg: "rgba(239,68,68,0.15)",
+    adminOnly: true,
+  },
+  {
+    to: ROUTES.AUDIT,        label: "Audit Log",   icon: ClipboardList,
+    section: null,             color: "#F59E0B", iconBg: "rgba(245,158,11,0.15)",
     adminOnly: true,
   },
 ];
@@ -92,8 +97,16 @@ function SidebarNav({
   const renderedSections = new Set<string>();
   const visibleItems = navItems.filter((item) => !item.adminOnly || user?.role === "admin");
 
+  const ROLE_PILL: Record<string, { label: string; color: string; bg: string }> = {
+    admin:   { label: "Admin",   color: "#f87171", bg: "rgba(239,68,68,0.12)"   },
+    analyst: { label: "Analyst", color: "#60a5fa", bg: "rgba(59,130,246,0.12)"  },
+    viewer:  { label: "Viewer",  color: "#94a3b8", bg: "rgba(148,163,184,0.10)" },
+  };
+  const rolePill = user ? ROLE_PILL[user.role] : null;
+
   return (
-    <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2.5 space-y-0.5">
+    <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2.5 space-y-0.5 flex flex-col">
+      <div className="flex-1 space-y-0.5">
       {visibleItems.map(({ to, label, icon: Icon, section, color, iconBg }) => {
         const showSection = section && !renderedSections.has(section);
         if (section) renderedSections.add(section);
@@ -179,6 +192,30 @@ function SidebarNav({
           </div>
         );
       })}
+      </div>
+
+      {/* Role pill at bottom of nav */}
+      {!collapsed && rolePill && (
+        <div
+          className="mx-2 mt-2 mb-1 px-3 py-2 rounded-lg flex items-center gap-2"
+          style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}
+        >
+          <div
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ backgroundColor: rolePill.color }}
+          />
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-[0.14em] font-semibold" style={{ color: rolePill.color }}>
+              {rolePill.label}
+            </p>
+            {user && (
+              <p className="text-[10px] truncate" style={{ color: "var(--text-subtle)" }}>
+                {user.username}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   );
 }
