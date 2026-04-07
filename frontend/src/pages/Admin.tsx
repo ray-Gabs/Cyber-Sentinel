@@ -13,10 +13,10 @@ import { motion } from "framer-motion";
 import {
   Users, ShieldCheck, Eye, Activity,
   RefreshCw, CheckCircle2, AlertCircle, Clock,
-  ChevronUp, ChevronDown, UserX,
+  UserX, Search, Wifi, WifiOff, UserCheck, UserMinus,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { listUsers, updateUserRole } from "@/services/authService";
+import { listUsers, updateUserRole, toggleUserStatus } from "@/services/authService";
 import type { UserResponse, UserRole } from "@/types";
 import { ROUTES } from "@/lib/constants";
 
@@ -73,6 +73,7 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
   const [filter,  setFilter]  = useState<FilterTab>("all");
+  const [search,  setSearch]  = useState("");
   const [busy,    setBusy]    = useState<Record<string, boolean>>({});
   const [toast,   setToast]   = useState<{ msg: string; ok: boolean } | null>(null);
 
@@ -113,6 +114,19 @@ export default function Admin() {
     }
   }
 
+  async function toggleStatus(userId: string) {
+    setBusy((b) => ({ ...b, [`status_${userId}`]: true }));
+    try {
+      const updated = await toggleUserStatus(userId);
+      setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
+      showToast(`${updated.username} ${updated.is_active ? "activated" : "deactivated"}`, true);
+    } catch {
+      showToast("Failed to update account status", false);
+    } finally {
+      setBusy((b) => ({ ...b, [`status_${userId}`]: false }));
+    }
+  }
+
   // ── Stats ──────────────────────────────────────────────────────────────────
   const counts = {
     all:     users.length,
@@ -136,7 +150,12 @@ export default function Admin() {
     { key: "admin",   label: "Admins",  count: counts.admin   },
   ];
 
-  const filtered = filter === "all" ? users : users.filter((u) => u.role === filter);
+  const filtered = (filter === "all" ? users : users.filter((u) => u.role === filter))
+    .filter((u) =>
+      !search ||
+      u.username.toLowerCase().includes(search.toLowerCase()) ||
+      u.email.toLowerCase().includes(search.toLowerCase())
+    );
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -188,6 +207,23 @@ export default function Admin() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search
+          size={13}
+          className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+          style={{ color: "var(--text-subtle)" }}
+        />
+        <input
+          type="text"
+          placeholder="Search by username or email..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="input pl-9 w-full"
+          style={{ maxWidth: "360px" }}
+        />
       </div>
 
       {/* Filter tabs */}
@@ -283,55 +319,83 @@ export default function Admin() {
                 </div>
               </div>
 
-              {/* Actions — only for other users */}
-              {u.id !== me?.id && (
-                <div className="flex items-center gap-2 flex-shrink-0 pl-12 sm:pl-0">
-                  {u.role === "viewer" && (
-                    <ActionButton
-                      label="Promote to Analyst"
-                      icon={<ChevronUp size={12} />}
-                      color="#60a5fa"
-                      bg="rgba(59,130,246,0.10)"
-                      border="rgba(59,130,246,0.25)"
-                      busy={!!busy[u.id]}
-                      onClick={() => changeRole(u.id, "analyst")}
-                    />
-                  )}
-                  {u.role === "analyst" && (
-                    <>
-                      <ActionButton
-                        label="Make Admin"
-                        icon={<ShieldCheck size={12} />}
-                        color="#f87171"
-                        bg="rgba(239,68,68,0.08)"
-                        border="rgba(239,68,68,0.2)"
-                        busy={!!busy[u.id]}
-                        onClick={() => changeRole(u.id, "admin")}
-                      />
-                      <ActionButton
-                        label="Demote"
-                        icon={<ChevronDown size={12} />}
-                        color="#64748b"
-                        bg="rgba(100,116,139,0.08)"
-                        border="rgba(100,116,139,0.2)"
-                        busy={!!busy[u.id]}
-                        onClick={() => changeRole(u.id, "viewer")}
-                      />
-                    </>
-                  )}
-                  {u.role === "admin" && (
-                    <ActionButton
-                      label="Demote to Analyst"
-                      icon={<ChevronDown size={12} />}
-                      color="#64748b"
-                      bg="rgba(100,116,139,0.08)"
-                      border="rgba(100,116,139,0.2)"
-                      busy={!!busy[u.id]}
-                      onClick={() => changeRole(u.id, "analyst")}
-                    />
-                  )}
-                </div>
-              )}
+              {/* Actions */}
+              <div className="flex items-center gap-2 flex-shrink-0 pl-12 sm:pl-0 flex-wrap">
+                {/* Wazuh agent badge */}
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full"
+                  style={
+                    u.wazuh_agent_name
+                      ? { backgroundColor: "rgba(34,197,94,0.1)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.2)" }
+                      : { backgroundColor: "var(--bg-muted)", color: "var(--text-subtle)", border: "1px solid var(--border)" }
+                  }
+                >
+                  {u.wazuh_agent_name ? <Wifi size={9} /> : <WifiOff size={9} />}
+                  {u.wazuh_agent_name ?? "No agent"}
+                </span>
+
+                {/* Active/inactive indicator */}
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full"
+                  style={
+                    u.is_active
+                      ? { backgroundColor: "rgba(34,197,94,0.08)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.2)" }
+                      : { backgroundColor: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }
+                  }
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: u.is_active ? "#4ade80" : "#f87171" }}
+                  />
+                  {u.is_active ? "Active" : "Inactive"}
+                </span>
+
+                {/* Role dropdown — only for other users */}
+                {u.id !== me?.id && (
+                  <div className="relative">
+                    {busy[u.id] ? (
+                      <RefreshCw size={12} className="animate-spin" style={{ color: "var(--text-muted)" }} />
+                    ) : (
+                      <select
+                        value={u.role}
+                        onChange={(e) => changeRole(u.id, e.target.value as UserRole)}
+                        className="text-xs font-medium px-2.5 py-1.5 rounded-lg cursor-pointer appearance-none pr-6"
+                        style={{
+                          backgroundColor: ROLE_CONFIG[u.role].bg,
+                          color: ROLE_CONFIG[u.role].color,
+                          border: `1px solid ${ROLE_CONFIG[u.role].color}30`,
+                          outline: "none",
+                        }}
+                      >
+                        <option value="viewer">Viewer</option>
+                        <option value="analyst">Analyst</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    )}
+                  </div>
+                )}
+
+                {/* Activate / Deactivate toggle — only for other users */}
+                {u.id !== me?.id && (
+                  <button
+                    disabled={!!busy[`status_${u.id}`]}
+                    onClick={() => toggleStatus(u.id)}
+                    title={u.is_active ? "Deactivate account" : "Activate account"}
+                    className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-50"
+                    style={
+                      u.is_active
+                        ? { backgroundColor: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }
+                        : { backgroundColor: "rgba(34,197,94,0.08)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.2)" }
+                    }
+                  >
+                    {busy[`status_${u.id}`]
+                      ? <RefreshCw size={11} className="animate-spin" />
+                      : u.is_active ? <UserMinus size={11} /> : <UserCheck size={11} />
+                    }
+                    {u.is_active ? "Deactivate" : "Activate"}
+                  </button>
+                )}
+              </div>
             </motion.div>
           ))}
         </div>
