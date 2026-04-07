@@ -5,7 +5,7 @@
 # and shape HTTP response bodies.
 # ============================================================
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import datetime
 from typing import Optional
 
@@ -31,6 +31,21 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str = Field(..., min_length=8, max_length=128)
+
+
+VALID_ROLES = {"admin", "analyst", "viewer"}
+
+
+class UpdateRoleRequest(BaseModel):
+    """Admin-only: change a user's role."""
+    role: str = Field(..., description="admin | analyst | viewer")
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in VALID_ROLES:
+            raise ValueError(f"role must be one of: {', '.join(sorted(VALID_ROLES))}")
+        return v
 
 
 class UpdateProfileRequest(BaseModel):

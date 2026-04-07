@@ -2,7 +2,7 @@
 # backend/domains/auth/router.py — Auth REST Endpoints
 # ============================================================
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from core.dependencies import get_current_user
 from core.rate_limit import limiter
@@ -14,6 +14,7 @@ from domains.auth.schemas import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
     UpdateProfileRequest,
+    UpdateRoleRequest,
     TokenResponse,
     UserResponse,
 )
@@ -78,6 +79,45 @@ def _user_response(user: User) -> UserResponse:
 async def get_me(user: User = Depends(get_current_user)):
     """Return the currently authenticated user's profile."""
     return _user_response(user)
+
+
+def _require_admin(user: User) -> None:
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+
+
+# ── Admin: user management ────────────────────────────────────────────────────
+
+@router.get("/users", response_model=list[UserResponse])
+async def list_users(user: User = Depends(get_current_user)):
+    """[Admin] List all registered users."""
+    _require_admin(user)
+    users = await User.find().sort("+created_at").to_list()
+    return [_user_response(u) for u in users]
+
+
+@router.patch("/users/{user_id}/role", response_model=UserResponse)
+async def update_user_role(
+    user_id: str,
+    data: UpdateRoleRequest,
+    user: User = Depends(get_current_user),
+):
+    """
+    [Admin] Change a user's role.
+
+    Roles:
+      admin   — full access, sees all scans/alerts, manages users
+      analyst — student role, sees only their own scans and linked-agent alerts
+      viewer  — read-only, no scan/alert creation
+    """
+    _require_admin(user)
+    from bson import ObjectId
+    target = await User.get(ObjectId(user_id))
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    target.role = data.role
+    await target.save()
+    return _user_response(target)
 
 
 @router.patch("/me", response_model=UserResponse)

@@ -48,6 +48,10 @@ async def lifespan(app: FastAPI):
     from domains.soc.rule_matcher import seed_default_rules
     await seed_default_rules()
 
+    # Seed first admin account on fresh DB (uses FIRST_ADMIN_* env vars)
+    from domains.auth.service import seed_admin
+    await seed_admin()
+
     yield
 
     # Shutdown

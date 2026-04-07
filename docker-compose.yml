@@ -100,6 +100,11 @@ services:
       - PYTHONUNBUFFERED=1
       # Lab mode: allow scanning private IPs (student machines on local network)
       - ALLOW_PRIVATE_TARGETS=true
+      # First-boot admin seed — only takes effect when the users collection is empty.
+      # Set these in .env before the first `docker compose up`. Change password after login.
+      - FIRST_ADMIN_USERNAME=${FIRST_ADMIN_USERNAME:-admin}
+      - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL:-}
+      - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD:-}
       # Wazuh Manager is on the HOST (not in Docker) — use host.docker.internal
       # to reach it. host-gateway resolves to the Docker bridge gateway IP
       # (the host VM's IP from inside the container). Wazuh runs on port 55000.

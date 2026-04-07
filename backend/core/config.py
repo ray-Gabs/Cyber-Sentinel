@@ -103,6 +103,15 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     smtp_use_tls: bool = True
 
+    # ---- First-boot Admin Seed ----
+    # If the users collection is empty on startup, Cyber Sentinel creates one admin
+    # account using these credentials. After that, these vars are ignored.
+    # Set them in .env before the FIRST `docker compose up` on a fresh database.
+    # Change the password immediately after logging in for the first time.
+    first_admin_username: str = "admin"
+    first_admin_email: str = ""
+    first_admin_password: str = ""
+
     # ---- Lab / Dev Mode ----
     # Set to true only in controlled lab environments where scanning private IPs
     # (e.g. DVWA, Juice Shop on local network) is intentional.

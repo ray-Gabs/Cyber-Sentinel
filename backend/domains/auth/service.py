@@ -18,6 +18,39 @@ from domains.auth.schemas import RegisterRequest, LoginRequest, TokenResponse
 log = logging.getLogger(__name__)
 
 
+async def seed_admin() -> None:
+    """
+    Create the first admin account on a fresh database.
+
+    Called once during app startup (main.py lifespan).
+    Does nothing if:
+      - FIRST_ADMIN_EMAIL or FIRST_ADMIN_PASSWORD is not set in .env
+      - The users collection already has at least one document
+
+    This means it is safe to leave configured indefinitely — it will never
+    overwrite an existing admin or create duplicate accounts.
+    """
+    if not settings.first_admin_email or not settings.first_admin_password:
+        return
+
+    count = await User.count()
+    if count > 0:
+        return  # DB already has users — skip silently
+
+    admin = User(
+        username=settings.first_admin_username or "admin",
+        email=settings.first_admin_email,
+        hashed_password=hash_password(settings.first_admin_password),
+        role="admin",
+    )
+    await admin.insert()
+    log.info(
+        "First admin seeded — username: %s  email: %s  (change this password now!)",
+        admin.username,
+        admin.email,
+    )
+
+
 async def register_user(data: RegisterRequest) -> User:
     """
     Create a new user. Raises 409 if username or email already exists.
