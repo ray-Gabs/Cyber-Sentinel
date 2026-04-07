@@ -6,7 +6,7 @@
  * It helps your editor auto-complete and catch mistakes.
  */
 import api from "./api";
-import type { LoginRequest, RegisterRequest, TokenResponse, UserResponse } from "@/types";
+import type { LoginRequest, RegisterRequest, TokenResponse, UserResponse, UpdateProfileRequest, UpdateRoleRequest } from "@/types";
 import { TOKEN_KEY } from "@/lib/constants";
 
 /** POST /api/auth/login → returns { access_token, token_type } */
@@ -49,4 +49,24 @@ export async function forgotPassword(email: string): Promise<void> {
 /** POST /api/auth/reset-password → resets password with token */
 export async function resetPassword(token: string, newPassword: string): Promise<void> {
   await api.post("/auth/reset-password", { token, new_password: newPassword });
+}
+
+/** PATCH /api/auth/me → update profile (link Wazuh agent etc.) */
+export async function updateProfile(data: UpdateProfileRequest): Promise<UserResponse> {
+  const res = await api.patch<UserResponse>("/auth/me", data);
+  return res.data;
+}
+
+// ── Admin ──────────────────────────────────────────────────────────────────
+
+/** GET /api/auth/users → list all users (admin only) */
+export async function listUsers(): Promise<UserResponse[]> {
+  const res = await api.get<UserResponse[]>("/auth/users");
+  return res.data;
+}
+
+/** PATCH /api/auth/users/:id/role → change user role (admin only) */
+export async function updateUserRole(userId: string, data: UpdateRoleRequest): Promise<UserResponse> {
+  const res = await api.patch<UserResponse>(`/auth/users/${userId}/role`, data);
+  return res.data;
 }

@@ -2,6 +2,7 @@
  * App.tsx — The root component. Sets up routing (which URL shows which page).
  *
  * Route structure:
+ *   /            → Landing page (public)
  *   /login       → Login page
  *   /register    → Register page
  *   /dashboard   → Dashboard (requires login)
@@ -12,6 +13,7 @@
  *   /alerts/:id  → Alert detail
  *   /analytics   → Charts
  *   /settings    → Settings
+ *   /admin       → User management (admin only)
  */
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -21,6 +23,7 @@ import AppLayout from "@/components/layout/AppLayout";
 import { PageLoader } from "@/components/common/LoadingSpinner";
 
 // Pages (lazy-loaded later if you want, but fine as direct imports for now)
+import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
@@ -36,6 +39,7 @@ import Settings from "@/pages/Settings";
 import Correlation from "@/pages/Correlation";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
+import Admin from "@/pages/Admin";
 
 // React Query client — used for data fetching/caching (you'll use this later)
 const queryClient = new QueryClient();
@@ -68,6 +72,7 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public routes */}
+      <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -92,10 +97,11 @@ function AppRoutes() {
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/correlations" element={<Correlation />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/admin" element={<Admin />} />
       </Route>
 
-      {/* Default: redirect to dashboard */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* Default: redirect to landing */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

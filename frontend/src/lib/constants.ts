@@ -89,6 +89,7 @@ export const ROUTES = {
   AGENTS: "/agents",
   CORRELATIONS: "/correlations",
   SETTINGS: "/settings",
+  ADMIN: "/admin",
   FORGOT_PASSWORD: "/forgot-password",
   RESET_PASSWORD: "/reset-password",
 } as const;

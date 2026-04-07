@@ -7,10 +7,11 @@ import { NavLink } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Crosshair, ShieldAlert, BarChart3,
-  Settings, ShieldCheck, Link2, Monitor, X,
+  Settings, ShieldCheck, Link2, Monitor, X, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
+import { useAuth } from "@/hooks/useAuth";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -26,6 +27,7 @@ interface NavItem {
   section: string | null;
   color: string;
   iconBg: string;
+  adminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -59,6 +61,11 @@ const navItems: NavItem[] = [
     to: ROUTES.SETTINGS,     label: "Settings",    icon: Settings,
     section: "System",         color: "#94A3B8", iconBg: "rgba(148,163,184,0.15)",
   },
+  {
+    to: ROUTES.ADMIN,        label: "Users",       icon: Users,
+    section: null,             color: "#F87171", iconBg: "rgba(239,68,68,0.15)",
+    adminOnly: true,
+  },
 ];
 
 const labelVariants = {
@@ -81,11 +88,13 @@ function SidebarNav({
   collapsed: boolean;
   onNavClick?: () => void;
 }) {
+  const { user } = useAuth();
   const renderedSections = new Set<string>();
+  const visibleItems = navItems.filter((item) => !item.adminOnly || user?.role === "admin");
 
   return (
     <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2.5 space-y-0.5">
-      {navItems.map(({ to, label, icon: Icon, section, color, iconBg }) => {
+      {visibleItems.map(({ to, label, icon: Icon, section, color, iconBg }) => {
         const showSection = section && !renderedSections.has(section);
         if (section) renderedSections.add(section);
 

@@ -34,4 +34,16 @@ export interface UserResponse {
   username: string;
   email: string;
   role: UserRole;
+  is_active: boolean;
+  created_at: string;
+  last_login?: string;
+  wazuh_agent_name?: string | null;
+}
+
+export interface UpdateProfileRequest {
+  wazuh_agent_name?: string;
+}
+
+export interface UpdateRoleRequest {
+  role: UserRole;
 }

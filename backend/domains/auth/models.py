@@ -16,7 +16,8 @@ class User(Document):
     username: str = Field(..., min_length=3, max_length=32)
     email: EmailStr
     hashed_password: str
-    role: str = Field(default="analyst")   # admin | analyst | viewer
+    role: str = Field(default="viewer")    # admin | analyst | viewer
+    # Default is viewer — instructor promotes to analyst via PATCH /api/auth/users/{id}/role
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_login: Optional[datetime] = None
