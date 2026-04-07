@@ -16,7 +16,7 @@ class Alert(Document):
     """
 
     wazuh_id: str                              # Original alert ID from Wazuh
-    timestamp: datetime
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     agent_id: str = ""
     agent_name: str = ""
     agent_ip: str = ""

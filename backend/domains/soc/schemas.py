@@ -22,6 +22,7 @@ class AlertSummaryResponse(BaseModel):
     ai_action: Optional[str] = None
     analyst_override: Optional[str] = None
     mitre_techniques: list[dict] = []
+    matched_rules: list[str] = []
     ingested_at: datetime
 
 

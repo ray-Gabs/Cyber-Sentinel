@@ -23,6 +23,9 @@
   --bg-muted:   #0E1428;
   --bg-input:   #080D1C;
   --bg-hover:   #111928;
+  /* Aliases used by ScanDiff and other components */
+  --surface:    #06091A;
+  --surface-2:  #0E1428;
 
   /* Borders — blue-tinted, subtle */
   --border:       #182138;
@@ -79,6 +82,9 @@
   --bg-muted:   #EDF2FF;
   --bg-input:   #FFFFFF;
   --bg-hover:   #EEF3FF;
+  /* Aliases used by ScanDiff and other components */
+  --surface:    #FFFFFF;
+  --surface-2:  #EDF2FF;
 
   /* Borders */
   --border:       #D0DCFA;

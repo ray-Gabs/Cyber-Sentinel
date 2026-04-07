@@ -2,6 +2,7 @@
 # backend/domains/soc/router.py — SOC REST Endpoints
 # ============================================================
 
+import asyncio
 import hmac
 import logging
 
@@ -307,7 +308,7 @@ async def wazuh_webhook(
             continue  # skip malformed entries in a batch
         try:
             alert = await service.ingest_wazuh_alert(raw)
-            triage_single_alert.delay(str(alert.id))
+            await asyncio.to_thread(triage_single_alert.delay, str(alert.id))
             ingested.append({"alert_id": str(alert.id), "wazuh_id": alert.wazuh_id})
         except Exception as exc:
             log.warning("[webhook] Failed to ingest alert: %s", exc)

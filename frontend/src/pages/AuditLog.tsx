@@ -84,7 +84,7 @@ export default function AuditLog() {
     }
   }
 
-  useEffect(() => { load(); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(page); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = filter
     ? logs.filter((l) => l.action.startsWith(filter))

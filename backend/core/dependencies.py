@@ -37,9 +37,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
 
     try:
         user = await User.get(PydanticObjectId(user_id))
+        if user is None:
+            raise credentials_exception
+    except HTTPException:
+        raise
     except Exception:
-        raise credentials_exception
-    if user is None:
         raise credentials_exception
     if not user.is_active:
         raise HTTPException(

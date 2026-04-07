@@ -33,10 +33,10 @@ export default function ConfirmModal({
   onCancel,
 }: ConfirmModalProps) {
   const isDanger = variant === "danger";
-  const accentColor = isDanger ? "var(--sev-critical)" : "#eab308";
-  const accentBg    = isDanger ? "rgba(239,68,68,0.12)" : "rgba(234,179,8,0.12)";
-  const accentBorder = isDanger ? "rgba(239,68,68,0.25)" : "rgba(234,179,8,0.25)";
-  const btnHoverBg   = isDanger ? "rgba(239,68,68,0.85)" : "rgba(234,179,8,0.85)";
+  const accentColor = isDanger ? "var(--sev-critical)" : "var(--sev-medium)";
+  const accentBg    = isDanger ? "rgba(239,68,68,0.12)" : "rgba(234,179,8,0.10)";
+  const accentBorder = isDanger ? "rgba(239,68,68,0.25)" : "rgba(234,179,8,0.22)";
+  const btnHoverBg   = isDanger ? "rgba(220,38,38,1)" : "rgba(161,98,7,1)";
 
   return (
     <AnimatePresence>
