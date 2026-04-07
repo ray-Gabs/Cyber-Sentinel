@@ -4,7 +4,7 @@
  * SOC Platform is shown first to reflect the Wazuh-first posture of the platform.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { getScans } from "@/services/scanService";
 import { getAlertStats } from "@/services/alertService";
@@ -18,7 +18,7 @@ import {
   Activity, AlertTriangle, CheckCircle2,
   ChevronRight, TrendingUp, Radio, Crosshair,
   ShieldAlert, Users, Zap, Settings, Server,
-  Eye, TriangleAlert,
+  Eye, TriangleAlert, X, Info,
 } from "lucide-react";
 import type { ScanSummary, AlertStats } from "@/types";
 
@@ -258,6 +258,14 @@ const quickActions: QuickAction[] = [
 export default function Dashboard() {
   const { user } = useAuth();
   const { isConfigured: wazuhConfigured } = useWazuhConfig();
+  const location = useLocation();
+  const roleBlocked = (location.state as { roleBlocked?: boolean; requiredRole?: string } | null)?.roleBlocked ?? false;
+  const requiredRole = (location.state as { roleBlocked?: boolean; requiredRole?: string } | null)?.requiredRole ?? "analyst";
+  const [roleBannerDismissed, setRoleBannerDismissed] = useState(false);
+  const [wazuhBannerDismissed, setWazuhBannerDismissed] = useState(
+    () => localStorage.getItem("wazuh_banner_dismissed") === "true"
+  );
+
   const [scans, setScans]           = useState<ScanSummary[]>([]);
   const [alertStats, setAlertStats] = useState<AlertStats | null>(null);
   const [alertError, setAlertError] = useState(false);
@@ -313,6 +321,70 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
+
+      {/* ── Role-blocked notice ──────────────────────────────── */}
+      {roleBlocked && !roleBannerDismissed && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.25 }}
+          className="flex items-start gap-3 rounded-xl px-4 py-3 text-sm"
+          style={{
+            backgroundColor: "rgba(245,158,11,0.08)",
+            border: "1px solid rgba(245,158,11,0.25)",
+            color: "var(--sev-medium-text)",
+          }}
+        >
+          <TriangleAlert size={15} className="shrink-0 mt-0.5" />
+          <span className="flex-1">
+            Your account has <strong>Viewer</strong> access — you cannot create scans.
+            Ask an admin to promote you to <strong>{requiredRole}</strong> to unlock this feature.
+          </span>
+          <button
+            onClick={() => setRoleBannerDismissed(true)}
+            className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+          >
+            <X size={14} />
+          </button>
+        </motion.div>
+      )}
+
+      {/* ── Wazuh agent setup prompt ─────────────────────────── */}
+      {user?.role === "analyst" && !user?.wazuh_agent_name && !wazuhBannerDismissed && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, delay: 0.05 }}
+          className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm"
+          style={{
+            backgroundColor: "var(--accent-dim)",
+            border: "1px solid rgba(59,130,246,0.25)",
+            color: "var(--sev-info-text)",
+          }}
+        >
+          <Info size={14} className="shrink-0" />
+          <span className="flex-1">
+            Link your Wazuh agent to enable personalized SOC alerts.{" "}
+            <Link
+              to="/settings"
+              className="font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity"
+              style={{ color: "var(--accent)" }}
+            >
+              Open Settings →
+            </Link>
+          </span>
+          <button
+            onClick={() => {
+              localStorage.setItem("wazuh_banner_dismissed", "true");
+              setWazuhBannerDismissed(true);
+            }}
+            className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+          >
+            <X size={14} />
+          </button>
+        </motion.div>
+      )}
 
       {/* ── Greeting header ───────────────────────────────────── */}
       <motion.div
