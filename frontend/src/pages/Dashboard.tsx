@@ -21,6 +21,7 @@ import {
   Eye, TriangleAlert, X, Info,
 } from "lucide-react";
 import type { ScanSummary, AlertStats } from "@/types";
+import { BorderGlow } from "@/components/ui/BorderGlow";
 
 // ── Time-based greeting ────────────────────────────────────────────────────
 function getGreeting() {
@@ -89,6 +90,7 @@ const cardVariants = {
 
 function StatCard({ label, value, icon: Icon, color, iconBg, accent, pulse = false, i }: StatCardProps) {
   return (
+    <BorderGlow color={`${accent}ff`} intensity="low" className="rounded-xl">
     <motion.div
       className="card relative overflow-hidden"
       custom={i}
@@ -126,6 +128,7 @@ function StatCard({ label, value, icon: Icon, color, iconBg, accent, pulse = fal
         </div>
       </div>
     </motion.div>
+    </BorderGlow>
   );
 }
 

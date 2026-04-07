@@ -80,45 +80,56 @@ export default function Register() {
   return (
     <div
       className="relative min-h-screen flex items-center justify-center overflow-hidden"
-      style={{ backgroundColor: "#06091A" }}
+      style={{ backgroundColor: isDark ? "#06091A" : "var(--bg-base)" }}
     >
-      {/* ── Layer 1: animated dot wave ────────────────────────────── */}
-      <DottedBackground isDark={true} className="opacity-60" />
+      {/* ── Dark mode background layers ───────────────────────────── */}
+      {isDark && (
+        <>
+          <DottedBackground isDark className="opacity-60" />
 
-      {/* ── Layer 2: animated grid squares ───────────────────────── */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ color: "rgba(59,130,246,0.16)" }}
-      >
-        <AnimatedGridPattern
-          width={52}
-          height={52}
-          numSquares={24}
-          maxOpacity={0.75}
-          duration={4.5}
-          repeatDelay={0.6}
-          className={cn(
-            "[mask-image:radial-gradient(ellipse_85%_85%_at_50%_50%,white,transparent)]",
-            "stroke-current fill-current w-full h-full absolute inset-0",
-          )}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{ color: "rgba(59,130,246,0.16)" }}
+          >
+            <AnimatedGridPattern
+              width={52}
+              height={52}
+              numSquares={24}
+              maxOpacity={0.75}
+              duration={4.5}
+              repeatDelay={0.6}
+              className={cn(
+                "[mask-image:radial-gradient(ellipse_85%_85%_at_50%_50%,white,transparent)]",
+                "stroke-current fill-current w-full h-full absolute inset-0",
+              )}
+            />
+          </div>
+
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: "radial-gradient(ellipse 65% 55% at 50% 50%, rgba(59,130,246,0.09) 0%, transparent 65%)",
+            }}
+          />
+
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: "radial-gradient(ellipse 90% 90% at 50% 50%, transparent 35%, rgba(2,8,23,0.82) 100%)",
+            }}
+          />
+        </>
+      )}
+
+      {/* ── Light mode gradient background ────────────────────────── */}
+      {!isDark && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: "linear-gradient(160deg, #f0f4ff 0%, #e8efff 40%, #f5f0ff 100%)",
+          }}
         />
-      </div>
-
-      {/* ── Layer 3: central glow ─────────────────────────────────── */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: "radial-gradient(ellipse 65% 55% at 50% 50%, rgba(59,130,246,0.09) 0%, transparent 65%)",
-        }}
-      />
-
-      {/* ── Layer 4: edge vignette ────────────────────────────────── */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: "radial-gradient(ellipse 90% 90% at 50% 50%, transparent 35%, rgba(2,8,23,0.82) 100%)",
-        }}
-      />
+      )}
 
       {/* ── Theme toggle ─────────────────────────────────────────── */}
       <button
@@ -160,7 +171,7 @@ export default function Register() {
 
           <h1
             className="text-2xl font-bold tracking-tight"
-            style={{ fontFamily: "Syne, sans-serif", color: "#E4EEFF", letterSpacing: "-0.025em" }}
+            style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.025em" }}
           >
             Cyber Sentinel
           </h1>
@@ -177,25 +188,24 @@ export default function Register() {
           variants={itemVariants}
           className="w-full rounded-2xl p-7 space-y-4"
           style={{
-            backgroundColor: "rgba(6,9,26,0.82)",
+            backgroundColor: isDark ? "rgba(6,9,26,0.82)" : "var(--bg-card)",
             backdropFilter: "blur(24px)",
             WebkitBackdropFilter: "blur(24px)",
             border: "1px solid rgba(59,130,246,0.18)",
-            boxShadow:
-              "0 0 0 1px rgba(59,130,246,0.06), " +
-              "0 32px 72px rgba(0,0,0,0.70), " +
-              "0 0 80px rgba(59,130,246,0.05)",
+            boxShadow: isDark
+              ? "0 0 0 1px rgba(59,130,246,0.06), 0 32px 72px rgba(0,0,0,0.70), 0 0 80px rgba(59,130,246,0.05)"
+              : "0 0 0 1px rgba(59,130,246,0.10), 0 8px 32px rgba(0,0,0,0.08)",
           }}
         >
           {/* Heading */}
           <div>
             <h2
               className="text-xl font-bold"
-              style={{ fontFamily: "Syne, sans-serif", color: "#E4EEFF", letterSpacing: "-0.015em" }}
+              style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.015em" }}
             >
               Create account
             </h2>
-            <p className="text-sm mt-0.5" style={{ color: "#607898" }}>
+            <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
               Fill in the details below to get started
             </p>
           </div>
@@ -373,7 +383,7 @@ export default function Register() {
         <motion.p
           variants={itemVariants}
           className="text-[10px] uppercase tracking-[0.18em] font-medium mt-6"
-          style={{ color: "#1E3A5F" }}
+          style={{ color: "var(--text-subtle)" }}
         >
           Smart City &amp; Cybersecurity Lab · ITS
         </motion.p>
