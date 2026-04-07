@@ -5,16 +5,30 @@
 # and shape HTTP response bodies.
 # ============================================================
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from typing import Optional
+
+
+def _validate_email(v: str) -> str:
+    """Loose email check — allows internal domains (.local, .lab, .test, etc.)."""
+    v = v.strip().lower()
+    if "@" not in v or v.startswith("@") or v.endswith("@"):
+        raise ValueError("Invalid email address")
+    return v
 
 
 # --------------- Requests ---------------
 
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=32)
-    email: EmailStr
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return _validate_email(v)
+
     password: str = Field(..., min_length=8, max_length=128)
 
 
@@ -25,7 +39,12 @@ class LoginRequest(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return _validate_email(v)
 
 
 class ResetPasswordRequest(BaseModel):

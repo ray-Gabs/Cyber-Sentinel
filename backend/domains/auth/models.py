@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from beanie import Document
-from pydantic import Field, EmailStr
+from pydantic import Field, field_validator
 from pymongo import ASCENDING, IndexModel
 
 
@@ -14,7 +14,15 @@ class User(Document):
     """MongoDB document stored in the 'users' collection."""
 
     username: str = Field(..., min_length=3, max_length=32)
-    email: EmailStr
+    email: str  # Loose validation — allows internal domains like .local, .lab, .test
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if "@" not in v or v.startswith("@") or v.endswith("@"):
+            raise ValueError("Invalid email address")
+        return v
     hashed_password: str
     role: str = Field(default="viewer")    # admin | analyst | viewer
     # Default is viewer — instructor promotes to analyst via PATCH /api/auth/users/{id}/role
