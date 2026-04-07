@@ -47,3 +47,15 @@ export interface UpdateProfileRequest {
 export interface UpdateRoleRequest {
   role: UserRole;
 }
+
+export interface AuditLogEntry {
+  id: string;
+  user_id: string;
+  username: string;
+  action: string;
+  resource_type?: string | null;
+  resource_id?: string | null;
+  details?: string | null;
+  ip_address?: string | null;
+  timestamp: string;
+}

@@ -6,7 +6,7 @@
  * It helps your editor auto-complete and catch mistakes.
  */
 import api from "./api";
-import type { LoginRequest, RegisterRequest, TokenResponse, UserResponse, UpdateProfileRequest, UpdateRoleRequest } from "@/types";
+import type { LoginRequest, RegisterRequest, TokenResponse, UserResponse, UpdateProfileRequest, UpdateRoleRequest, AuditLogEntry } from "@/types";
 import { TOKEN_KEY } from "@/lib/constants";
 
 /** POST /api/auth/login → returns { access_token, token_type } */
@@ -68,5 +68,17 @@ export async function listUsers(): Promise<UserResponse[]> {
 /** PATCH /api/auth/users/:id/role → change user role (admin only) */
 export async function updateUserRole(userId: string, data: UpdateRoleRequest): Promise<UserResponse> {
   const res = await api.patch<UserResponse>(`/auth/users/${userId}/role`, data);
+  return res.data;
+}
+
+/** PATCH /api/auth/users/:id/status → toggle activate/deactivate (admin only) */
+export async function toggleUserStatus(userId: string): Promise<UserResponse> {
+  const res = await api.patch<UserResponse>(`/auth/users/${userId}/status`);
+  return res.data;
+}
+
+/** GET /api/audit/ → list audit log entries (admin only) */
+export async function getAuditLogs(page = 1, size = 50): Promise<AuditLogEntry[]> {
+  const res = await api.get<AuditLogEntry[]>(`/audit/?page=${page}&size=${size}`);
   return res.data;
 }
