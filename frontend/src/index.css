@@ -173,8 +173,11 @@
     background-color: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 0.75rem;
-    padding: 1.5rem;
+    padding: 1rem;          /* mobile: 16px — tight but breathable on small screens */
     transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+  @media (min-width: 640px) {
+    .card { padding: 1.5rem; }   /* sm+: restore 24px for tablets and desktop */
   }
 
   .card-hover {
@@ -465,8 +468,11 @@
     background-color: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 0.75rem;
-    padding: 1.25rem 1.5rem;
+    padding: 0.875rem 1rem;      /* mobile: 14px/16px — compact for 2-col grid */
     transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  }
+  @media (min-width: 640px) {
+    .stat-card { padding: 1.25rem 1.5rem; }   /* sm+: restore comfortable spacing */
   }
   .stat-card:hover {
     border-color: var(--accent-dim);
@@ -534,10 +540,10 @@
   .row-info     { border-left: 2px solid var(--sev-info); }
 
   /* ── Responsive layout (AppLayout) ──────────────────────── */
-  /* Mobile: no left margin (sidebar is overlay) */
+  /* Mobile: no left margin (sidebar is overlay drawer) */
   .layout-main { margin-left: 0; }
 
-  /* Desktop: left margin tracks sidebar width CSS variable */
+  /* Tablet/Desktop (md+): margin-left tracks sidebar width CSS var */
   @media (min-width: 768px) {
     .layout-main {
       margin-left: var(--sidebar-current-width, 240px);
@@ -545,12 +551,20 @@
     }
   }
 
-  /* Mobile: extra bottom padding for the BottomNav bar */
+  /*
+   * layout-main-content: controls padding-bottom only.
+   * padding-top is set via pt-* Tailwind classes on the <main> element.
+   *
+   * Desktop (768px+): standard 1.5rem — no bottom nav bar.
+   * Mobile (<768px):  BottomNav is ~54px + safe-area-inset.
+   *                   calc(3.75rem + ...) = 60px minimum, safe on notched phones.
+   */
   .layout-main-content { padding-bottom: 1.5rem; }
 
   @media (max-width: 767px) {
+    /* BottomNav min-h = 3.25rem (52px) + 8px breathing room + safe-area-inset */
     .layout-main-content {
-      padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+      padding-bottom: calc(3.25rem + 8px + env(safe-area-inset-bottom, 0px));
     }
   }
 }

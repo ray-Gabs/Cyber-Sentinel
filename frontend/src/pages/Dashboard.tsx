@@ -299,7 +299,6 @@ export default function Dashboard() {
 
   // ── SOC derived stats ──
   const socTotal     = alertStats?.total ?? 0;
-  const socCritical  = alertStats?.by_severity?.["critical"] ?? alertStats?.by_severity?.["15"] ?? 0;
   const socEscalated = alertStats?.by_action?.["ESCALATE"] ?? 0;
   const socTP        = alertStats?.by_verdict?.["TRUE_POSITIVE"] ?? 0;
 

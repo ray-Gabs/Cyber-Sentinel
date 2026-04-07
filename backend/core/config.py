@@ -7,9 +7,21 @@
 
 import secrets
 import warnings
+from pathlib import Path
 
 from pydantic_settings import BaseSettings
 from pydantic import Field, model_validator
+
+# Resolve .env location relative to this file's actual path — works both
+# when running locally (project root/.env) and inside Docker (no .env file;
+# docker-compose passes vars as real env vars via its own env_file directive).
+_here = Path(__file__).resolve().parent          # backend/core/
+_project_root = _here.parent.parent              # Cyber-Sentinel/
+_env_candidates = [
+    _project_root / ".env",                      # local dev: project root
+    _here.parent / ".env",                       # fallback: backend/.env
+]
+_env_file = next((str(p) for p in _env_candidates if p.exists()), None)
 
 
 class Settings(BaseSettings):
@@ -148,7 +160,7 @@ class Settings(BaseSettings):
         return self
 
     class Config:
-        env_file = "../.env"        # relative to backend/
+        env_file = _env_file        # resolved at import time; None in Docker (uses real env vars)
         env_file_encoding = "utf-8"
         extra = "ignore"            # ignore unknown env vars
 

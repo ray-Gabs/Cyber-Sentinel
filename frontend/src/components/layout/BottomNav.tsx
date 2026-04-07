@@ -23,13 +23,15 @@ export default function BottomNav() {
         backgroundColor: "var(--bg-surface)",
         borderColor: "var(--border)",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
       }}
     >
       {NAV_ITEMS.map(({ to, label, icon: Icon, color }) => (
         <NavLink
           key={to}
           to={to}
-          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50"
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 min-h-[3.25rem] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50"
         >
           {({ isActive }) => (
             <>

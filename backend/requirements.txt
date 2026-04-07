@@ -26,7 +26,7 @@ redis==5.2.*
 
 # --- AI (install the one matching your AI_PROVIDER in .env) ---
 groq==0.25.*                      # Groq API SDK (Llama 3.3 70B)    — AI_PROVIDER=groq
-anthropic>=0.40.*                 # Claude API SDK (Anthropic)       — AI_PROVIDER=claude
+anthropic>=0.40.0                 # Claude API SDK (Anthropic)       — AI_PROVIDER=claude
 # openai>=1.0.*                   # OpenAI SDK                       — AI_PROVIDER=openai  (uncomment if needed)
 # google-generativeai>=0.8.*      # Gemini SDK                       — AI_PROVIDER=gemini  (uncomment if needed)
 

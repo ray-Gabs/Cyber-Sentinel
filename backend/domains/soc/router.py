@@ -2,8 +2,13 @@
 # backend/domains/soc/router.py — SOC REST Endpoints
 # ============================================================
 
+import hmac
+import logging
+
 from fastapi import APIRouter, Depends, Query, HTTPException, Header, Request, status
 from typing import Any, Optional
+
+log = logging.getLogger(__name__)
 
 from core.config import settings
 from core.dependencies import get_current_user
@@ -190,6 +195,9 @@ async def deploy_custom_rules(
     )
 
 
+_MAX_WEBHOOK_BYTES = 10 * 1024 * 1024  # 10 MB — prevents memory DoS from huge payloads
+
+
 @router.post("/webhook")
 async def wazuh_webhook(
     request: Request,
@@ -201,39 +209,78 @@ async def wazuh_webhook(
     Configure in Wazuh's ossec.conf:
       <integration>
         <name>custom-webhook</name>
-        <hook_url>http://<server>:8000/api/alerts/webhook</hook_url>
+        <hook_url>https://<server>/api/alerts/webhook</hook_url>
         <level>7</level>
         <alert_format>json</alert_format>
       </integration>
 
-    Security: if WAZUH_WEBHOOK_TOKEN is set, the X-Wazuh-Token header must match.
-    On isolated lab networks it is acceptable to leave the token empty.
+    Security:
+      - If WAZUH_WEBHOOK_TOKEN is set, the X-Wazuh-Token header must match
+        (compared with hmac.compare_digest to prevent timing attacks).
+      - Payload is limited to 10 MB to prevent memory DoS.
+      - Content-Type must be application/json.
     """
-    # Verify shared secret when configured
-    if settings.wazuh_webhook_token and x_wazuh_token != settings.wazuh_webhook_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook token")
+    # ── Content-Type guard ──────────────────────────────────────────────────
+    ct = request.headers.get("content-type", "")
+    if "application/json" not in ct:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Content-Type must be application/json",
+        )
 
-    body: Any = await request.json()
+    # ── Payload size guard ──────────────────────────────────────────────────
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > _MAX_WEBHOOK_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Payload exceeds 10 MB limit",
+        )
+
+    # ── Shared-secret verification (timing-safe) ────────────────────────────
+    if settings.wazuh_webhook_token:
+        token = x_wazuh_token or ""
+        # hmac.compare_digest prevents timing-oracle attacks on string comparison
+        if not hmac.compare_digest(token, settings.wazuh_webhook_token):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid webhook token",
+            )
+
+    # ── Parse body ──────────────────────────────────────────────────────────
+    try:
+        body: Any = await request.json()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid JSON payload",
+        )
 
     # Wazuh can send a single alert object or a batch {"alerts": [...]}
     if isinstance(body, list):
         raw_alerts = body
     elif isinstance(body, dict) and "alerts" in body:
         raw_alerts = body["alerts"]
-    else:
+    elif isinstance(body, dict):
         raw_alerts = [body]
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unexpected payload shape — expected alert object or {alerts: [...]}",
+        )
+
+    # ── Ingest + dispatch triage ────────────────────────────────────────────
+    from domains.soc.tasks import triage_single_alert
 
     ingested = []
     for raw in raw_alerts:
+        if not isinstance(raw, dict):
+            continue  # skip malformed entries in a batch
         try:
             alert = await service.ingest_wazuh_alert(raw)
-            # Dispatch background triage for newly ingested alerts
-            from domains.soc.tasks import triage_single_alert
             triage_single_alert.delay(str(alert.id))
             ingested.append({"alert_id": str(alert.id), "wazuh_id": alert.wazuh_id})
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning("[webhook] Failed to ingest alert: %s", exc)
+            log.warning("[webhook] Failed to ingest alert: %s", exc)
 
     return {"status": "ok", "ingested": len(ingested), "alerts": ingested}
 

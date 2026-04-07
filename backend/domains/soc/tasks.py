@@ -132,8 +132,12 @@ async def _poll_async():
         return
 
     for raw in raw_alerts:
-        # 1. Ingest
-        alert = await ingest_wazuh_alert(raw)
+        # 1. Ingest — skip bad entries silently
+        try:
+            alert = await ingest_wazuh_alert(raw)
+        except Exception as e:
+            log.warning("[SOC Polling] Failed to ingest alert: %s", e)
+            continue
 
         # 2. Apply MITRE ATT&CK mapping
         if not alert.mitre_techniques:
@@ -147,8 +151,13 @@ async def _poll_async():
         #    - Have rule_level >= 7 (medium+ severity in Wazuh)
         if alert.ai_verdict is None and alert.rule_level >= 7:
             try:
-                # Build context for LLM
-                agent_info = await wazuh_client.get_agent(alert.agent_id)
+                # Build context for LLM (agent lookup is best-effort)
+                agent_info = None
+                if alert.agent_id:
+                    try:
+                        agent_info = await wazuh_client.get_agent(alert.agent_id)
+                    except Exception:
+                        pass
                 context = {
                     "agent_name": alert.agent_name,
                     "agent_os": agent_info.get("os", {}).get("name", "unknown") if agent_info else "unknown",

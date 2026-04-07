@@ -74,7 +74,7 @@ export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
       <div className="w-px h-4 shrink-0" style={{ backgroundColor: "var(--border-muted)" }} />
 
       {/* ── Global search ───────────────────────── */}
-      <div className="search-bar flex-1 max-w-sm">
+      <div className="search-bar flex-1 max-w-[10rem] sm:max-w-xs md:max-w-sm">
         <Search size={12} className="shrink-0" style={{ color: "var(--text-subtle)" }} />
         <input
           type="text"
@@ -95,10 +95,10 @@ export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
       </div>
 
       {/* ── Spacer ──────────────────────────────── */}
-      <div className="flex-1" />
+      <div className="flex-1 min-w-0" />
 
       {/* ── Right controls ──────────────────────── */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0 sm:gap-1">
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}

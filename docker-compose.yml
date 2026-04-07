@@ -1,58 +1,232 @@
 # ============================================================
-# Cyber Sentinel — Docker Compose (Dev Environment)
+# Cyber Sentinel — Docker Compose (Full Stack)
 # ============================================================
-# Usage:
-#   docker-compose up -d                    # Start Redis only (using Atlas MongoDB)
-#   docker-compose --profile local-db up -d # Start Redis + local MongoDB
-#   docker-compose --profile zap up -d      # Start Redis + ZAP
-#   docker-compose --profile wazuh up -d    # Start Redis + Wazuh
-#   docker-compose down                     # Stop everything
+# Default services (always started):
+#   mongo    — MongoDB 7 (persistent scan/alert storage)
+#   redis    — Redis 7 (Celery broker + result backend)
+#   backend  — FastAPI + uvicorn (hot-reload via volume mount)
+#   celery   — Celery worker (--pool=solo for dev; see note below)
+#   frontend — React built with Vite, served by internal nginx
+#   zap      — OWASP ZAP daemon (DAST scanner for pentest engine)
+#   nginx    — SSL reverse proxy (HTTPS on 443, HTTP→HTTPS on 80)
 #
-# If you are using MongoDB Atlas (cloud), just run Redis.
-# If you want local MongoDB, use --profile local-db.
+# Optional profile (heavy — start separately when needed):
+#   docker-compose --profile wazuh up -d   # Wazuh SIEM manager
+#
+# Common commands:
+#   docker-compose up -d --build     # First run / after Dockerfile changes
+#   docker-compose up -d             # Subsequent runs (no rebuild)
+#   docker-compose down              # Stop containers (keep volumes)
+#   docker-compose down -v           # Stop + wipe volumes (clean slate)
+#   docker-compose logs -f backend   # Tail backend logs
+#   docker-compose logs -f celery    # Tail Celery worker logs
+#   docker-compose logs -f nginx     # Tail nginx / SSL logs
+#
+# Platform notes:
+#   Windows  — Docker Desktop (WSL2 backend). All Linux tools run in containers.
+#   Ubuntu   — Install docker.io + docker-compose-plugin, then run as-is.
+#              Celery: change --pool=solo to --pool=prefork on dedicated Ubuntu servers.
+#   macOS    — Docker Desktop. Add "platform: linux/amd64" if on Apple Silicon.
+#
+# HTTPS:
+#   Dev:  self-signed cert auto-generated on first nginx start.
+#         Import nginx_certs:/etc/nginx/certs/server.crt into your browser to trust it.
+#   Prod: mount real certs into the nginx_certs volume:
+#         server.crt (fullchain) + server.key (private key) → /etc/nginx/certs/
+#   Let's Encrypt: set CERT_DOMAIN=yourdomain.com env var on the nginx service.
 # ============================================================
 
+networks:
+  sentinel-net:
+    driver: bridge
+
 services:
-  # ---- MongoDB (optional — use --profile local-db) ----
+
+  # ── MongoDB ──────────────────────────────────────────────────────────────
   mongo:
     image: mongo:7
     container_name: cyber-sentinel-mongo
-    profiles: ["local-db"]
+    networks:
+      - sentinel-net
     ports:
-      - "27017:27017"
+      - "27017:27017"       # exposed for Compass / direct dev access
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # ---- Redis (Celery broker + result backend) ----
+  # ── Redis (Celery broker + result backend) ────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: cyber-sentinel-redis
+    networks:
+      - sentinel-net
     ports:
-      - "6379:6379"
+      - "6379:6379"         # exposed for direct dev inspection (redis-cli)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ── FastAPI Backend (uvicorn) ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber-sentinel-backend
+    networks:
+      - sentinel-net
+    env_file:
+      - .env
+    environment:
+      # Override .env localhost defaults with Docker service hostnames
+      - MONGODB_URI=mongodb://mongo:27017
+      - REDIS_URL=redis://redis:6379/0
+      - FRONTEND_URL=https://localhost
+      - CORS_EXTRA_ORIGINS=http://localhost:5173,http://localhost:3000,https://localhost
+      - ZAP_API_URL=http://zap:8080
+      # Python container settings
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8000:8000"         # exposed for Swagger UI / direct API testing
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Volume mount: host source → /app so --reload picks up changes without rebuilding
+      - ./backend:/app
     restart: unless-stopped
 
-  # ---- OWASP ZAP (optional — use --profile zap) ----
+  # ── Celery Worker ─────────────────────────────────────────────────────────
+  # Pool notes:
+  #   --pool=solo     → single-threaded; safe on Windows Docker Desktop + WSL2 (default)
+  #   --pool=prefork  → multi-process; better on dedicated Ubuntu/Linux servers
+  #   Switch by overriding the command: e.g. COMPOSE_CELERY_POOL=prefork
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber-sentinel-celery
+    networks:
+      - sentinel-net
+    command: celery -A core.celery_app worker --loglevel=info --pool=solo
+    env_file:
+      - .env
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+      - REDIS_URL=redis://redis:6379/0
+      - ZAP_API_URL=http://zap:8080
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  # ── Celery Beat Scheduler (periodic tasks — Wazuh polling every 30s) ────────
+  # Beat must run as a single instance — never scale this service.
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber-sentinel-celery-beat
+    networks:
+      - sentinel-net
+    command: celery -A core.celery_app beat --loglevel=info --scheduler celery.beat.PersistentScheduler
+    env_file:
+      - .env
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+      - REDIS_URL=redis://redis:6379/0
+      - ZAP_API_URL=http://zap:8080
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  # ── React Frontend (nginx serving the Vite static build) ─────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cyber-sentinel-frontend
+    networks:
+      - sentinel-net
+    restart: unless-stopped
+
+  # ── OWASP ZAP (DAST scanner daemon) ──────────────────────────────────────
   zap:
     image: ghcr.io/zaproxy/zaproxy:stable
     container_name: cyber-sentinel-zap
-    profiles: ["zap"]
-    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.disablekey=true
+    networks:
+      - sentinel-net
+    command: >
+      zap.sh -daemon -host 0.0.0.0 -port 8080
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+      -config api.disablekey=true
     ports:
       - "8080:8080"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/JSON/core/view/version/"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
-  # ---- Wazuh All-in-One (optional — use --profile wazuh) ----
+  # ── nginx Reverse Proxy + Load Balancer ──────────────────────────────────
+  # Single entry point for the whole app (HTTP only):
+  #   http://localhost    → routes / to frontend, /api + /ws to backend
+  # To scale: add more backend/frontend instances under upstream blocks in nginx.conf
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: cyber-sentinel-nginx
+    networks:
+      - sentinel-net
+    ports:
+      - "80:80"             # http://localhost  ← open this in your browser
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+  # ── Wazuh All-in-One (optional — docker-compose --profile wazuh up -d) ───
   wazuh:
     image: wazuh/wazuh-manager:4.9.2
     container_name: cyber-sentinel-wazuh
+    networks:
+      - sentinel-net
     profiles: ["wazuh"]
     hostname: wazuh.manager
     ports:
-      - "1514:1514/udp"   # Agent communication
-      - "1515:1515"       # Agent enrollment
-      - "55000:55000"     # Wazuh API
-      - "514:514/udp"     # Syslog
+      - "1514:1514/udp"
+      - "1515:1515"
+      - "55000:55000"
+      - "514:514/udp"
     environment:
       WAZUH_MANAGER_CONFIG: |
         <ossec_config>

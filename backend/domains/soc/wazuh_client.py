@@ -6,7 +6,7 @@
 # ============================================================
 
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from core.config import settings
@@ -38,7 +38,7 @@ class WazuhClient:
     async def authenticate(self) -> str:
         """
         Authenticate with the Wazuh API and cache the JWT token.
-        Tokens expire after 15 minutes by default.
+        Tokens expire after 15 minutes by default; we refresh at 13 minutes.
         """
         async with httpx.AsyncClient(verify=self.verify_ssl) as client:
             resp = await client.post(
@@ -48,11 +48,14 @@ class WazuhClient:
             )
             resp.raise_for_status()
             self._token = resp.json()["data"]["token"]
+            # Treat tokens as valid for 13 minutes (Wazuh default is 15)
+            self._token_expires = datetime.now(timezone.utc) + timedelta(minutes=13)
             return self._token
 
     async def _get_token(self) -> str:
-        """Return cached token or re-authenticate."""
-        if not self._token:
+        """Return cached token or re-authenticate if missing/expired."""
+        now = datetime.now(timezone.utc)
+        if not self._token or (self._token_expires and now >= self._token_expires):
             await self.authenticate()
         return self._token
 
