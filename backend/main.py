@@ -132,6 +132,7 @@ from domains.soc.router import router as soc_router
 from domains.correlation.router import router as correlation_router
 from domains.notifications.router import router as notifications_router
 from domains.analytics.router import router as analytics_router
+from domains.audit.router import router as audit_router
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 app.include_router(pentest_router, prefix="/api/scans", tags=["Pentesting"])
@@ -139,6 +140,7 @@ app.include_router(soc_router, prefix="/api/alerts", tags=["SOC"])
 app.include_router(correlation_router, prefix="/api/correlations", tags=["Correlation"])
 app.include_router(notifications_router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(analytics_router, tags=["Analytics"])
+app.include_router(audit_router, prefix="/api/audit", tags=["Audit"])
 
 # --------------- Health Check ---------------
 

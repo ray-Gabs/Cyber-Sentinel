@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from core.dependencies import get_current_user
 from core.rate_limit import limiter
 from core.config import settings
+from core.security import create_access_token
 from domains.auth.models import User
 from domains.auth.schemas import (
     RegisterRequest,
@@ -19,31 +20,47 @@ from domains.auth.schemas import (
     UserResponse,
 )
 from domains.auth import service
+from domains.audit import service as audit_service
 
 router = APIRouter()
 
 
-@router.post("/register", response_model=UserResponse, status_code=201)
+@router.post("/register", response_model=TokenResponse, status_code=201)
 @limiter.limit(settings.rate_limit_register)
 async def register(request: Request, data: RegisterRequest):
-    """Register a new user account."""
+    """Register a new user account and return a JWT so the client is immediately signed in."""
     user = await service.register_user(data)
-    return UserResponse(
-        id=str(user.id),
+    token = create_access_token(data={"sub": str(user.id), "role": user.role})
+    # Audit — non-blocking
+    ip = request.client.host if request.client else None
+    await audit_service.log_event(
+        user_id=str(user.id),
         username=user.username,
-        email=user.email,
-        role=user.role,
-        is_active=user.is_active,
-        created_at=user.created_at,
-        last_login=user.last_login,
+        action="user.registered",
+        ip_address=ip,
     )
+    return TokenResponse(access_token=token)
 
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit(settings.rate_limit_login)
 async def login(request: Request, data: LoginRequest):
     """Authenticate and receive a JWT access token."""
-    return await service.authenticate_user(data)
+    result = await service.authenticate_user(data)
+    # Audit — look up user for username (fire-and-forget)
+    try:
+        user = await User.find_one({"$or": [{"username": data.identifier}, {"email": data.identifier}]})
+        if user:
+            ip = request.client.host if request.client else None
+            await audit_service.log_event(
+                user_id=str(user.id),
+                username=user.username,
+                action="user.login",
+                ip_address=ip,
+            )
+    except Exception:
+        pass
+    return result
 
 
 @router.post("/forgot-password", status_code=200)
@@ -115,8 +132,44 @@ async def update_user_role(
     target = await User.get(ObjectId(user_id))
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    old_role = target.role
     target.role = data.role
     await target.save()
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="role.changed",
+        resource_type="user",
+        resource_id=user_id,
+        details=f"{target.username}: {old_role} → {data.role}",
+    )
+    return _user_response(target)
+
+
+@router.patch("/users/{user_id}/status", response_model=UserResponse)
+async def toggle_user_status(
+    user_id: str,
+    user: User = Depends(get_current_user),
+):
+    """[Admin] Activate or deactivate a user account."""
+    _require_admin(user)
+    from bson import ObjectId
+    target = await User.get(ObjectId(user_id))
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if str(target.id) == str(user.id):
+        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+    target.is_active = not target.is_active
+    await target.save()
+    action = "account.activated" if target.is_active else "account.deactivated"
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action=action,
+        resource_type="user",
+        resource_id=user_id,
+        details=f"{target.username} set to {'active' if target.is_active else 'inactive'}",
+    )
     return _user_response(target)
 
 
