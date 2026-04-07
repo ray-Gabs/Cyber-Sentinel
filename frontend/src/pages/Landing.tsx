@@ -6,12 +6,16 @@
  */
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useTheme } from "@/providers/ThemeProvider";
 import {
   ShieldCheck, Radar, BrainCircuit, FileText,
   ArrowRight, Terminal, Activity,
 } from "lucide-react";
 import { DottedBackground } from "@/components/ui/DottedBackground";
 import { AnimatedGridPattern } from "@/components/ui/AnimatedGridPattern";
+import { FloatingParticles } from "@/components/ui/FloatingParticles";
+import { GlitchText } from "@/components/ui/GlitchText";
+import { BorderGlow } from "@/components/ui/BorderGlow";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
 
@@ -48,31 +52,46 @@ const FEATURES = [
 ] as const;
 
 export default function Landing() {
+  const { isDark } = useTheme();
+
   return (
     <div
       className="relative min-h-screen flex flex-col overflow-hidden"
-      style={{ backgroundColor: "#06091A" }}
+      style={{ backgroundColor: isDark ? "#06091A" : "var(--bg-base)" }}
     >
-      {/* ── Background layers ─────────────────────────────────────────── */}
-      <DottedBackground isDark className="opacity-50" />
+      {/* ── Background layers — dark mode only ───────────────────────── */}
+      {isDark && (
+        <>
+          <DottedBackground isDark className="opacity-50" />
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{ color: "rgba(59,130,246,0.13)" }}
+          >
+            <AnimatedGridPattern
+              width={56}
+              height={56}
+              numSquares={20}
+              maxOpacity={0.65}
+              duration={5}
+              repeatDelay={0.8}
+              className={cn(
+                "[mask-image:radial-gradient(ellipse_80%_80%_at_50%_30%,white,transparent)]",
+                "stroke-current fill-current w-full h-full absolute inset-0",
+              )}
+            />
+          </div>
+        </>
+      )}
 
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ color: "rgba(59,130,246,0.13)" }}
-      >
-        <AnimatedGridPattern
-          width={56}
-          height={56}
-          numSquares={20}
-          maxOpacity={0.65}
-          duration={5}
-          repeatDelay={0.8}
-          className={cn(
-            "[mask-image:radial-gradient(ellipse_80%_80%_at_50%_30%,white,transparent)]",
-            "stroke-current fill-current w-full h-full absolute inset-0",
-          )}
+      {/* ── Light mode gradient background ────────────────────────────── */}
+      {!isDark && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: "linear-gradient(160deg, #f0f4ff 0%, #e8efff 40%, #f5f0ff 100%)",
+          }}
         />
-      </div>
+      )}
 
       {/* Radial blue glow — top-center */}
       <div
@@ -83,14 +102,19 @@ export default function Landing() {
         }}
       />
 
-      {/* Edge vignette */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(ellipse 90% 90% at 50% 50%, transparent 40%, rgba(2,8,23,0.8) 100%)",
-        }}
-      />
+      {/* Floating particles — dark mode only */}
+      {isDark && <FloatingParticles count={16} color="rgba(59,130,246,0.28)" />}
+
+      {/* Edge vignette — dark mode only */}
+      {isDark && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(ellipse 90% 90% at 50% 50%, transparent 40%, rgba(2,8,23,0.8) 100%)",
+          }}
+        />
+      )}
 
       {/* ── Nav bar ───────────────────────────────────────────────────── */}
       <nav className="relative z-10 flex items-center justify-between px-5 sm:px-8 md:px-12 py-5">
@@ -106,7 +130,7 @@ export default function Landing() {
           </div>
           <span
             className="text-base font-bold tracking-tight"
-            style={{ fontFamily: "Syne, sans-serif", color: "#E4EEFF", letterSpacing: "-0.02em" }}
+            style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.02em" }}
           >
             Cyber Sentinel
           </span>
@@ -116,7 +140,7 @@ export default function Landing() {
           <Link
             to={ROUTES.LOGIN}
             className="text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            style={{ color: "#94a3b8" }}
+            style={{ color: "var(--text-muted)" }}
           >
             Sign in
           </Link>
@@ -156,9 +180,9 @@ export default function Landing() {
         <motion.h1
           {...fade(0.1)}
           className="text-4xl sm:text-5xl md:text-6xl font-bold max-w-3xl leading-[1.08] tracking-tight"
-          style={{ fontFamily: "Syne, sans-serif", color: "#E4EEFF", letterSpacing: "-0.03em" }}
+          style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.03em" }}
         >
-          Unified Security
+          <GlitchText text="Unified Security" style={{ color: "var(--text-base)", fontFamily: "Syne, sans-serif" }} />
           <br />
           <span style={{ color: "#3b82f6" }}>Assessment Platform</span>
         </motion.h1>
@@ -167,7 +191,7 @@ export default function Landing() {
         <motion.p
           {...fade(0.18)}
           className="mt-5 text-base sm:text-lg max-w-xl leading-relaxed"
-          style={{ color: "#64748b" }}
+          style={{ color: "var(--text-muted)" }}
         >
           Automated pentesting, AI-powered SOC monitoring, and real-time
           threat analysis — purpose-built for web security education.
@@ -191,9 +215,9 @@ export default function Landing() {
             to={ROUTES.REGISTER}
             className="inline-flex items-center gap-2 text-sm font-medium px-6 py-3 rounded-xl transition-all w-full sm:w-auto justify-center"
             style={{
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.08)",
-              color: "#94a3b8",
+              background: "var(--bg-muted)",
+              border: "1px solid var(--border)",
+              color: "var(--text-muted)",
             }}
           >
             Create an account
@@ -206,12 +230,11 @@ export default function Landing() {
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-16 w-full max-w-5xl"
         >
           {FEATURES.map(({ icon: Icon, title, body, color }) => (
+            <BorderGlow key={title} color={`${color}ff`} intensity="low" className="rounded-xl">
             <div
-              key={title}
               className="rounded-xl p-5 text-left"
               style={{
-                background: "rgba(6,9,26,0.7)",
-                border: "1px solid rgba(255,255,255,0.06)",
+                background: "var(--bg-card)",
                 backdropFilter: "blur(12px)",
               }}
             >
@@ -226,14 +249,15 @@ export default function Landing() {
               </div>
               <h3
                 className="text-sm font-semibold mb-1.5"
-                style={{ fontFamily: "Syne, sans-serif", color: "#c8d8f0" }}
+                style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}
               >
                 {title}
               </h3>
-              <p className="text-xs leading-relaxed" style={{ color: "#475569" }}>
+              <p className="text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>
                 {body}
               </p>
             </div>
+            </BorderGlow>
           ))}
         </motion.div>
       </main>
@@ -242,7 +266,7 @@ export default function Landing() {
       <footer className="relative z-10 text-center py-6 px-5">
         <p
           className="text-[10px] uppercase tracking-[0.2em] font-medium"
-          style={{ color: "#1e3a5f" }}
+          style={{ color: "var(--text-subtle)" }}
         >
           Smart City &amp; Cybersecurity Lab · ITS · v1.0
         </p>

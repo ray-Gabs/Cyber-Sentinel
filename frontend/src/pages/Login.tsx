@@ -61,45 +61,53 @@ export default function Login() {
   return (
     <div
       className="relative min-h-screen flex items-center justify-center overflow-hidden"
-      style={{ backgroundColor: "#06091A" }}
+      style={{ backgroundColor: isDark ? "#06091A" : "var(--bg-base)" }}
     >
-      {/* ── Layer 1: animated dot wave — full screen ──────────────── */}
-      <DottedBackground isDark={true} className="opacity-60" />
+      {/* ── Dark mode only: animated background layers ───────────── */}
+      {isDark && (
+        <>
+          <DottedBackground isDark={true} className="opacity-60" />
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{ color: "rgba(59,130,246,0.16)" }}
+          >
+            <AnimatedGridPattern
+              width={52}
+              height={52}
+              numSquares={24}
+              maxOpacity={0.75}
+              duration={4.5}
+              repeatDelay={0.6}
+              className={cn(
+                "[mask-image:radial-gradient(ellipse_85%_85%_at_50%_50%,white,transparent)]",
+                "stroke-current fill-current w-full h-full absolute inset-0",
+              )}
+            />
+          </div>
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: "radial-gradient(ellipse 65% 55% at 50% 50%, rgba(59,130,246,0.09) 0%, transparent 65%)",
+            }}
+          />
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: "radial-gradient(ellipse 90% 90% at 50% 50%, transparent 35%, rgba(2,8,23,0.82) 100%)",
+            }}
+          />
+        </>
+      )}
 
-      {/* ── Layer 2: animated grid squares — full screen ─────────── */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ color: "rgba(59,130,246,0.16)" }}
-      >
-        <AnimatedGridPattern
-          width={52}
-          height={52}
-          numSquares={24}
-          maxOpacity={0.75}
-          duration={4.5}
-          repeatDelay={0.6}
-          className={cn(
-            "[mask-image:radial-gradient(ellipse_85%_85%_at_50%_50%,white,transparent)]",
-            "stroke-current fill-current w-full h-full absolute inset-0",
-          )}
+      {/* ── Light mode: soft gradient ──────────────────────────────── */}
+      {!isDark && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: "linear-gradient(135deg, #f0f4ff 0%, #e8efff 50%, #f5f0ff 100%)",
+          }}
         />
-      </div>
-
-      {/* ── Layer 3: central blue glow ────────────────────────────── */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: "radial-gradient(ellipse 65% 55% at 50% 50%, rgba(59,130,246,0.09) 0%, transparent 65%)",
-        }}
-      />
-
-      {/* ── Layer 4: edge vignette (darkens corners) ─────────────── */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: "radial-gradient(ellipse 90% 90% at 50% 50%, transparent 35%, rgba(2,8,23,0.82) 100%)",
-        }}
-      />
+      )}
 
       {/* ── Theme toggle ─────────────────────────────────────────── */}
       <button
@@ -141,7 +149,7 @@ export default function Login() {
 
           <h1
             className="text-2xl font-bold tracking-tight"
-            style={{ fontFamily: "Syne, sans-serif", color: "#E4EEFF", letterSpacing: "-0.025em" }}
+            style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.025em" }}
           >
             Cyber Sentinel
           </h1>
@@ -158,25 +166,24 @@ export default function Login() {
           variants={itemVariants}
           className="w-full rounded-2xl p-7 space-y-5"
           style={{
-            backgroundColor: "rgba(6,9,26,0.82)",
+            backgroundColor: isDark ? "rgba(6,9,26,0.82)" : "rgba(255,255,255,0.92)",
             backdropFilter: "blur(24px)",
             WebkitBackdropFilter: "blur(24px)",
-            border: "1px solid rgba(59,130,246,0.18)",
-            boxShadow:
-              "0 0 0 1px rgba(59,130,246,0.06), " +
-              "0 32px 72px rgba(0,0,0,0.70), " +
-              "0 0 80px rgba(59,130,246,0.05)",
+            border: isDark ? "1px solid rgba(59,130,246,0.18)" : "1px solid var(--border)",
+            boxShadow: isDark
+              ? "0 0 0 1px rgba(59,130,246,0.06), 0 32px 72px rgba(0,0,0,0.70), 0 0 80px rgba(59,130,246,0.05)"
+              : "0 8px 40px rgba(37,99,235,0.08), 0 2px 8px rgba(0,0,0,0.06)",
           }}
         >
           {/* Heading */}
           <div>
             <h2
               className="text-xl font-bold"
-              style={{ fontFamily: "Syne, sans-serif", color: "#E4EEFF", letterSpacing: "-0.015em" }}
+              style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.015em" }}
             >
               Welcome back
             </h2>
-            <p className="text-sm mt-0.5" style={{ color: "#607898" }}>
+            <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
               Sign in to access your dashboard
             </p>
           </div>
@@ -309,7 +316,7 @@ export default function Login() {
         <motion.p
           variants={itemVariants}
           className="text-[10px] uppercase tracking-[0.18em] font-medium mt-6"
-          style={{ color: "#1E3A5F" }}
+          style={{ color: isDark ? "#1E3A5F" : "var(--text-subtle)" }}
         >
           Smart City &amp; Cybersecurity Lab · ITS
         </motion.p>
