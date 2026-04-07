@@ -35,6 +35,7 @@ async def init_db() -> None:
     from domains.correlation.models import Correlation
     from domains.soc.playbook import PlaybookExecution
     from domains.notifications.models import Notification
+    from domains.audit.models import AuditLog
 
     await init_beanie(
         database=database,
@@ -47,6 +48,7 @@ async def init_db() -> None:
             Correlation,
             PlaybookExecution,
             Notification,
+            AuditLog,
         ],
     )
 
