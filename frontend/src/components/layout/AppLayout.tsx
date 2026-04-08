@@ -13,7 +13,13 @@ import Sidebar from "./Sidebar";
 import Header from "./Header";
 import BottomNav from "./BottomNav";
 import { AnimatedGridPattern } from "@/components/ui/AnimatedGridPattern";
+import { ScrollVelocity } from "@/components/ui/reactbits/ScrollVelocity";
 import { cn } from "@/lib/utils";
+
+const SECURITY_TOOLS = [
+  "Nmap", "Nuclei", "SSLyze", "WhatWeb", "OWASP ZAP",
+  "Wazuh", "EPSS", "MITRE ATT&CK", "CVE Scanner", "OWASP Top 10",
+];
 
 const SIDEBAR_KEY = "cs_sidebar_open";
 
@@ -100,6 +106,12 @@ export default function AppLayout() {
           <TransitionProvider>
             <Outlet />
           </TransitionProvider>
+
+          {/* Decorative security-tools marquee strip */}
+          <div className="mt-8 mb-2 hidden md:block" style={{ opacity: 0.18 }}>
+            <ScrollVelocity items={SECURITY_TOOLS} baseSpeed={0.8} direction="left"  className="mb-1" />
+            <ScrollVelocity items={SECURITY_TOOLS} baseSpeed={0.8} direction="right" />
+          </div>
         </main>
       </div>
 

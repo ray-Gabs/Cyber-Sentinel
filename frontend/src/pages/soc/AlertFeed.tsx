@@ -5,6 +5,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
+import { AnimatedList } from "@/components/ui/reactbits/AnimatedList";
 import { ShieldAlert, RefreshCw, ChevronRight } from "lucide-react";
 import { getAlerts } from "@/services/alertService";
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -261,13 +262,11 @@ export default function AlertFeed() {
           </p>
         </div>
       ) : (
-        <motion.div
+        <AnimatedList
+          items={alerts}
+          keyExtractor={(alert) => alert.id}
           className="space-y-2"
-          variants={listVariants}
-          initial="hidden"
-          animate="show"
-        >
-          {alerts.map((alert) => {
+          renderItem={(alert) => {
             const sevColor   = getSeverityColor(alert.rule_level);
             const sevLabel   = getSeverityLabel(alert.rule_level);
             const verdictSty = alert.ai_verdict ? VERDICT_STYLE[alert.ai_verdict] : null;
@@ -275,8 +274,6 @@ export default function AlertFeed() {
 
             return (
               <motion.div
-                key={alert.id}
-                variants={rowVariants}
                 onClick={() => navigate(`/alerts/${alert.id}`)}
                 className="card cursor-pointer group transition-all duration-150"
                 style={{
@@ -423,8 +420,8 @@ export default function AlertFeed() {
                 </div>
               </motion.div>
             );
-          })}
-        </motion.div>
+          }}
+        />
       )}
 
       {/* ── Pagination ──────────────────────────────────────────── */}

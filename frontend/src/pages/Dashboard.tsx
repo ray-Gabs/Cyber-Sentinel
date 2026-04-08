@@ -19,6 +19,7 @@ import {
   ChevronRight, TrendingUp, Radio, Crosshair,
   ShieldAlert, Users, Zap, Settings, Server,
   Eye, TriangleAlert, X, Info,
+  Target, Sparkles, FileText,
 } from "lucide-react";
 import type { ScanSummary, AlertStats } from "@/types";
 import { BorderGlow } from "@/components/ui/BorderGlow";
@@ -26,6 +27,26 @@ import { Threads } from "@/components/ui/reactbits/Threads";
 import { GlareCard } from "@/components/ui/reactbits/GlareCard";
 import { SpotlightCard } from "@/components/ui/reactbits/SpotlightCard";
 import { RotatingText } from "@/components/ui/reactbits/RotatingText";
+import { GlowStepper, getScanStepIndex, type GlowStep } from "@/components/ui/reactbits/GlowStepper";
+import { AnimatedList } from "@/components/ui/reactbits/AnimatedList";
+
+// ── Scan pipeline steps for GlowStepper ───────────────────────────────────
+const PIPELINE_STEPS = (status: string, currentStage: string | null | undefined): GlowStep[] => {
+  const idx = getScanStepIndex(status, currentStage);
+  const toStatus = (stepIdx: number): import("@/components/ui/reactbits/GlowStepper").StepStatus => {
+    if (status === "failed"    && stepIdx === idx) return "failed";
+    if (status === "cancelled" && stepIdx === idx) return "failed";
+    if (stepIdx < idx)  return "completed";
+    if (stepIdx === idx) return status === "completed" ? "completed" : "active";
+    return "pending";
+  };
+  return [
+    { id: "recon",    label: "Recon",    icon: Target,       status: toStatus(0) },
+    { id: "scan",     label: "Scan",     icon: Crosshair,    status: toStatus(1) },
+    { id: "analysis", label: "Analysis", icon: Sparkles,     status: toStatus(2) },
+    { id: "report",   label: "Report",   icon: FileText,     status: toStatus(3) },
+  ];
+};
 
 // ── Time-based greeting ────────────────────────────────────────────────────
 function getGreeting() {
@@ -631,9 +652,12 @@ export default function Dashboard() {
                 </p>
               </div>
             </div>
-            <div className="space-y-2.5">
-              {activeScans.map((scan) => (
-                <Link key={scan.id} to={`/scans/${scan.id}`} className="block group">
+            <AnimatedList
+              items={activeScans}
+              keyExtractor={(scan) => scan.id}
+              className="space-y-2.5"
+              renderItem={(scan) => (
+                <Link to={`/scans/${scan.id}`} className="block group">
                   <div className="rounded-xl p-4 transition-colors" style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}>
                     <div className="flex items-center justify-between mb-2.5">
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -646,7 +670,7 @@ export default function Dashboard() {
                         {scan.progress}%
                       </span>
                     </div>
-                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "var(--border)" }}>
+                    <div className="w-full h-1.5 rounded-full overflow-hidden mb-3" style={{ backgroundColor: "var(--border)" }}>
                       <motion.div
                         className="h-full rounded-full"
                         style={{ backgroundColor: "var(--accent)" }}
@@ -655,16 +679,17 @@ export default function Dashboard() {
                         transition={{ duration: 0.5 }}
                       />
                     </div>
+                    <GlowStepper steps={PIPELINE_STEPS(scan.status, scan.current_stage)} />
                     {scan.current_stage && TOOL_INFO[scan.current_stage] && (
-                      <p className="text-[11px] mt-1.5 flex items-center gap-1.5" style={{ color: "var(--text-muted)" }}>
+                      <p className="text-[11px] mt-2 flex items-center gap-1.5" style={{ color: "var(--text-muted)" }}>
                         <span style={{ color: "var(--text-subtle)" }}>→</span>
                         {TOOL_INFO[scan.current_stage].label}
                       </p>
                     )}
                   </div>
                 </Link>
-              ))}
-            </div>
+              )}
+            />
           </motion.div>
         )}
       </AnimatePresence>
