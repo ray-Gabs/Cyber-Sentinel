@@ -23,6 +23,9 @@ import {
 import type { ScanSummary, AlertStats } from "@/types";
 import { BorderGlow } from "@/components/ui/BorderGlow";
 import { Threads } from "@/components/ui/reactbits/Threads";
+import { GlareCard } from "@/components/ui/reactbits/GlareCard";
+import { SpotlightCard } from "@/components/ui/reactbits/SpotlightCard";
+import { RotatingText } from "@/components/ui/reactbits/RotatingText";
 
 // ── Time-based greeting ────────────────────────────────────────────────────
 function getGreeting() {
@@ -91,7 +94,7 @@ const cardVariants = {
 
 function StatCard({ label, value, icon: Icon, color, iconBg, accent, pulse = false, i }: StatCardProps) {
   return (
-    <BorderGlow color={`${accent}ff`} intensity="low" className="rounded-xl">
+    <GlareCard intensity="low" className="rounded-xl">
     <motion.div
       className="card relative overflow-hidden"
       custom={i}
@@ -129,7 +132,7 @@ function StatCard({ label, value, icon: Icon, color, iconBg, accent, pulse = fal
         </div>
       </div>
     </motion.div>
-    </BorderGlow>
+    </GlareCard>
   );
 }
 
@@ -404,7 +407,11 @@ export default function Dashboard() {
             className="text-2xl font-bold"
             style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.02em" }}
           >
-            {getGreeting()},{" "}
+            <RotatingText
+              texts={[getGreeting(), "Security Monitor", "Threat Overview", "SOC Dashboard"]}
+              interval={4000}
+              className="inline-block"
+            />,{" "}
             <span style={{ color: "var(--accent)" }}>{user?.username ?? "operator"}</span>
           </h1>
           <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
@@ -780,6 +787,7 @@ export default function Dashboard() {
         </motion.div>
 
         {/* Quick actions */}
+        <SpotlightCard className="rounded-xl">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -829,6 +837,7 @@ export default function Dashboard() {
             </Link>
           </div>
         </motion.div>
+        </SpotlightCard>
       </div>
 
     </div>
