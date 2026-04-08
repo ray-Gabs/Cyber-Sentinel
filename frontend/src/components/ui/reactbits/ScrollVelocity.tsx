@@ -7,7 +7,7 @@
 import { useRef, useEffect, useState, type CSSProperties } from "react";
 import {
   useScroll, useVelocity, useReducedMotion,
-  useAnimationFrame, useMotionValue, useTransform,
+  useAnimationFrame, useMotionValue,
   motion,
 } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -21,8 +21,6 @@ interface ScrollVelocityProps {
   speedOnScroll?: number;
   /** "left" = normal direction, "right" = reverse (default "left") */
   direction?: "left" | "right";
-  /** String rendered between items (default " · ") */
-  separator?: string;
   className?: string;
   textClassName?: string;
   style?: CSSProperties;
@@ -33,7 +31,6 @@ export function ScrollVelocity({
   baseSpeed = 1.2,
   speedOnScroll = 4,
   direction = "left",
-  separator = " · ",
   className,
   textClassName,
   style,
@@ -68,9 +65,7 @@ export function ScrollVelocity({
 
   if (reduced) return null;
 
-  // Duplicate items for seamless loop
-  const allItems = [...items, ...items, ...items];
-  const itemStr  = allItems.join(separator);
+  // Duplicate items for seamless loop (itemStr unused — kept for reference)
 
   return (
     <div

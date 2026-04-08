@@ -22,9 +22,9 @@ import {
   Target, Sparkles, FileText,
 } from "lucide-react";
 import type { ScanSummary, AlertStats } from "@/types";
-import { BorderGlow } from "@/components/ui/BorderGlow";
 import { Threads } from "@/components/ui/reactbits/Threads";
 import { GlareCard } from "@/components/ui/reactbits/GlareCard";
+import { BentoGrid, BentoGridItem } from "@/components/ui/reactbits/BentoGrid";
 import { SpotlightCard } from "@/components/ui/reactbits/SpotlightCard";
 import { RotatingText } from "@/components/ui/reactbits/RotatingText";
 import { GlowStepper, getScanStepIndex, type GlowStep } from "@/components/ui/reactbits/GlowStepper";
@@ -612,18 +612,21 @@ export default function Dashboard() {
         <SectionLabel label="Pentest Engine" accent="#F59E0B" icon={Crosshair} />
       </motion.div>
 
-      {/* Pentest stat cards */}
-      <motion.div
-        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
-        initial="hidden"
-        animate="show"
-        variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
-      >
-        <StatCard label="Active Scans"   value={activeScans.length}   icon={Radio}         color={activeScans.length > 0 ? "var(--sev-info-text)" : "var(--text-muted)"}     iconBg={activeScans.length > 0 ? "rgba(59,130,246,0.15)" : "var(--bg-muted)"}    accent={activeScans.length > 0 ? "#3B82F6" : "var(--border-muted)"} pulse={activeScans.length > 0} i={0} />
-        <StatCard label="Completed"      value={completedScans.length} icon={CheckCircle2}  color="var(--sev-low-text)"       iconBg="var(--color-success-dim)"   accent="#22C55E" i={1} />
-        <StatCard label="Total Findings" value={totalFindings}          icon={Activity}      color="var(--color-purple-text)"  iconBg="var(--color-purple-dim)"    accent="#A855F7" i={2} />
-        <StatCard label="High Risk"      value={highRiskCount}          icon={AlertTriangle} color={highRiskCount > 0 ? "var(--sev-critical-text)" : "var(--text-muted)"} iconBg={highRiskCount > 0 ? "rgba(239,68,68,0.12)" : "var(--bg-muted)"} accent={highRiskCount > 0 ? "#EF4444" : "var(--border-muted)"} i={3} />
-      </motion.div>
+      {/* Pentest stat cards — BentoGrid layout */}
+      <BentoGrid columns={4} gap="0.75rem">
+        <BentoGridItem colSpan={1}>
+          <StatCard label="Active Scans"   value={activeScans.length}   icon={Radio}         color={activeScans.length > 0 ? "var(--sev-info-text)" : "var(--text-muted)"}     iconBg={activeScans.length > 0 ? "rgba(59,130,246,0.15)" : "var(--bg-muted)"}    accent={activeScans.length > 0 ? "#3B82F6" : "var(--border-muted)"} pulse={activeScans.length > 0} i={0} />
+        </BentoGridItem>
+        <BentoGridItem colSpan={1}>
+          <StatCard label="Completed"      value={completedScans.length} icon={CheckCircle2}  color="var(--sev-low-text)"       iconBg="var(--color-success-dim)"   accent="#22C55E" i={1} />
+        </BentoGridItem>
+        <BentoGridItem colSpan={1}>
+          <StatCard label="Total Findings" value={totalFindings}          icon={Activity}      color="var(--color-purple-text)"  iconBg="var(--color-purple-dim)"    accent="#A855F7" i={2} />
+        </BentoGridItem>
+        <BentoGridItem colSpan={1}>
+          <StatCard label="High Risk"      value={highRiskCount}          icon={AlertTriangle} color={highRiskCount > 0 ? "var(--sev-critical-text)" : "var(--text-muted)"} iconBg={highRiskCount > 0 ? "rgba(239,68,68,0.12)" : "var(--bg-muted)"} accent={highRiskCount > 0 ? "#EF4444" : "var(--border-muted)"} i={3} />
+        </BentoGridItem>
+      </BentoGrid>
 
       {/* Active scans live feed */}
       <AnimatePresence>
@@ -756,15 +759,16 @@ export default function Dashboard() {
         </motion.div>
       )}
 
-      {/* ── Bottom: Recent scans + Quick actions ──────────────── */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+      {/* ── Bottom: Recent scans + Quick actions — BentoGrid ─── */}
+      <BentoGrid columns={3} gap="1.25rem" animate={false}>
 
-        {/* Recent scans */}
+        {/* Recent scans — spans 2 cols */}
+        <BentoGridItem colSpan={2}>
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35, duration: 0.3 }}
-          className="card lg:col-span-2"
+          className="card h-full"
         >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold" style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}>
@@ -810,9 +814,11 @@ export default function Dashboard() {
             </motion.div>
           )}
         </motion.div>
+        </BentoGridItem>
 
         {/* Quick actions */}
-        <SpotlightCard className="rounded-xl">
+        <BentoGridItem colSpan={1}>
+        <SpotlightCard className="rounded-xl h-full">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -863,7 +869,8 @@ export default function Dashboard() {
           </div>
         </motion.div>
         </SpotlightCard>
-      </div>
+        </BentoGridItem>
+      </BentoGrid>
 
     </div>
   );

@@ -56,15 +56,7 @@ const LEVEL_FILTERS = [
   { value: 5,  label: "Medium 5+"      },
 ];
 
-// ── Animations ─────────────────────────────────────────────────────────────
-const listVariants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.04 } },
-};
-const rowVariants = {
-  hidden: { opacity: 0, y: 8 },
-  show:   { opacity: 1, y: 0, transition: { duration: 0.22, ease: "easeOut" as const } },
-};
+// ── Animations — per-row entrance now handled by AnimatedList ─────────────
 
 // ── Component ──────────────────────────────────────────────────────────────
 export default function AlertFeed() {
