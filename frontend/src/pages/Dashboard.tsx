@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { ScanSummary, AlertStats } from "@/types";
 import { BorderGlow } from "@/components/ui/BorderGlow";
+import { Threads } from "@/components/ui/reactbits/Threads";
 
 // ── Time-based greeting ────────────────────────────────────────────────────
 function getGreeting() {
@@ -323,7 +324,9 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 relative">
+      {/* ── Threads texture — ambient background only ───────── */}
+      <Threads count={10} opacity={0.05} className="fixed inset-0 z-0 pointer-events-none" />
 
       {/* ── Role-blocked notice ──────────────────────────────── */}
       {roleBlocked && !roleBannerDismissed && (

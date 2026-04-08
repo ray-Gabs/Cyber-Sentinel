@@ -16,6 +16,7 @@ import { ROUTES } from "@/lib/constants";
 import { DottedBackground } from "@/components/ui/DottedBackground";
 import { AnimatedGridPattern } from "@/components/ui/AnimatedGridPattern";
 import { LightRays } from "@/components/ui/LightRays";
+import { Beams } from "@/components/ui/reactbits/Beams";
 import { cn } from "@/lib/utils";
 
 const itemVariants = {
@@ -119,6 +120,8 @@ export default function Register() {
               background: "radial-gradient(ellipse 90% 90% at 50% 50%, transparent 35%, rgba(2,8,23,0.82) 100%)",
             }}
           />
+          {/* Beam layer — subtle animated light streaks */}
+          <Beams count={5} opacity={0.8} className="z-[1]" />
         </>
       )}
 

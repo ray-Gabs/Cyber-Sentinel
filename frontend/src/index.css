@@ -70,6 +70,16 @@
   /* Scrollbar */
   --scrollbar-track: #06091A;
   --scrollbar-thumb: #182138;
+
+  /* React Bits UI effects */
+  --glare-color:      rgba(255,255,255,0.06);
+  --spotlight-color:  rgba(59,130,246,0.08);
+  --beam-color:       rgba(59,130,246,0.40);
+  --stepper-track:    var(--border);
+  --stepper-active:   var(--accent);
+  --stepper-complete: var(--sev-low);
+  --stepper-failed:   var(--sev-critical);
+  --marquee-text:     var(--text-subtle);
 }
 
 .light {
@@ -129,6 +139,16 @@
   /* Scrollbar */
   --scrollbar-track: #EDF2FF;
   --scrollbar-thumb: #C0D3F5;
+
+  /* React Bits UI effects */
+  --glare-color:      rgba(255,255,255,0.15);
+  --spotlight-color:  rgba(37,99,235,0.06);
+  --beam-color:       rgba(37,99,235,0.25);
+  --stepper-track:    var(--border);
+  --stepper-active:   var(--accent);
+  --stepper-complete: var(--sev-low);
+  --stepper-failed:   var(--sev-critical);
+  --marquee-text:     var(--text-subtle);
 }
 
 /* ══════════════════════════════════════════════════════
