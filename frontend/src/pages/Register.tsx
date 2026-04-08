@@ -15,6 +15,7 @@ import {
 import { ROUTES } from "@/lib/constants";
 import { DottedBackground } from "@/components/ui/DottedBackground";
 import { AnimatedGridPattern } from "@/components/ui/AnimatedGridPattern";
+import { LightRays } from "@/components/ui/LightRays";
 import { cn } from "@/lib/utils";
 
 const itemVariants = {
@@ -121,14 +122,17 @@ export default function Register() {
         </>
       )}
 
-      {/* ── Light mode gradient background ────────────────────────── */}
+      {/* ── Light mode: soft gradient + light rays ─────────────────── */}
       {!isDark && (
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: "linear-gradient(160deg, #f0f4ff 0%, #e8efff 40%, #f5f0ff 100%)",
-          }}
-        />
+        <>
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: "linear-gradient(160deg, #f0f6ff 0%, #eaf1ff 40%, #f4f0ff 100%)",
+            }}
+          />
+          <LightRays />
+        </>
       )}
 
       {/* ── Top controls ─────────────────────────────────────────── */}
