@@ -465,7 +465,7 @@ export default function CorrelationPage() {
                                     const typeInfo = CORRELATION_TYPE_LABELS[link.correlation_type];
                                     return (
                                       <tr
-                                        key={link.finding_id ?? `${link.correlation_type}-${i}`}
+                                        key={`${link.correlation_type}-${i}`}
                                         style={{
                                           borderBottom: i < corr.links.length - 1
                                             ? "1px solid var(--border)"

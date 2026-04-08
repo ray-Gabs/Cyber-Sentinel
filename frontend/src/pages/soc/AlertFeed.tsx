@@ -351,7 +351,7 @@ export default function AlertFeed() {
                       <div className="flex gap-1 mt-1.5 flex-wrap">
                         {alert.mitre_techniques.slice(0, 3).map((t, i) => (
                           <span
-                            key={t.technique_id ?? t.technique ?? i}
+                            key={t.technique ?? i}
                             className="text-[10px] px-1.5 py-0.5 rounded font-medium"
                             style={{
                               backgroundColor: "var(--color-purple-dim)",

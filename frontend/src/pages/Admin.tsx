@@ -434,7 +434,7 @@ interface ActionButtonProps {
   onClick: () => void;
 }
 
-function ActionButton({ label, icon, color, bg, border, busy, onClick }: ActionButtonProps) {
+export function ActionButton({ label, icon, color, bg, border, busy, onClick }: ActionButtonProps) {
   return (
     <button
       disabled={busy}
