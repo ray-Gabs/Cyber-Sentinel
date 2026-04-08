@@ -16,6 +16,7 @@ beanie==1.27.*             # MongoDB ODM (built on Motor + Pydantic)
 # --- Auth ---
 python-jose[cryptography]==3.3.*   # JWT encoding/decoding
 passlib[bcrypt]==1.7.*             # Password hashing
+bcrypt<5.0.0                       # Pin bcrypt 4.x (passlib compat)
 pydantic[email]==2.10.*            # Includes EmailStr
 pydantic-settings==2.7.*          # Settings from .env
 
@@ -23,8 +24,11 @@ pydantic-settings==2.7.*          # Settings from .env
 celery==5.4.*
 redis==5.2.*
 
-# --- AI ---
-google-generativeai==0.8.*        # Gemini Flash SDK
+# --- AI (install the one matching your AI_PROVIDER in .env) ---
+groq==0.25.*                      # Groq API SDK (Llama 3.3 70B)    — AI_PROVIDER=groq
+anthropic>=0.40.0                 # Claude API SDK (Anthropic)       — AI_PROVIDER=claude
+# openai>=1.0.*                   # OpenAI SDK                       — AI_PROVIDER=openai  (uncomment if needed)
+# google-generativeai>=0.8.*      # Gemini SDK                       — AI_PROVIDER=gemini  (uncomment if needed)
 
 # --- Security Tools (Python libraries) ---
 python-nmap==0.7.*                # Nmap wrapper
@@ -35,7 +39,21 @@ sslyze==6.*                       # SSL/TLS analyser
 # --- HTTP ---
 httpx==0.28.*                     # Async HTTP client (for Wazuh + ZAP APIs)
 python-dotenv==1.0.*              # .env file loading
+beautifulsoup4==4.12.*            # HTML parsing (fallback crawler + fingerprinting)
 
 # --- Reports ---
-weasyprint==63.*                  # HTML → PDF report generation
+xhtml2pdf==0.2.*                  # HTML → PDF report generation (pure Python)
 jinja2==3.1.*                     # HTML templates for reports
+
+# --- Rate Limiting ---
+slowapi==0.1.*                    # FastAPI rate limiting (backed by Redis)
+limits==3.*                       # Storage backends for slowapi
+
+# --- Async Email ---
+aiosmtplib==3.*                   # Async SMTP (non-blocking email sending)
+
+# --- Threat Intelligence ---
+# VirusTotal + AbuseIPDB via httpx (already included above)
+
+# --- MITRE ATT&CK ---
+# Uses bundled STIX data + LLM classification (no extra deps)

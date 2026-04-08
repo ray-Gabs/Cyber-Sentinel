@@ -2,6 +2,7 @@
 # backend/core/dependencies.py — FastAPI Dependency Injection
 # ============================================================
 
+from beanie import PydanticObjectId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
@@ -34,9 +35,19 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     except Exception:
         raise credentials_exception
 
-    user = await User.get(user_id)
-    if user is None:
+    try:
+        user = await User.get(PydanticObjectId(user_id))
+        if user is None:
+            raise credentials_exception
+    except HTTPException:
+        raise
+    except Exception:
         raise credentials_exception
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is deactivated. Contact an administrator.",
+        )
     return user
 
 

@@ -5,7 +5,7 @@
  * When you see `ScanCreateRequest`, it means "an object with target and scan_type fields."
  */
 import api from "./api";
-import type { Scan, ScanSummary, ScanCreateRequest } from "@/types";
+import type { Scan, ScanSummary, ScanCreateRequest, ScanDiff } from "@/types";
 
 /** POST /api/scans/ → start a new scan */
 export async function createScan(data: ScanCreateRequest): Promise<Scan> {
@@ -15,11 +15,11 @@ export async function createScan(data: ScanCreateRequest): Promise<Scan> {
 
 /** GET /api/scans/ → list all scans (paginated) */
 export async function getScans(
-  skip: number = 0,
-  limit: number = 20
+  page: number = 1,
+  size: number = 20
 ): Promise<ScanSummary[]> {
   const res = await api.get<ScanSummary[]>("/scans/", {
-    params: { skip, limit },
+    params: { page, size },
   });
   return res.data;
 }
@@ -33,4 +33,40 @@ export async function getScan(id: string): Promise<Scan> {
 /** POST /api/scans/:id/cancel → cancel a running scan */
 export async function cancelScan(id: string): Promise<void> {
   await api.post(`/scans/${id}/cancel`);
+}
+
+/** DELETE /api/scans/:id → permanently delete a scan */
+export async function deleteScan(id: string): Promise<void> {
+  await api.delete(`/scans/${id}`);
+}
+
+/** POST /api/scans/ with same target+type as an existing scan → re-run */
+export async function reRunScan(scan: { target: string; scan_type: string }): Promise<Scan> {
+  const res = await api.post<Scan>("/scans/", {
+    target: scan.target,
+    scan_type: scan.scan_type,
+  });
+  return res.data;
+}
+
+/** GET /api/scans/:id/report/html → download HTML report */
+export async function exportHtmlReport(id: string): Promise<string> {
+  const res = await api.get<string>(`/scans/${id}/report/html`, {
+    responseType: "text",
+  });
+  return res.data;
+}
+
+/** GET /api/scans/:id/report/pdf → download PDF report as blob */
+export async function exportPdfReport(id: string): Promise<Blob> {
+  const res = await api.get(`/scans/${id}/report/pdf`, {
+    responseType: "blob",
+  });
+  return res.data as Blob;
+}
+
+/** GET /api/scans/:id/diff/:baselineId → compare two completed scans */
+export async function diffScans(scanId: string, baselineId: string): Promise<ScanDiff> {
+  const res = await api.get<ScanDiff>(`/scans/${scanId}/diff/${baselineId}`);
+  return res.data;
 }

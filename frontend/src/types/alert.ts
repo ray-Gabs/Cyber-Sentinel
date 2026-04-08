@@ -1,69 +1,98 @@
 /* ── SOC / Alert Types ────────────────────────────── */
 
-export type AlertClassification = "TRUE_POSITIVE" | "FALSE_POSITIVE";
+export type AlertClassification = "TRUE_POSITIVE" | "FALSE_POSITIVE" | "UNKNOWN";
 export type AlertAction = "ESCALATE" | "MONITOR" | "DISMISS";
-export type AlertStatus = "new" | "analysed" | "escalated" | "dismissed" | "overridden";
 
-export interface AiVerdict {
-  classification: AlertClassification;
-  confidence: number;
-  reasoning: string;
-  recommended_action: AlertAction;
-  analysed_at: string;
+export interface MitreTechnique {
+  tactic: string;
+  technique: string;   // e.g. "T1110"
+  name: string;        // e.g. "Brute Force"
 }
 
-export interface AnalystOverride {
-  classification: AlertClassification;
-  notes: string;
-  analyst_id: string;
-  overridden_at: string;
-}
-
-export interface WazuhRule {
-  id: number;
-  level: number;
-  description: string;
-  groups?: string[];
+export interface ThreatIntelResult {
+  virustotal?: Array<{
+    source: string;
+    ip?: string;
+    domain?: string;
+    malicious: number;
+    suspicious: number;
+    harmless: number;
+    reputation?: number;
+    country?: string;
+    as_owner?: string;
+  }>;
+  abuseipdb?: Array<{
+    source: string;
+    ip: string;
+    abuse_confidence: number;
+    total_reports: number;
+    country_code: string;
+    isp: string;
+    is_tor: boolean;
+  }>;
 }
 
 export interface Alert {
   id: string;
   wazuh_id: string;
-  rule_id: number;
-  rule_level: number;
-  rule_description: string;
+  timestamp: string;
   agent_id: string;
   agent_name: string;
-  timestamp: string;
-  status: AlertStatus;
-  ai_verdict?: AiVerdict;
-  analyst_override?: AnalystOverride;
-  raw?: Record<string, unknown>;
+  agent_ip: string;
+  rule_id: string;
+  rule_description: string;
+  rule_level: number;
+  rule_groups: string[];
+  full_log: string;
+  data?: Record<string, unknown>;
+  ai_verdict?: string;
+  ai_confidence?: number;
+  ai_action?: string;
+  ai_reasoning?: string;
+  analyst_override?: string;
+  analyst_notes?: string;
+  ingested_at: string;
+  analysed_at?: string;
+  mitre_tactics?: string[];
+  mitre_techniques?: MitreTechnique[];
+  threat_intel?: ThreatIntelResult;
 }
 
 export interface AlertSummary {
   id: string;
   wazuh_id: string;
-  rule_id: number;
-  rule_level: number;
-  rule_description: string;
-  agent_name: string;
   timestamp: string;
-  status: AlertStatus;
-  ai_classification?: AlertClassification;
+  agent_name: string;
+  rule_id: string;
+  rule_description: string;
+  rule_level: number;
+  ai_verdict?: string;
   ai_confidence?: number;
+  ai_action?: string;
+  analyst_override?: string;
+  mitre_techniques?: MitreTechnique[];
+  ingested_at: string;
 }
 
 export interface AnalystOverrideRequest {
-  classification: AlertClassification;
-  notes: string;
+  override: string;
+  notes?: string;
 }
 
 export interface AlertFilterParams {
-  status?: AlertStatus;
-  min_level?: number;
-  agent_id?: string;
-  classification?: AlertClassification;
-  skip?: number;
-  limit?: number;
+  page?: number;
+  size?: number;
+  rule_level_min?: number;
+  ai_verdict?: string;
+  agent_name?: string;
+}
+
+export interface AlertStats {
+  total: number;
+  by_verdict: Record<string, number>;
+  by_action: Record<string, number>;
+  by_severity: Record<string, number>;
+  daily_counts: Array<{ date: string; count: number }>;
+  top_rules: Array<{ _id: string; count: number; desc: string }>;
+  top_agents: Array<{ _id: string; count: number }>;
 }

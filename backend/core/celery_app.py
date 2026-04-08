@@ -7,6 +7,13 @@
 #   celery -A core.celery_app beat --loglevel=info
 # ============================================================
 
+import os, sys
+
+# Ensure the backend directory is on sys.path so Celery can find local packages.
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
 from celery import Celery
 from celery.schedules import crontab
 from core.config import settings
@@ -28,6 +35,8 @@ celery.conf.update(
     worker_prefetch_multiplier=1,
     # Each task gets a fresh connection (avoids stale Motor connections)
     worker_max_tasks_per_child=50,
+    # Celery 6.0 compatibility — retry broker connections on startup
+    broker_connection_retry_on_startup=True,
 )
 
 # --------------- Beat Schedule (Periodic Tasks) ---------------

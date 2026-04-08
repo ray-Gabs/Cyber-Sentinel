@@ -1,0 +1,56 @@
+{% extends "email/base.html" %}
+
+{% block title %}Welcome to Cyber Sentinel{% endblock %}
+
+{% block content %}
+  <!-- Heading -->
+  <p style="margin:0 0 8px;font-size:22px;font-weight:700;color:#E2E8F0;letter-spacing:-0.4px;">
+    Welcome, {{ username }}
+  </p>
+  <p style="margin:0 0 28px;font-size:14px;color:#94A3B8;line-height:1.6;">
+    Your Cyber Sentinel account is ready. Start scanning, monitoring, and securing your targets.
+  </p>
+
+  <!-- Quick start steps -->
+  <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#94A3B8;text-transform:uppercase;
+             letter-spacing:0.06em;">Get started</p>
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;border-collapse:collapse;">
+    <tr>
+      <td style="padding:12px 16px;background:#0A0A0F;border:1px solid #2A2A3A;border-radius:8px 8px 0 0;">
+        <span style="display:inline-block;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;
+               font-size:11px;font-weight:700;width:20px;height:20px;border-radius:50%;text-align:center;
+               line-height:20px;margin-right:10px;">1</span>
+        <span style="font-size:13px;color:#E2E8F0;">Start a scan — enter a target URL and pick a scan type</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:12px 16px;background:#0A0A0F;border:1px solid #2A2A3A;border-top:0;">
+        <span style="display:inline-block;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;
+               font-size:11px;font-weight:700;width:20px;height:20px;border-radius:50%;text-align:center;
+               line-height:20px;margin-right:10px;">2</span>
+        <span style="font-size:13px;color:#E2E8F0;">View results — see findings ranked by severity with AI explanations</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:12px 16px;background:#0A0A0F;border:1px solid #2A2A3A;border-top:0;border-radius:0 0 8px 8px;">
+        <span style="display:inline-block;background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;
+               font-size:11px;font-weight:700;width:20px;height:20px;border-radius:50%;text-align:center;
+               line-height:20px;margin-right:10px;">3</span>
+        <span style="font-size:13px;color:#E2E8F0;">Check reports — export your findings as PDF or HTML</span>
+      </td>
+    </tr>
+  </table>
+
+  <!-- CTA Button -->
+  <table cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="background:linear-gradient(135deg,#3B82F6,#1D4ED8);border-radius:10px;">
+        <a href="{{ dashboard_url }}"
+           style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;
+                  color:#ffffff;text-decoration:none;letter-spacing:-0.2px;">
+          Get Started &rarr;
+        </a>
+      </td>
+    </tr>
+  </table>
+{% endblock %}

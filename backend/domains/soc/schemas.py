@@ -21,6 +21,8 @@ class AlertSummaryResponse(BaseModel):
     ai_confidence: Optional[float] = None
     ai_action: Optional[str] = None
     analyst_override: Optional[str] = None
+    mitre_techniques: list[dict] = []
+    matched_rules: list[str] = []
     ingested_at: datetime
 
 
@@ -33,6 +35,9 @@ class AlertDetailResponse(AlertSummaryResponse):
     ai_reasoning: Optional[str] = None
     analyst_notes: Optional[str] = None
     analysed_at: Optional[datetime] = None
+    mitre_tactics: list[str] = []
+    threat_intel: Optional[dict] = None
+    matched_rules: list[str] = []
 
 
 # --------------- Requests ---------------
@@ -41,6 +46,33 @@ class AnalystOverrideRequest(BaseModel):
     """Human analyst overrides the AI verdict."""
     override: str = Field(..., description="TRUE_POSITIVE or FALSE_POSITIVE")
     notes: Optional[str] = Field(None, description="Optional analyst notes")
+
+
+class CustomRuleCreate(BaseModel):
+    name: str
+    description: str
+    pattern: str
+    severity: str = Field(..., pattern="^(Low|Medium|High|Critical)$")
+    enabled: bool = True
+
+
+class CustomRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    pattern: Optional[str] = None
+    severity: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class CustomRuleResponse(BaseModel):
+    id: str
+    user_id: str
+    name: str
+    description: str
+    pattern: str
+    severity: str
+    enabled: bool
+    created_at: datetime
 
 
 class AlertFilterParams(BaseModel):

@@ -1,18 +1,20 @@
 # ============================================================
 # backend/ai/gemini_service.py — Shared Gemini Flash AI Service
 # ============================================================
-# Single service class with multiple prompt-methods.
-# Both pentesting and SOC domains call into this.
-#
-# Key design:
-#   - Load prompt templates from ai/prompts/ files
-#   - Cache responses by content hash (saves $$)
-#   - Always request JSON output from Gemini for easy parsing
+# Optimised for minimal token usage:
+#   - Cap findings sent to Gemini (top 15 by severity)
+#   - Compact JSON (no indent) to cut whitespace tokens
+#   - Truncate descriptions aggressively
+#   - Use async generation with timeout
+#   - Retry once on 429 rate-limit errors
+#   - Cache responses by content hash
 # ============================================================
 
+import asyncio
 import json
-import os
-from typing import Any, Optional
+import logging
+import re as _re
+from typing import Any
 from pathlib import Path
 
 import google.generativeai as genai
@@ -20,70 +22,111 @@ import google.generativeai as genai
 from core.config import settings
 from ai.cache import AiCache
 
+log = logging.getLogger(__name__)
+
 PROMPTS_DIR = Path(__file__).parent / "prompts"
+
+# Max findings to include in AI prompt (most severe first)
+_MAX_FINDINGS_FOR_AI = 15
+# Max description length per finding (chars)
+_MAX_DESC_LEN = 120
+# Timeout for a single Gemini call (seconds)
+_GEMINI_TIMEOUT = 30
+# Severity ordering for prioritisation
+_SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
 
 class GeminiService:
     """Wrapper around the Google Gemini Flash API."""
 
     def __init__(self):
-        genai.configure(api_key=settings.gemini_api_key)
-        self.model = genai.GenerativeModel(settings.gemini_model)
+        if settings.gemini_api_key:
+            genai.configure(api_key=settings.gemini_api_key)
+            self.model = genai.GenerativeModel(
+                settings.gemini_model,
+                generation_config=genai.GenerationConfig(
+                    max_output_tokens=1024,
+                    temperature=0.2,
+                ),
+            )
+        else:
+            self.model = None
         self.cache = AiCache()
 
     def _load_prompt(self, name: str) -> str:
-        """Load a .txt prompt template from ai/prompts/."""
         path = PROMPTS_DIR / f"{name}.txt"
         if path.exists():
             return path.read_text(encoding="utf-8")
         return ""
 
     async def _generate(self, prompt: str, use_cache: bool = True) -> str:
-        """
-        Call Gemini Flash with caching.
-        Returns the raw text response.
-        """
+        """Call Gemini with caching, timeout, and one retry on 429."""
+        if self.model is None:
+            raise RuntimeError("Gemini API key not configured")
+
         if use_cache:
             cached = await self.cache.get(prompt)
             if cached:
                 return cached
 
-        response = self.model.generate_content(prompt)
-        text = response.text
+        last_err = None
+        for attempt in range(2):
+            try:
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(self.model.generate_content, prompt),
+                    timeout=_GEMINI_TIMEOUT,
+                )
+                text = response.text
+                if use_cache:
+                    await self.cache.set(prompt, text)
+                return text
+            except asyncio.TimeoutError:
+                last_err = TimeoutError(f"Gemini did not respond within {_GEMINI_TIMEOUT}s")
+                break  # Don't retry timeouts
+            except Exception as e:
+                last_err = e
+                if "429" in str(e) and attempt == 0:
+                    log.warning("Gemini 429 rate limit — retrying in 5s")
+                    await asyncio.sleep(5)
+                    continue
+                break
 
-        if use_cache:
-            await self.cache.set(prompt, text)
-        return text
+        raise last_err  # type: ignore[misc]
 
     # ======================== PENTESTING ========================
 
     async def generate_scan_summary(self, scan) -> dict[str, Any]:
         """
-        Generate an executive summary + remediation advice for a
-        completed scan.
-
-        Since Nuclei already provides severity + description, we only
-        send Gemini a condensed summary — saving tokens.
-
-        Returns:
-            {
-                "executive_summary": str,
-                "remediation": str,
-                "risk_score": float,
-            }
+        Generate an executive summary + remediation for a completed scan.
+        Sends only the top findings (by severity) in compact form.
         """
+        if not scan.findings:
+            return {
+                "executive_summary": "No findings were detected during the scan.",
+                "remediation": "",
+                "risk_score": 0.0,
+            }
+
         template = self._load_prompt("scan_executive_summary")
 
-        # Build condensed findings list (not full raw data)
-        condensed = []
-        for f in scan.findings:
-            condensed.append({
-                "tool": f.tool,
-                "severity": f.severity,
-                "name": f.name,
-                "description": f.description[:200],  # Truncate
-                "matched_at": f.matched_at,
-            })
+        # Sort by severity, take top N
+        sorted_findings = sorted(
+            scan.findings,
+            key=lambda f: _SEV_RANK.get(f.severity, 5),
+        )
+        top = sorted_findings[:_MAX_FINDINGS_FOR_AI]
+
+        # Build compact findings list
+        condensed = [
+            {
+                "t": f.tool,
+                "s": f.severity,
+                "n": f.name,
+                "d": (f.description or "")[:_MAX_DESC_LEN],
+                "u": f.matched_at or "",
+            }
+            for f in top
+        ]
 
         prompt = template or (
             "You are a senior cybersecurity consultant. Analyse the following "
@@ -93,43 +136,43 @@ class GeminiService:
             "3. risk_score (float 0.0 – 10.0)\n\n"
             "Respond ONLY in valid JSON with keys: executive_summary, remediation, risk_score.\n\n"
         )
-        prompt += f"\nTarget: {scan.target}\nScan type: {scan.scan_type}\n"
-        prompt += f"\nFindings ({len(condensed)} total):\n{json.dumps(condensed, indent=2)}"
+        # Compact payload: keys are t=tool, s=severity, n=name, d=desc, u=url
+        prompt += (
+            f"\nTarget: {scan.target}\nScan type: {scan.scan_type}\n"
+            f"Total findings: {len(scan.findings)} (showing top {len(top)} by severity)\n"
+            f"\nFindings:\n{json.dumps(condensed, separators=(',', ':'))}"
+        )
 
         text = await self._generate(prompt)
         try:
             return json.loads(self._extract_json(text))
         except json.JSONDecodeError:
-            return {"executive_summary": text, "remediation": "", "risk_score": 5.0}
+            return {"executive_summary": text[:500], "remediation": "", "risk_score": 5.0}
 
     async def generate_remediation(self, finding: dict) -> str:
         """Generate step-by-step remediation for a single finding."""
         template = self._load_prompt("scan_remediation")
-        prompt = (template or "You are a cybersecurity expert. Suggest a detailed remediation plan for this vulnerability:\n\n") + json.dumps(finding, indent=2)
+        compact = {k: (v[:200] if isinstance(v, str) else v) for k, v in finding.items()}
+        prompt = (
+            template
+            or "You are a cybersecurity expert. Suggest a detailed remediation plan for this vulnerability:\n\n"
+        ) + json.dumps(compact, separators=(",", ":"))
         return await self._generate(prompt)
 
     # ======================== SOC / WAZUH ========================
 
     async def analyse_alert(self, alert_dict: dict, context: dict) -> dict[str, Any]:
-        """
-        Classify a Wazuh alert as TRUE_POSITIVE / FALSE_POSITIVE.
-
-        Uses few-shot examples from past analyst overrides to improve
-        accuracy over time.
-
-        Returns:
-            {
-                "classification": "TRUE_POSITIVE" | "FALSE_POSITIVE",
-                "confidence": float 0-100,
-                "reasoning": str,
-                "action": "ESCALATE" | "MONITOR" | "DISMISS",
-            }
-        """
-        # Get historical analyst decisions for the same rule_id (few-shot)
+        """Classify a Wazuh alert as TRUE_POSITIVE / FALSE_POSITIVE."""
         from domains.soc.models import AiVerdict
-        similar = await AiVerdict.find(
-            {"rule_id": alert_dict.get("rule_id"), "analyst_agreed": {"$exists": True}},
-        ).sort("-created_at").limit(5).to_list()
+
+        similar = (
+            await AiVerdict.find(
+                {"rule_id": alert_dict.get("rule_id"), "analyst_agreed": {"$exists": True}},
+            )
+            .sort("-created_at")
+            .limit(3)
+            .to_list()
+        )
 
         few_shot = [
             {"verdict": s.verdict, "analyst_agreed": s.analyst_agreed, "reasoning": s.reasoning}
@@ -145,19 +188,20 @@ class GeminiService:
             "4. action: ESCALATE | MONITOR | DISMISS\n\n"
             "Respond ONLY in valid JSON with those 4 keys.\n\n"
         )
-        prompt += f"\nALERT:\n{json.dumps(alert_dict, indent=2)}"
-        prompt += f"\n\nCONTEXT:\n{json.dumps(context, indent=2)}"
+        # Compact JSON for alert and context
+        prompt += f"\nALERT:\n{json.dumps(alert_dict, separators=(',', ':'))}"
+        prompt += f"\n\nCONTEXT:\n{json.dumps(context, separators=(',', ':'))}"
         if few_shot:
-            prompt += f"\n\nHISTORICAL ANALYST FEEDBACK (for similar alerts):\n{json.dumps(few_shot, indent=2)}"
+            prompt += f"\n\nHISTORICAL ANALYST FEEDBACK:\n{json.dumps(few_shot, separators=(',', ':'))}"
 
-        text = await self._generate(prompt, use_cache=False)  # Don't cache alert analyses
+        text = await self._generate(prompt, use_cache=False)
         try:
             return json.loads(self._extract_json(text))
         except json.JSONDecodeError:
             return {
                 "classification": "UNKNOWN",
                 "confidence": 0.0,
-                "reasoning": text,
+                "reasoning": text[:300],
                 "action": "MONITOR",
             }
 
@@ -165,19 +209,17 @@ class GeminiService:
 
     @staticmethod
     def _extract_json(text: str) -> str:
-        """
-        Extract JSON from Gemini's response which may include markdown
-        code fences.
-        """
+        """Extract JSON from Gemini's response (may include code fences)."""
         text = text.strip()
         if text.startswith("```"):
-            # Remove code fence
             lines = text.split("\n")
-            # Remove first and last lines (```json and ```)
             lines = [l for l in lines if not l.strip().startswith("```")]
-            text = "\n".join(lines)
+            text = "\n".join(lines).strip()
+        match = _re.search(r"\{.*\}", text, _re.DOTALL)
+        if match:
+            return match.group()
         return text.strip()
 
 
-# Singleton — import this everywhere
+# Singleton
 gemini_service = GeminiService()
