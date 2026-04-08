@@ -4,6 +4,7 @@
  * Built from scratch using framer-motion v12.
  * Pointer-events: none — never blocks interaction.
  */
+import { useEffect } from "react";
 import { useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -36,9 +37,25 @@ const DEFAULT_BEAMS: BeamDef[] = [
   { left: "80%",  top: "0",   rotate: -32, width: 1,  height: 65, opacity: 0.35, animationDelay: "0.8s",  animationDuration: "7.5s"},
 ];
 
+const BEAM_KEYFRAME_ID = "cs-beam-pulse-keyframes";
+
 export function Beams({ count = 5, color, opacity = 1, className }: BeamsProps) {
   const reduced = useReducedMotion();
   const beams = DEFAULT_BEAMS.slice(0, Math.max(1, Math.min(count, DEFAULT_BEAMS.length)));
+
+  // Inject keyframes once into <head> — singleton guard prevents duplicates
+  useEffect(() => {
+    if (document.getElementById(BEAM_KEYFRAME_ID)) return;
+    const style = document.createElement("style");
+    style.id = BEAM_KEYFRAME_ID;
+    style.textContent = `
+      @keyframes beam-pulse {
+        0%, 100% { opacity: 0; transform: translateY(-10%) scaleY(0.9); }
+        50%       { opacity: 1; transform: translateY(0%)   scaleY(1);   }
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
 
   return (
     <div
@@ -46,13 +63,6 @@ export function Beams({ count = 5, color, opacity = 1, className }: BeamsProps) 
       className={cn("absolute inset-0 overflow-hidden pointer-events-none", className)}
       style={{ opacity }}
     >
-      {/* Inject keyframe once via a style tag */}
-      <style>{`
-        @keyframes beam-pulse {
-          0%, 100% { opacity: 0; transform: translateY(-10%) scaleY(0.9); }
-          50%       { opacity: 1; transform: translateY(0%)   scaleY(1);   }
-        }
-      `}</style>
 
       {beams.map((beam, i) => (
         <div

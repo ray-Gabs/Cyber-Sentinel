@@ -4,7 +4,7 @@
  * Uses CSS custom properties so the spotlight tracks without JS re-renders.
  * Respects prefers-reduced-motion.
  */
-import { useRef, useCallback, type ReactNode, type CSSProperties } from "react";
+import { useRef, useCallback, useEffect, type ReactNode, type CSSProperties } from "react";
 import { useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +31,11 @@ export function SpotlightCard({
   const reduced  = useReducedMotion();
   const wrapRef  = useRef<HTMLDivElement>(null);
   const rafRef   = useRef<number | null>(null);
+
+  // Cancel pending RAF on unmount
+  useEffect(() => () => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+  }, []);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (reduced || !wrapRef.current) return;

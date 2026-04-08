@@ -4,7 +4,7 @@
  * Uses CSS column-count with breakInside: avoid — no JS layout engine.
  * Responsive columns via CSS media queries in inline style injection.
  */
-import { type ReactNode, type CSSProperties } from "react";
+import { Children, useId, type ReactNode, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
 interface ResponsiveColumns {
@@ -33,7 +33,8 @@ export function MasonryGrid({
   className,
   style,
 }: MasonryGridProps) {
-  const uid = "masonry-grid";
+  const rawId = useId().replace(/:/g, "");
+  const uid = `mg-${rawId}`;
 
   // Build column-count CSS per breakpoint
   let responsiveStyles = "";
@@ -58,18 +59,11 @@ export function MasonryGrid({
         style={{ columnGap: gap, ...style }}
       >
         {/* Each direct child needs break-inside: avoid */}
-        {Array.isArray(children)
-          ? children.map((child, i) => (
-              <div key={i} style={{ breakInside: "avoid", marginBottom: gap }}>
-                {child}
-              </div>
-            ))
-          : (
-            <div style={{ breakInside: "avoid", marginBottom: gap }}>
-              {children}
-            </div>
-          )
-        }
+        {Children.map(children, (child, i) => (
+          <div key={i} style={{ breakInside: "avoid", marginBottom: gap }}>
+            {child}
+          </div>
+        ))}
       </div>
     </>
   );

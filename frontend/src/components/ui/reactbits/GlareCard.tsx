@@ -4,7 +4,7 @@
  * Uses element-level onMouseMove only (no global listeners).
  * Respects prefers-reduced-motion.
  */
-import { useRef, type ReactNode, type CSSProperties } from "react";
+import { useRef, useEffect, type ReactNode, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -39,24 +39,32 @@ export function GlareCard({
   const rafRef   = useRef<number | null>(null);
   const { tilt, glare } = INTENSITY_MAP[intensity];
 
+  // Cancel pending RAF on unmount
+  useEffect(() => () => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+  }, []);
+
   function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
     if (reduced || !cardRef.current || !glareRef.current) return;
+    // Read coordinates before scheduling RAF (synthetic event may be recycled)
+    const clientX = e.clientX;
+    const clientY = e.clientY;
 
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
 
     rafRef.current = requestAnimationFrame(() => {
       if (!cardRef.current || !glareRef.current) return;
-      const rect   = cardRef.current.getBoundingClientRect();
-      const cx     = rect.left + rect.width  / 2;
-      const cy     = rect.top  + rect.height / 2;
-      const dx     = (e.clientX - cx) / (rect.width  / 2);   // -1 to 1
-      const dy     = (e.clientY - cy) / (rect.height / 2);   // -1 to 1
+      const rect = cardRef.current.getBoundingClientRect();
+      const cx   = rect.left + rect.width  / 2;
+      const cy   = rect.top  + rect.height / 2;
+      const dx   = (clientX - cx) / (rect.width  / 2);
+      const dy   = (clientY - cy) / (rect.height / 2);
 
       cardRef.current.style.transform =
         `perspective(800px) rotateX(${-dy * tilt}deg) rotateY(${dx * tilt}deg)`;
 
-      const glareX = ((e.clientX - rect.left) / rect.width)  * 100;
-      const glareY = ((e.clientY - rect.top)  / rect.height) * 100;
+      const glareX = ((clientX - rect.left) / rect.width)  * 100;
+      const glareY = ((clientY - rect.top)  / rect.height) * 100;
       glareRef.current.style.background =
         `radial-gradient(circle at ${glareX}% ${glareY}%, ${color} 0%, transparent 60%)`;
       glareRef.current.style.opacity = String(glare);

@@ -55,17 +55,25 @@ export function ScrollVelocity({
     return () => obs.disconnect();
   }, []);
 
+  // Ref to measure one copy's width for seamless loop wrapping
+  const copyRef = useRef<HTMLSpanElement>(null);
+
   useAnimationFrame(() => {
     if (reduced || !visible) return;
-    const vel   = scrollVelocity.get();
-    const speed = baseSpeed + Math.min(Math.abs(vel) * 0.001, speedOnScroll);
-    const delta = direction === "left" ? -speed : speed;
-    x.set(x.get() + delta);
+    const vel       = scrollVelocity.get();
+    const speed     = baseSpeed + Math.min(Math.abs(vel) * 0.001, speedOnScroll);
+    const delta     = direction === "left" ? -speed : speed;
+    const copyWidth = copyRef.current?.offsetWidth ?? 600;
+    let next        = x.get() + delta;
+
+    // Wrap when we've scrolled one full copy — creates a seamless loop
+    if (direction === "left"  && next < -copyWidth) next += copyWidth;
+    if (direction === "right" && next >  copyWidth) next -= copyWidth;
+
+    x.set(next);
   });
 
   if (reduced) return null;
-
-  // Duplicate items for seamless loop (itemStr unused — kept for reference)
 
   return (
     <div
@@ -77,11 +85,12 @@ export function ScrollVelocity({
         className="flex whitespace-nowrap"
         style={{ x }}
       >
-        {/* Three copies to fill any viewport width */}
+        {/* Three copies — first has ref for width measurement */}
         {[0, 1, 2].map((copy) => (
           <span
             key={copy}
-            className={cn("inline-flex items-center text-[10px] uppercase tracking-[0.18em] font-semibold mr-0", textClassName)}
+            ref={copy === 0 ? copyRef : undefined}
+            className={cn("inline-flex items-center text-[10px] uppercase tracking-[0.18em] font-semibold", textClassName)}
             style={{ color: "var(--marquee-text)" }}
           >
             {items.map((item, i) => (
