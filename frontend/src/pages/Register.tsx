@@ -131,7 +131,14 @@ export default function Register() {
         />
       )}
 
-      {/* ── Theme toggle ─────────────────────────────────────────── */}
+      {/* ── Top controls ─────────────────────────────────────────── */}
+      <Link
+        to="/"
+        className="absolute top-5 left-5 btn-ghost rounded-lg px-3 py-1.5 z-20 text-xs flex items-center gap-1.5"
+        style={{ color: "var(--text-muted)" }}
+      >
+        ← Home
+      </Link>
       <button
         onClick={toggleTheme}
         className="absolute top-5 right-5 btn-ghost rounded-full p-2 z-20"

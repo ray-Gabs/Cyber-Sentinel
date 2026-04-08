@@ -7,14 +7,14 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useTheme } from "@/providers/ThemeProvider";
+import { useAuth } from "@/hooks/useAuth";
 import {
   ShieldCheck, Radar, BrainCircuit, FileText,
-  ArrowRight, Terminal, Activity,
+  ArrowRight, Terminal, Activity, Sun, Moon,
 } from "lucide-react";
 import { DottedBackground } from "@/components/ui/DottedBackground";
 import { AnimatedGridPattern } from "@/components/ui/AnimatedGridPattern";
 import { FloatingParticles } from "@/components/ui/FloatingParticles";
-import { GlitchText } from "@/components/ui/GlitchText";
 import { BorderGlow } from "@/components/ui/BorderGlow";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
@@ -52,7 +52,8 @@ const FEATURES = [
 ] as const;
 
 export default function Landing() {
-  const { isDark } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
+  const { user } = useAuth();
 
   return (
     <div
@@ -136,25 +137,51 @@ export default function Landing() {
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Link
-            to={ROUTES.LOGIN}
-            className="text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            style={{ color: "var(--text-muted)" }}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleTheme}
+            className="btn-ghost p-2 rounded-lg"
+            title={isDark ? "Light mode" : "Dark mode"}
           >
-            Sign in
-          </Link>
-          <Link
-            to={ROUTES.REGISTER}
-            className="text-sm font-semibold px-4 py-2 rounded-lg transition-all"
-            style={{
-              background: "rgba(59,130,246,0.15)",
-              border: "1px solid rgba(59,130,246,0.3)",
-              color: "#93c5fd",
-            }}
-          >
-            Register
-          </Link>
+            {isDark
+              ? <Sun  size={14} style={{ color: "var(--text-muted)" }} />
+              : <Moon size={14} style={{ color: "var(--text-muted)" }} />
+            }
+          </button>
+          {user ? (
+            <Link
+              to={ROUTES.DASHBOARD}
+              className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition-all"
+              style={{
+                background: "rgba(59,130,246,0.15)",
+                border: "1px solid rgba(59,130,246,0.3)",
+                color: "#93c5fd",
+              }}
+            >
+              Go to Dashboard <ArrowRight size={13} />
+            </Link>
+          ) : (
+            <>
+              <Link
+                to={ROUTES.LOGIN}
+                className="text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Sign in
+              </Link>
+              <Link
+                to={ROUTES.REGISTER}
+                className="text-sm font-semibold px-4 py-2 rounded-lg transition-all"
+                style={{
+                  background: "rgba(59,130,246,0.15)",
+                  border: "1px solid rgba(59,130,246,0.3)",
+                  color: "#93c5fd",
+                }}
+              >
+                Register
+              </Link>
+            </>
+          )}
         </div>
       </nav>
 
@@ -182,7 +209,7 @@ export default function Landing() {
           className="text-4xl sm:text-5xl md:text-6xl font-bold max-w-3xl leading-[1.08] tracking-tight"
           style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.03em" }}
         >
-          <GlitchText text="Unified Security" style={{ color: "var(--text-base)", fontFamily: "Syne, sans-serif" }} />
+          <span>Unified Security</span>
           <br />
           <span style={{ color: "#3b82f6" }}>Assessment Platform</span>
         </motion.h1>

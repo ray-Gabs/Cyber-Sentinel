@@ -37,7 +37,7 @@ const ThemeContext = createContext<ThemeContextValue>({
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
     try {
-      return (localStorage.getItem("cs-theme") as Theme) || "dark";
+      return (localStorage.getItem("cs-theme") as Theme) || "light";
     } catch {
       return "dark";
     }

@@ -3,7 +3,7 @@
  * GPU-friendly: uses only CSS animation with transform/opacity.
  * Memoized to prevent regeneration on parent re-renders.
  */
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 
 interface Particle {
   id: number;
@@ -38,16 +38,30 @@ export function FloatingParticles({
     [count],
   );
 
-  return (
-    <div className={`absolute inset-0 overflow-hidden pointer-events-none ${className ?? ""}`}>
-      <style>{`
+  // Inject keyframe into <head> once, clean up on unmount
+  useEffect(() => {
+    const id = "cs-float-keyframe";
+    if (!document.getElementById(id)) {
+      const style = document.createElement("style");
+      style.id = id;
+      style.textContent = `
         @keyframes cs-float {
-          0%   { transform: translateY(0)      translateX(0);    opacity: 0; }
+          0%   { transform: translateY(0) translateX(0);    opacity: 0; }
           8%   { opacity: 1; }
           92%  { opacity: 0.6; }
           100% { transform: translateY(-110vh) translateX(15px); opacity: 0; }
         }
-      `}</style>
+      `;
+      document.head.appendChild(style);
+    }
+    return () => {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    };
+  }, []);
+
+  return (
+    <div className={`absolute inset-0 overflow-hidden pointer-events-none ${className ?? ""}`}>
       {particles.map((p) => (
         <div
           key={p.id}
