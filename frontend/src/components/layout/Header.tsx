@@ -3,7 +3,7 @@
  * theme toggle, notification bell, and user controls with story-ring avatar.
  */
 import { useRef, useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/providers/ThemeProvider";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -20,6 +20,12 @@ export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
   const { notifications, unreadCount, loading, markRead, markAllRead, deleteNotification, clearAll } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -108,7 +114,7 @@ export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
         >
           {isDark
             ? <Sun  size={14} style={{ color: "var(--text-muted)" }} />
-            : <Moon size={14} style={{ color: "var(--text-muted)" }} />
+            : <Moon size={14} style={{ color: "var(--accent)" }} />
           }
         </button>
 
@@ -163,7 +169,7 @@ export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
 
         {/* Logout */}
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className="btn-ghost p-2 rounded-lg"
           title="Logout"
           aria-label="Logout"
