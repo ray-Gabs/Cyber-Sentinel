@@ -37,10 +37,18 @@ export async function markAllNotificationsRead(): Promise<void> {
 
 /** DELETE /api/notifications/{id} — permanently delete one notification */
 export async function deleteNotification(id: string): Promise<void> {
-  await api.delete(`/notifications/${id}`);
+  try {
+    await api.delete(`/notifications/${id}`);
+  } catch {
+    // silently ignore if backend not yet available
+  }
 }
 
 /** DELETE /api/notifications/ — delete all notifications for current user */
 export async function clearAllNotifications(): Promise<void> {
-  await api.delete("/notifications/");
+  try {
+    await api.delete("/notifications/");
+  } catch {
+    // silently ignore if backend not yet available
+  }
 }

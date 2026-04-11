@@ -40,24 +40,25 @@ export default function DataTable<T extends Record<string, unknown>>({
 }: DataTableProps<T>) {
   if (data.length === 0) {
     return (
-      <div className="card flex items-center justify-center py-12 text-gray-500">
+      <div className="card flex items-center justify-center py-12" style={{ color: "var(--text-muted)" }}>
         {emptyMessage}
       </div>
     );
   }
 
   return (
-    <div className={cn("overflow-x-auto rounded-xl border border-gray-800", className)}>
+    <div
+      className={cn("overflow-x-auto rounded-xl border", className)}
+      style={{ borderColor: "var(--border)" }}
+    >
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-800 bg-gray-900/50">
+          <tr style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--bg-muted)" }}>
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={cn(
-                  "px-4 py-3 text-left text-xs font-medium uppercase text-gray-500",
-                  col.className
-                )}
+                className={cn("px-4 py-3 text-left text-xs font-medium uppercase", col.className)}
+                style={{ color: "var(--text-muted)" }}
               >
                 {col.label}
               </th>
@@ -69,13 +70,15 @@ export default function DataTable<T extends Record<string, unknown>>({
             <tr
               key={idx}
               onClick={() => onRowClick?.(item)}
-              className={cn(
-                "border-b border-gray-800/50 transition-colors",
-                onRowClick && "cursor-pointer hover:bg-gray-800/50"
-              )}
+              className={cn("transition-colors", onRowClick && "cursor-pointer hover:bg-[var(--bg-hover)]")}
+              style={{ borderBottom: "1px solid color-mix(in srgb, var(--border) 50%, transparent)" }}
             >
               {columns.map((col) => (
-                <td key={col.key} className={cn("px-4 py-3 text-gray-300", col.className)}>
+                <td
+                  key={col.key}
+                  className={cn("px-4 py-3", col.className)}
+                  style={{ color: "var(--text-base)" }}
+                >
                   {col.render
                     ? col.render(item)
                     : String(item[col.key] ?? "")}

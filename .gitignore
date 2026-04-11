@@ -43,6 +43,10 @@ secrets/
 *.key
 *.pem
 
+# Celery runtime files
+celerybeat-schedule
+celerybeat.pid
+
 # Python extras
 *.pyc
 .pytest_cache/

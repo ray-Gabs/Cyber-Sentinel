@@ -1,6 +1,7 @@
 /**
  * SeverityBadge — shared severity indicator used across scans, alerts, and findings.
  * Accepts case-insensitive severity strings.
+ * Uses CSS custom properties from design-tokens.css for theme-aware coloring.
  */
 
 interface SeverityBadgeProps {
@@ -8,20 +9,24 @@ interface SeverityBadgeProps {
   className?: string;
 }
 
-const SEVERITY_STYLES: Record<string, string> = {
-  critical: "bg-red-500/20 text-red-400 border border-red-500/30",
-  high:     "bg-orange-500/20 text-orange-400 border border-orange-500/30",
-  medium:   "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30",
-  low:      "bg-blue-500/20 text-blue-400 border border-blue-500/30",
-  info:     "bg-slate-500/20 text-slate-400 border border-slate-500/30",
+const SEV_TOKEN: Record<string, string> = {
+  critical: "critical",
+  high:     "high",
+  medium:   "medium",
+  low:      "low",
+  info:     "info",
 };
 
 export default function SeverityBadge({ severity, className = "" }: SeverityBadgeProps) {
-  const key = severity?.toLowerCase() ?? "info";
-  const styles = SEVERITY_STYLES[key] ?? SEVERITY_STYLES.info;
+  const key = SEV_TOKEN[severity?.toLowerCase()] ?? "info";
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wide ${styles} ${className}`.trim()}
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wide border ${className}`.trim()}
+      style={{
+        backgroundColor: `color-mix(in srgb, var(--sev-${key}) 15%, transparent)`,
+        color: `var(--sev-${key}-text)`,
+        borderColor: `color-mix(in srgb, var(--sev-${key}) 30%, transparent)`,
+      }}
     >
       {severity}
     </span>

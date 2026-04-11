@@ -53,7 +53,6 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions) {
       if (isUnmounted.current) { ws.close(); return; }
       setConnected(true);
       retryCount.current = 0;
-      console.log(`[WS] Connected to ${channel}`);
     };
 
     ws.onmessage = (event) => {
@@ -73,11 +72,9 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions) {
       // Don't reconnect if the component has unmounted (StrictMode or real unmount)
       if (isUnmounted.current) return;
 
-      console.log(`[WS] Disconnected from ${channel}`);
       if (autoReconnect && retryCount.current < maxRetries) {
         const delay = Math.min(BASE_DELAY_MS * 2 ** retryCount.current, MAX_DELAY_MS);
         retryCount.current += 1;
-        console.log(`[WS] Reconnecting in ${delay}ms (attempt ${retryCount.current}/${maxRetries})`);
         reconnectTimer.current = setTimeout(connect, delay);
       } else if (retryCount.current >= maxRetries) {
         console.warn(`[WS] Max retries (${maxRetries}) reached for "${channel}". Giving up.`);

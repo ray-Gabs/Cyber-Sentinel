@@ -28,8 +28,14 @@ export default function StatusBadge({ value, variant = "severity" }: StatusBadge
       {/* Pulsing dot for running status */}
       {value === "running" && (
         <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sentinel-400 opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-sentinel-500" />
+          <span
+            className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+            style={{ backgroundColor: "var(--color-accent)" }}
+          />
+          <span
+            className="relative inline-flex h-2 w-2 rounded-full"
+            style={{ backgroundColor: "var(--color-accent)" }}
+          />
         </span>
       )}
       {capitalize(value)}
