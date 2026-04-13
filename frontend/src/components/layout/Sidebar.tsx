@@ -147,7 +147,7 @@ function SidebarNav({
                   "group relative flex items-center rounded-lg overflow-hidden transition-colors duration-150",
                   collapsed ? "justify-center p-2 mx-0.5" : "gap-2.5 px-2 py-2",
                   isActive
-                    ? "bg-[var(--bg-muted)]"
+                    ? "bg-[var(--accent-dim)]"
                     : "text-[var(--text-muted)] hover:bg-[var(--bg-muted)] hover:text-[var(--text-base)]"
                 )
               }
@@ -184,7 +184,7 @@ function SidebarNav({
                         initial="hidden" animate="show" exit="exit"
                         variants={labelVariants}
                         className="text-sm font-medium whitespace-nowrap overflow-hidden"
-                        style={{ color: isActive ? "var(--text-base)" : "inherit" }}
+                        style={{ color: isActive ? "var(--accent)" : "inherit" }}
                       >
                         {label}
                       </motion.span>

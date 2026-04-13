@@ -71,6 +71,7 @@ export default function AlertFeed() {
   const [filterLevel, setFilterLevel]   = useState(0);
   const [filterAgent, setFilterAgent]   = useState(searchParams.get("agent_name") ?? "");
   const [liveCount, setLiveCount]       = useState(0);
+  const [showFP, setShowFP]             = useState(false);
 
   const { messages } = useWebSocket<AlertSummary>({ channel: "alerts" });
 
@@ -108,6 +109,10 @@ export default function AlertFeed() {
   }, [messages, alerts, page]);
 
   const uniqueAgents = [...new Set(alerts.map((a) => a.agent_name).filter(Boolean))];
+
+  // Split real alerts from false positives
+  const realAlerts = alerts.filter((a) => a.ai_verdict !== "FALSE_POSITIVE");
+  const fpAlerts   = alerts.filter((a) => a.ai_verdict === "FALSE_POSITIVE");
 
   if (loading) {
     return (
@@ -254,15 +259,18 @@ export default function AlertFeed() {
           </p>
         </div>
       ) : (
+        <>
         <AnimatedList
-          items={alerts}
+          items={[...realAlerts, ...(showFP ? fpAlerts : [])]}
           keyExtractor={(alert) => alert.id}
           className="space-y-2"
           renderItem={(alert) => {
+            const isFP       = alert.ai_verdict === "FALSE_POSITIVE";
             const sevColor   = getSeverityColor(alert.rule_level);
             const sevLabel   = getSeverityLabel(alert.rule_level);
             const verdictSty = alert.ai_verdict ? VERDICT_STYLE[alert.ai_verdict] : null;
             const actionSty  = alert.ai_action  ? ACTION_STYLE[alert.ai_action]   : null;
+            const isCritical = alert.rule_level >= 12;
 
             return (
               <motion.div
@@ -271,6 +279,9 @@ export default function AlertFeed() {
                 style={{
                   padding: "1rem 1.25rem 1rem 1rem",
                   borderLeft: `3px solid ${sevColor}`,
+                  boxShadow: isCritical ? "0 0 20px rgba(239,68,68,0.12)" : undefined,
+                  opacity: isFP ? 0.55 : 1,
+                  position: "relative",
                 }}
                 onMouseEnter={(e) => {
                   (e.currentTarget as HTMLElement).style.borderColor = sevColor;
@@ -410,10 +421,32 @@ export default function AlertFeed() {
                     />
                   </div>
                 </div>
+                {isFP && (
+                  <span
+                    className="absolute top-2 right-8 text-[9px] italic"
+                    style={{ color: "var(--text-subtle)" }}
+                  >
+                    False Positive
+                  </span>
+                )}
               </motion.div>
             );
           }}
         />
+
+        {/* False positive toggle */}
+        {fpAlerts.length > 0 && (
+          <button
+            onClick={() => setShowFP((v) => !v)}
+            className="text-xs mt-1"
+            style={{ color: "var(--text-subtle)", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
+          >
+            {showFP
+              ? `Hide ${fpAlerts.length} false positive${fpAlerts.length > 1 ? "s" : ""}`
+              : `Show ${fpAlerts.length} false positive${fpAlerts.length > 1 ? "s" : ""}`}
+          </button>
+        )}
+        </>
       )}
 
       {/* ── Pagination ──────────────────────────────────────────── */}
