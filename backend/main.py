@@ -53,6 +53,34 @@ async def lifespan(app: FastAPI):
     await seed_admin()
     await seed_demo_user()
 
+    # Seed demo projects for the demo user (idempotent)
+    import os as _os
+    _demo_email = _os.getenv("DEMO_USER_EMAIL", "").strip()
+    if _demo_email:
+        from domains.auth.models import User as _User
+        from domains.soc.project_models import SocProject as _SocProject
+        _demo = await _User.find_one({"email": _demo_email})
+        if _demo:
+            _count = await _SocProject.find({"owner_id": str(_demo.id)}).count()
+            if _count == 0:
+                _js_url = _os.getenv("DEMO_JUICESHOP_URL", "http://localhost:3000")
+                _dvwa_url = _os.getenv("DEMO_DVWA_URL", "http://localhost:8080")
+                await _SocProject(
+                    owner_id=str(_demo.id), name="Juice Shop", slug="juice-shop",
+                    target_url=_js_url,
+                    description="OWASP Juice Shop — intentionally vulnerable web app",
+                    wazuh_agent_registered=True, wazuh_agent_id="001",
+                    wazuh_agent_name="juice-shop-agent",
+                ).insert()
+                await _SocProject(
+                    owner_id=str(_demo.id), name="DVWA", slug="dvwa",
+                    target_url=_dvwa_url,
+                    description="Damn Vulnerable Web Application",
+                    wazuh_agent_registered=True, wazuh_agent_id="002",
+                    wazuh_agent_name="dvwa-agent",
+                ).insert()
+                log.info("Seeded 2 demo projects for %s", _demo_email)
+
     yield
 
     # Shutdown
@@ -134,6 +162,7 @@ from domains.correlation.router import router as correlation_router
 from domains.notifications.router import router as notifications_router
 from domains.analytics.router import router as analytics_router
 from domains.audit.router import router as audit_router
+from domains.soc.projects_router import router as soc_projects_router
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 app.include_router(pentest_router, prefix="/api/scans", tags=["Pentesting"])
@@ -142,6 +171,7 @@ app.include_router(correlation_router, prefix="/api/correlations", tags=["Correl
 app.include_router(notifications_router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(analytics_router, tags=["Analytics"])
 app.include_router(audit_router, prefix="/api/audit", tags=["Audit"])
+app.include_router(soc_projects_router, prefix="/api/soc", tags=["SOC Projects"])
 
 # --------------- Health Check ---------------
 

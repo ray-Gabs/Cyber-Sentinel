@@ -35,6 +35,7 @@ import AlertFeed from "@/pages/soc/AlertFeed";
 import AlertDetail from "@/pages/soc/AlertDetail";
 import Analytics from "@/pages/soc/Analytics";
 import AgentsMonitor from "@/pages/soc/AgentsMonitor";
+import UserProjects from "@/pages/soc/UserProjects";
 import Settings from "@/pages/Settings";
 import Correlation from "@/pages/Correlation";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -126,6 +127,7 @@ function AppRoutes() {
         <Route path="/alerts" element={<AlertFeed />} />
         <Route path="/alerts/:id" element={<AlertDetail />} />
         <Route path="/agents" element={<AgentsMonitor />} />
+        <Route path="/projects" element={<UserProjects />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/correlations" element={<Correlation />} />
         <Route path="/settings" element={<Settings />} />

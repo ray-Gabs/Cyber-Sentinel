@@ -7,7 +7,7 @@ import { NavLink } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Crosshair, ShieldAlert, BarChart3,
-  Settings, ShieldCheck, Link2, Monitor, X, Users, ClipboardList,
+  Settings, ShieldCheck, Link2, Monitor, X, Users, ClipboardList, Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
@@ -43,6 +43,10 @@ const navItems: NavItem[] = [
   {
     to: ROUTES.AGENTS,       label: "Agents",      icon: Monitor,
     section: null,             color: "#22C55E", iconBg: "rgba(34,197,94,0.18)",
+  },
+  {
+    to: ROUTES.PROJECTS,     label: "Projects",    icon: Layers,
+    section: null,             color: "#A78BFA", iconBg: "rgba(167,139,250,0.18)",
   },
   {
     to: ROUTES.ANALYTICS,    label: "Analytics",   icon: BarChart3,

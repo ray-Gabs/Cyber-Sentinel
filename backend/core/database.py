@@ -32,6 +32,7 @@ async def init_db() -> None:
     from domains.auth.models import User
     from domains.pentesting.models import Scan
     from domains.soc.models import Alert, AiVerdict, CustomDetectionRule
+    from domains.soc.project_models import SocProject
     from domains.correlation.models import Correlation
     from domains.soc.playbook import PlaybookExecution
     from domains.notifications.models import Notification
@@ -45,6 +46,7 @@ async def init_db() -> None:
             Alert,
             AiVerdict,
             CustomDetectionRule,
+            SocProject,
             Correlation,
             PlaybookExecution,
             Notification,

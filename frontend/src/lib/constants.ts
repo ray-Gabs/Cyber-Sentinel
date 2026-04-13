@@ -93,4 +93,5 @@ export const ROUTES = {
   FORGOT_PASSWORD: "/forgot-password",
   RESET_PASSWORD: "/reset-password",
   AUDIT: "/audit",
+  PROJECTS: "/projects",
 } as const;
