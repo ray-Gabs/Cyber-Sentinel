@@ -49,8 +49,9 @@ async def lifespan(app: FastAPI):
     await seed_default_rules()
 
     # Seed first admin account on fresh DB (uses FIRST_ADMIN_* env vars)
-    from domains.auth.service import seed_admin
+    from domains.auth.service import seed_admin, seed_demo_user
     await seed_admin()
+    await seed_demo_user()
 
     yield
 

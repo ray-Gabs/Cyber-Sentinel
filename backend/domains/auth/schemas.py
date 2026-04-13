@@ -96,6 +96,8 @@ class UserResponse(BaseModel):
     email: str
     role: str
     is_active: bool
+    status: str = "active"
+    is_demo: bool = False
     created_at: datetime
     last_login: Optional[datetime] = None
     wazuh_agent_name: Optional[str] = None

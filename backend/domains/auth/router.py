@@ -2,6 +2,8 @@
 # backend/domains/auth/router.py — Auth REST Endpoints
 # ============================================================
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from core.dependencies import get_current_user
@@ -25,13 +27,11 @@ from domains.audit import service as audit_service
 router = APIRouter()
 
 
-@router.post("/register", response_model=TokenResponse, status_code=201)
+@router.post("/register", status_code=201)
 @limiter.limit(settings.rate_limit_register)
 async def register(request: Request, data: RegisterRequest):
-    """Register a new user account and return a JWT so the client is immediately signed in."""
+    """Register a new user account — returns pending state awaiting admin approval."""
     user = await service.register_user(data)
-    token = create_access_token(data={"sub": str(user.id), "role": user.role})
-    # Audit — non-blocking
     ip = request.client.host if request.client else None
     await audit_service.log_event(
         user_id=str(user.id),
@@ -39,7 +39,7 @@ async def register(request: Request, data: RegisterRequest):
         action="user.registered",
         ip_address=ip,
     )
-    return TokenResponse(access_token=token)
+    return {"message": "Registration received — awaiting admin approval", "status": "pending"}
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -86,6 +86,8 @@ def _user_response(user: User) -> UserResponse:
         email=user.email,
         role=user.role,
         is_active=user.is_active,
+        status=getattr(user, "status", "active"),
+        is_demo=getattr(user, "is_demo", False),
         created_at=user.created_at,
         last_login=user.last_login,
         wazuh_agent_name=user.wazuh_agent_name,
@@ -169,6 +171,54 @@ async def toggle_user_status(
         resource_type="user",
         resource_id=user_id,
         details=f"{target.username} set to {'active' if target.is_active else 'inactive'}",
+    )
+    return _user_response(target)
+
+
+@router.patch("/users/{user_id}/approve", response_model=UserResponse)
+async def approve_user(user_id: str, user: User = Depends(get_current_user)):
+    """[Admin] Approve a pending user account so they can log in."""
+    _require_admin(user)
+    from bson import ObjectId
+    target = await User.get(ObjectId(user_id))
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    target.status = "active"
+    target.is_active = True
+    target.approved_by = str(user.id)
+    target.approved_at = datetime.now(timezone.utc)
+    await target.save()
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="user.approved",
+        resource_type="user",
+        resource_id=user_id,
+        details=f"Approved: {target.username}",
+    )
+    return _user_response(target)
+
+
+@router.patch("/users/{user_id}/suspend", response_model=UserResponse)
+async def suspend_user(user_id: str, user: User = Depends(get_current_user)):
+    """[Admin] Suspend an active user account."""
+    _require_admin(user)
+    from bson import ObjectId
+    target = await User.get(ObjectId(user_id))
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if str(target.id) == str(user.id):
+        raise HTTPException(status_code=400, detail="Cannot suspend your own account")
+    target.status = "suspended"
+    target.is_active = False
+    await target.save()
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="user.suspended",
+        resource_type="user",
+        resource_id=user_id,
+        details=f"Suspended: {target.username}",
     )
     return _user_response(target)
 

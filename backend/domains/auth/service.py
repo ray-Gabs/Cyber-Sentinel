@@ -51,6 +51,33 @@ async def seed_admin() -> None:
     )
 
 
+async def seed_demo_user() -> None:
+    """
+    Seed a demo user account on startup.
+    Reads DEMO_USER_EMAIL and DEMO_USER_PASSWORD from env.
+    Skips silently if env vars are not set or user already exists.
+    """
+    import os
+    email = os.getenv("DEMO_USER_EMAIL", "").strip()
+    password = os.getenv("DEMO_USER_PASSWORD", "").strip()
+    if not email or not password:
+        return
+    existing = await User.find_one({"email": email})
+    if existing:
+        return
+    demo = User(
+        username="demo",
+        email=email,
+        hashed_password=hash_password(password),
+        role="analyst",
+        status="active",
+        is_active=True,
+        is_demo=True,
+    )
+    await demo.insert()
+    log.info("Demo user seeded: %s", email)
+
+
 async def register_user(data: RegisterRequest) -> User:
     """
     Create a new user. Raises 409 if username or email already exists.
@@ -69,29 +96,11 @@ async def register_user(data: RegisterRequest) -> User:
         username=data.username,
         email=data.email,
         hashed_password=hash_password(data.password),
+        status="pending",
+        is_active=False,
     )
     await user.insert()
-
-    # Welcome email — non-blocking; registration succeeds even if email fails
-    try:
-        await send_email(
-            to=user.email,
-            subject="Welcome to Cyber Sentinel",
-            template="welcome.html",
-            context={
-                "username": user.username,
-                "dashboard_url": settings.frontend_url,
-            },
-            plain_text=(
-                f"Hi {user.username},\n\n"
-                f"Your Cyber Sentinel account is ready. "
-                f"Visit {settings.frontend_url} to get started.\n\n"
-                f"— Cyber Sentinel"
-            ),
-        )
-    except Exception as e:
-        log.warning("Welcome email not sent to %s: %s", user.email, e)
-
+    log.info("New registration (pending approval): %s <%s>", user.username, user.email)
     return user
 
 
@@ -107,6 +116,19 @@ async def authenticate_user(data: LoginRequest) -> TokenResponse:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
+        )
+
+    # Approval / suspension gate
+    user_status = getattr(user, "status", "active")
+    if user_status == "pending":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account pending admin approval.",
+        )
+    if user_status == "suspended":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account suspended. Contact an administrator.",
         )
 
     # Update last_login timestamp
