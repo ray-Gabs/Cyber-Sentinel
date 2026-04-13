@@ -11,13 +11,13 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Users, ShieldCheck, Eye, Activity,
+  Users, ShieldCheck, Activity,
   RefreshCw, CheckCircle2, AlertCircle, Clock,
   UserX, Search, Wifi, WifiOff, UserCheck, UserMinus,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { listUsers, updateUserRole, toggleUserStatus, approveUser, suspendUser } from "@/services/authService";
-import type { UserResponse, UserRole, UserStatus } from "@/types";
+import type { UserResponse, UserRole } from "@/types";
 import { ROUTES } from "@/lib/constants";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
