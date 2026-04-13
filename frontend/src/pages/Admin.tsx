@@ -16,8 +16,8 @@ import {
   UserX, Search, Wifi, WifiOff, UserCheck, UserMinus,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { listUsers, updateUserRole, toggleUserStatus } from "@/services/authService";
-import type { UserResponse, UserRole } from "@/types";
+import { listUsers, updateUserRole, toggleUserStatus, approveUser, suspendUser } from "@/services/authService";
+import type { UserResponse, UserRole, UserStatus } from "@/types";
 import { ROUTES } from "@/lib/constants";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -62,8 +62,6 @@ function formatDate(iso?: string): string {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-
-type FilterTab = "all" | UserRole;
 
 export default function Admin() {
   const { user: me } = useAuth();
@@ -127,30 +125,63 @@ export default function Admin() {
     }
   }
 
+  async function handleApprove(userId: string) {
+    setBusy((b) => ({ ...b, [`approve_${userId}`]: true }));
+    try {
+      const updated = await approveUser(userId);
+      setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
+      showToast(`${updated.username} approved`, true);
+    } catch {
+      showToast("Failed to approve user", false);
+    } finally {
+      setBusy((b) => ({ ...b, [`approve_${userId}`]: false }));
+    }
+  }
+
+  async function handleSuspend(userId: string) {
+    setBusy((b) => ({ ...b, [`suspend_${userId}`]: true }));
+    try {
+      const updated = await suspendUser(userId);
+      setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
+      showToast(`${updated.username} suspended`, true);
+    } catch {
+      showToast("Failed to suspend user", false);
+    } finally {
+      setBusy((b) => ({ ...b, [`suspend_${userId}`]: false }));
+    }
+  }
+
   // ── Stats ──────────────────────────────────────────────────────────────────
   const counts = {
     all:     users.length,
     admin:   users.filter((u) => u.role === "admin").length,
     analyst: users.filter((u) => u.role === "analyst").length,
     viewer:  users.filter((u) => u.role === "viewer").length,
+    pending: users.filter((u) => u.status === "pending").length,
   };
 
   const STATS = [
-    { label: "Total",    value: counts.all,     icon: Users,      color: "#64748b" },
+    { label: "Total",    value: counts.all,     icon: Users,       color: "#64748b" },
+    { label: "Pending",  value: counts.pending, icon: Clock,       color: "#f59e0b" },
+    { label: "Analysts", value: counts.analyst, icon: Activity,    color: "#60a5fa" },
     { label: "Admins",   value: counts.admin,   icon: ShieldCheck, color: "#f87171" },
-    { label: "Analysts", value: counts.analyst, icon: Activity,   color: "#60a5fa" },
-    { label: "Viewers",  value: counts.viewer,  icon: Eye,        color: "#94a3b8" },
   ];
 
   // ── Filter ─────────────────────────────────────────────────────────────────
+  type FilterTab = "all" | UserRole | "pending";
   const TABS: { key: FilterTab; label: string; count: number }[] = [
     { key: "all",     label: "All",     count: counts.all     },
+    { key: "pending", label: "Pending", count: counts.pending },
     { key: "viewer",  label: "Viewers", count: counts.viewer  },
     { key: "analyst", label: "Analysts",count: counts.analyst },
     { key: "admin",   label: "Admins",  count: counts.admin   },
   ];
 
-  const filtered = (filter === "all" ? users : users.filter((u) => u.role === filter))
+  const filtered = (
+    filter === "all" ? users
+    : filter === "pending" ? users.filter((u) => u.status === "pending")
+    : users.filter((u) => u.role === (filter as UserRole))
+  )
     .filter((u) =>
       !search ||
       u.username.toLowerCase().includes(search.toLowerCase()) ||
@@ -334,20 +365,24 @@ export default function Admin() {
                   {u.wazuh_agent_name ?? "No agent"}
                 </span>
 
-                {/* Active/inactive indicator */}
+                {/* Status badge */}
                 <span
                   className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full"
                   style={
-                    u.is_active
-                      ? { backgroundColor: "rgba(34,197,94,0.08)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.2)" }
-                      : { backgroundColor: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }
+                    u.status === "pending"
+                      ? { backgroundColor: "rgba(245,158,11,0.1)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.25)" }
+                      : u.status === "suspended"
+                      ? { backgroundColor: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }
+                      : { backgroundColor: "rgba(34,197,94,0.08)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.2)" }
                   }
                 >
                   <span
                     className="w-1.5 h-1.5 rounded-full"
-                    style={{ backgroundColor: u.is_active ? "#4ade80" : "#f87171" }}
+                    style={{
+                      backgroundColor: u.status === "pending" ? "#fbbf24" : u.status === "suspended" ? "#f87171" : "#4ade80",
+                    }}
                   />
-                  {u.is_active ? "Active" : "Inactive"}
+                  {u.status === "pending" ? "Pending" : u.status === "suspended" ? "Suspended" : "Active"}
                 </span>
 
                 {/* Role dropdown — only for other users */}
@@ -375,6 +410,40 @@ export default function Admin() {
                   </div>
                 )}
 
+                {/* Approve — pending users only */}
+                {u.id !== me?.id && u.status === "pending" && (
+                  <button
+                    disabled={!!busy[`approve_${u.id}`]}
+                    onClick={() => handleApprove(u.id)}
+                    title="Approve account"
+                    className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-50"
+                    style={{ backgroundColor: "rgba(34,197,94,0.1)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.25)" }}
+                  >
+                    {busy[`approve_${u.id}`]
+                      ? <RefreshCw size={11} className="animate-spin" />
+                      : <UserCheck size={11} />
+                    }
+                    Approve
+                  </button>
+                )}
+
+                {/* Suspend — active users only */}
+                {u.id !== me?.id && u.status === "active" && (
+                  <button
+                    disabled={!!busy[`suspend_${u.id}`]}
+                    onClick={() => handleSuspend(u.id)}
+                    title="Suspend account"
+                    className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-50"
+                    style={{ backgroundColor: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }}
+                  >
+                    {busy[`suspend_${u.id}`]
+                      ? <RefreshCw size={11} className="animate-spin" />
+                      : <UserMinus size={11} />
+                    }
+                    Suspend
+                  </button>
+                )}
+
                 {/* Activate / Deactivate toggle — only for other users */}
                 {u.id !== me?.id && (
                   <button
@@ -384,7 +453,7 @@ export default function Admin() {
                     className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-50"
                     style={
                       u.is_active
-                        ? { backgroundColor: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }
+                        ? { backgroundColor: "rgba(100,116,139,0.08)", color: "#64748b", border: "1px solid rgba(100,116,139,0.2)" }
                         : { backgroundColor: "rgba(34,197,94,0.08)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.2)" }
                     }
                   >

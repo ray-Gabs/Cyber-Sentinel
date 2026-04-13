@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
+import { getMe } from "@/services/authService";
 import { useTheme } from "@/providers/ThemeProvider";
 import {
   ShieldCheck, LogIn, AlertCircle, Eye, EyeOff,
@@ -49,12 +50,25 @@ export default function Login() {
     setLoading(true);
     try {
       await login({ identifier, password });
-      navigate(ROUTES.DASHBOARD);
+      // Redirect based on role — fetch me after token is stored
+      try {
+        const me = await getMe();
+        navigate(me.role === "admin" ? "/admin" : ROUTES.DASHBOARD, { replace: true });
+      } catch {
+        navigate(ROUTES.DASHBOARD, { replace: true });
+      }
     } catch (err: unknown) {
-      setError(
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-        || "Login failed. Check your credentials.",
-      );
+      const detail =
+        (err as { response?: { data?: { detail?: string }; status?: number } })?.response?.data?.detail ?? "";
+      const httpStatus =
+        (err as { response?: { status?: number } })?.response?.status;
+      if (httpStatus === 403 && detail.toLowerCase().includes("pending")) {
+        setError("Your account is pending admin approval.");
+      } else if (httpStatus === 403 && detail.toLowerCase().includes("suspended")) {
+        setError("Your account has been suspended. Contact an administrator.");
+      } else {
+        setError(detail || "Login failed. Check your credentials.");
+      }
     } finally {
       setLoading(false);
     }

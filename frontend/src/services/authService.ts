@@ -17,10 +17,9 @@ export async function login(data: LoginRequest): Promise<TokenResponse> {
   return res.data;
 }
 
-/** POST /api/auth/register → returns { access_token, token_type } */
-export async function register(data: RegisterRequest): Promise<TokenResponse> {
-  const res = await api.post<TokenResponse>("/auth/register", data);
-  localStorage.setItem(TOKEN_KEY, res.data.access_token);
+/** POST /api/auth/register → returns { message, status: "pending" } */
+export async function register(data: RegisterRequest): Promise<{ message: string; status: string }> {
+  const res = await api.post<{ message: string; status: string }>("/auth/register", data);
   return res.data;
 }
 
@@ -74,6 +73,18 @@ export async function updateUserRole(userId: string, data: UpdateRoleRequest): P
 /** PATCH /api/auth/users/:id/status → toggle activate/deactivate (admin only) */
 export async function toggleUserStatus(userId: string): Promise<UserResponse> {
   const res = await api.patch<UserResponse>(`/auth/users/${userId}/status`);
+  return res.data;
+}
+
+/** PATCH /api/auth/users/:id/approve → approve pending user (admin only) */
+export async function approveUser(userId: string): Promise<UserResponse> {
+  const res = await api.patch<UserResponse>(`/auth/users/${userId}/approve`);
+  return res.data;
+}
+
+/** PATCH /api/auth/users/:id/suspend → suspend active user (admin only) */
+export async function suspendUser(userId: string): Promise<UserResponse> {
+  const res = await api.patch<UserResponse>(`/auth/users/${userId}/suspend`);
   return res.data;
 }
 

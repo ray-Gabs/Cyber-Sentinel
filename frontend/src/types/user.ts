@@ -3,14 +3,19 @@
 /* ---- User / Auth ---- */
 export type UserRole = "admin" | "analyst" | "viewer";
 
+export type UserStatus = "pending" | "active" | "suspended";
+
 export interface User {
   id: string;
   username: string;
   email: string;
   role: UserRole;
   is_active: boolean;
+  status?: UserStatus;
+  is_demo?: boolean;
   created_at: string;
   last_login?: string;
+  wazuh_agent_name?: string | null;
 }
 
 export interface LoginRequest {
@@ -35,6 +40,8 @@ export interface UserResponse {
   email: string;
   role: UserRole;
   is_active: boolean;
+  status?: UserStatus;
+  is_demo?: boolean;
   created_at: string;
   last_login?: string;
   wazuh_agent_name?: string | null;
