@@ -78,8 +78,18 @@ export default function Admin() {
   const [search,     setSearch]     = useState("");
   const [busy,       setBusy]       = useState<Record<string, boolean>>({});
   const [toast,      setToast]      = useState<{ msg: string; ok: boolean } | null>(null);
-  const [adminStats, setAdminStats] = useState<{ scans: { by_day: {date:string;count:number}[] }; alerts: { by_severity: {name:string;count:number}[] } } | null>(null);
+  const [adminStats, setAdminStats] = useState<{
+    scans:  { total: number; today: number; period: number; trend_pct: number; by_day: {date:string;count:number}[] };
+    alerts: { total: number; today: number; critical: number; period: number; trend_pct: number; by_severity: {name:string;count:number}[]; by_day?: {date:string;count:number}[] };
+    users:  { total: number; pending: number; active: number; new_today: number; new_period: number; trend_pct: number };
+    top_scan_users: {email:string;scans:number}[];
+    top_alert_agents: {agent:string;count:number}[];
+    range: string;
+    generated_at: string;
+  } | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [statsRange,   setStatsRange]   = useState<"7d"|"30d"|"90d">("7d");
+  const [exporting,    setExporting]    = useState(false);
 
   // Redirect non-admins immediately
   useEffect(() => {
@@ -98,12 +108,12 @@ export default function Admin() {
     }
   }
 
-  const loadStats = useCallback(async () => {
+  const loadStats = useCallback(async (range: "7d"|"30d"|"90d" = "7d") => {
     setStatsLoading(true);
     try {
-      const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+      const API   = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
       const token = localStorage.getItem("access_token");
-      const res = await fetch(`${API}/api/analytics/admin-stats`, {
+      const res   = await fetch(`${API}/api/analytics/admin-stats?range=${range}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) setAdminStats(await res.json());
@@ -111,7 +121,33 @@ export default function Admin() {
     finally { setStatsLoading(false); }
   }, []);
 
-  useEffect(() => { load(); loadStats(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  async function exportCSV() {
+    setExporting(true);
+    try {
+      const API   = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+      const token = localStorage.getItem("access_token");
+      const res   = await fetch(`${API}/api/analytics/admin-stats/export?range=${statsRange}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = `cyber-sentinel-stats-${statsRange}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch { /* non-critical */ }
+    finally { setExporting(false); }
+  }
+
+  function handleRangeChange(r: "7d"|"30d"|"90d") {
+    setStatsRange(r);
+    loadStats(r);
+  }
+
+  useEffect(() => { load(); loadStats("7d"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function showToast(msg: string, ok: boolean) {
     setToast({ msg, ok });
@@ -260,76 +296,173 @@ export default function Admin() {
         ))}
       </div>
 
-      {/* Charts */}
-      {!statsLoading && adminStats && (() => {
-        const chartTheme = {
-          grid: { strokeDasharray: "3 3", stroke: "#1e2730", vertical: false } as const,
-          xAxis: { tick: { fill: "#8896a4", fontSize: 11, fontFamily: "IBM Plex Mono, monospace" }, axisLine: { stroke: "#1e2730" }, tickLine: false },
-          yAxis: { tick: { fill: "#8896a4", fontSize: 11, fontFamily: "IBM Plex Mono, monospace" }, axisLine: false, tickLine: false },
-          tooltip: {
-            contentStyle: { background: "#161c23", border: "1px solid #2a3540", borderRadius: "6px", fontFamily: "IBM Plex Mono, monospace", fontSize: "12px", color: "#e8edf2" },
-            cursor: { fill: "rgba(59,130,246,0.05)" },
-          },
-        };
-        const SEV_COLORS = ["#EF4444", "#F97316", "#EAB308", "#22C55E", "#3B82F6"];
-        const allZero = adminStats.scans.by_day.every((d) => d.count === 0);
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Bar chart — scans per day */}
-            <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              <h3 style={{ fontFamily: "Sora, sans-serif", fontSize: 15, fontWeight: 600, marginBottom: 14, color: "#c8d8f0" }}>
-                Scan Activity — Last 7 Days
-              </h3>
-              {allZero ? (
-                <p className="text-xs text-center py-8" style={{ color: "#475569" }}>No scans in the last 7 days</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={adminStats.scans.by_day}>
-                    <CartesianGrid {...chartTheme.grid} />
-                    <XAxis dataKey="date" {...chartTheme.xAxis} />
-                    <YAxis {...chartTheme.yAxis} />
-                    <Tooltip {...chartTheme.tooltip} />
-                    <Bar dataKey="count" fill="#3B82F6" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            {/* Donut chart — alerts by severity */}
-            <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              <h3 style={{ fontFamily: "Sora, sans-serif", fontSize: 15, fontWeight: 600, marginBottom: 14, color: "#c8d8f0" }}>
-                Alert Severity Breakdown
-              </h3>
-              <div className="flex justify-center">
-                <PieChart width={280} height={200}>
-                  <Pie
-                    data={adminStats.alerts.by_severity}
-                    cx={130} cy={90}
-                    innerRadius={50}
-                    outerRadius={75}
-                    dataKey="count"
-                    paddingAngle={2}
-                  >
-                    {adminStats.alerts.by_severity.map((_, idx) => (
-                      <Cell key={idx} fill={SEV_COLORS[idx % SEV_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip {...chartTheme.tooltip} />
-                  <Legend
-                    iconType="circle"
-                    iconSize={8}
-                    formatter={(value) => (
-                      <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "11px", color: "#8896a4" }}>
-                        {value}
-                      </span>
-                    )}
-                  />
-                </PieChart>
-              </div>
-            </div>
+      {/* Analytics toolbar + charts */}
+      <div style={{ marginTop: "28px" }}>
+        {/* Toolbar */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <h3 style={{ fontFamily: "Sora, sans-serif", fontSize: "15px", fontWeight: 600, color: "var(--text-base)", margin: 0 }}>
+            Platform Analytics
+          </h3>
+          <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+            {(["7d", "30d", "90d"] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => handleRangeChange(r)}
+                style={{
+                  padding: "4px 10px", borderRadius: "5px",
+                  fontSize: "11px", fontFamily: "IBM Plex Mono, monospace",
+                  border: `1px solid ${statsRange === r ? "var(--accent)" : "var(--border)"}`,
+                  background: statsRange === r ? "var(--accent-dim)" : "transparent",
+                  color:      statsRange === r ? "var(--accent)"     : "var(--text-muted)",
+                  cursor: "pointer",
+                }}
+              >{r}</button>
+            ))}
+            <button
+              onClick={exportCSV}
+              disabled={exporting}
+              style={{
+                marginLeft: "8px", padding: "4px 12px", borderRadius: "5px",
+                fontSize: "11px", fontFamily: "IBM Plex Sans, sans-serif",
+                border: "1px solid var(--border)", background: "transparent",
+                color: "var(--text-muted)", cursor: exporting ? "wait" : "pointer",
+                display: "flex", alignItems: "center", gap: "4px",
+              }}
+            >
+              ↓ {exporting ? "Exporting…" : "Export CSV"}
+            </button>
           </div>
-        );
-      })()}
+        </div>
+
+        {/* Summary stat pills — new today */}
+        {adminStats && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" style={{ marginBottom: "16px" }}>
+            {[
+              { label: "Scans this period", value: adminStats.scans.period ?? 0,   trend: adminStats.scans.trend_pct,  color: "var(--accent)" },
+              { label: "Alerts this period", value: adminStats.alerts.period ?? 0, trend: adminStats.alerts.trend_pct, color: "var(--sev-high)" },
+              { label: "Critical alerts",    value: adminStats.alerts.critical ?? 0,trend: null,                       color: "var(--sev-critical)" },
+              { label: "New users",          value: adminStats.users?.new_period ?? 0, trend: adminStats.users?.trend_pct, color: "var(--sev-low)" },
+            ].map(({ label, value, trend, color }) => (
+              <div key={label} style={{
+                padding: "12px 14px", borderRadius: "8px",
+                background: "rgba(255,255,255,0.02)",
+                border: "1px solid rgba(255,255,255,0.06)",
+                borderLeft: `3px solid ${color}`,
+              }}>
+                <div style={{ fontSize: "22px", fontWeight: 700, fontFamily: "Sora, sans-serif", color }}>{value}</div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>{label}</div>
+                {trend != null && (
+                  <div style={{ fontSize: "10px", marginTop: "4px", color: trend >= 0 ? "var(--sev-low)" : "var(--sev-critical)", fontFamily: "IBM Plex Mono, monospace" }}>
+                    {trend >= 0 ? "▲" : "▼"} {Math.abs(trend)}% vs prev period
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Charts */}
+        {!statsLoading && adminStats && (() => {
+          const chartTheme = {
+            grid: { strokeDasharray: "3 3", stroke: "#1e2730", vertical: false } as const,
+            xAxis: { tick: { fill: "#8896a4", fontSize: 11, fontFamily: "IBM Plex Mono, monospace" }, axisLine: { stroke: "#1e2730" }, tickLine: false },
+            yAxis: { tick: { fill: "#8896a4", fontSize: 11, fontFamily: "IBM Plex Mono, monospace" }, axisLine: false, tickLine: false },
+            tooltip: {
+              contentStyle: { background: "#161c23", border: "1px solid #2a3540", borderRadius: "6px", fontFamily: "IBM Plex Mono, monospace", fontSize: "12px", color: "#e8edf2" },
+              cursor: { fill: "rgba(59,130,246,0.05)" },
+            },
+          };
+          const SEV_COLORS = ["#EF4444", "#F97316", "#EAB308", "#22C55E", "#3B82F6"];
+          const allZero = adminStats.scans.by_day.every((d) => d.count === 0);
+          return (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Bar chart — scans per day */}
+                <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <h3 style={{ fontFamily: "Sora, sans-serif", fontSize: 14, fontWeight: 600, marginBottom: 14, color: "#c8d8f0" }}>
+                    Scan Activity — {statsRange}
+                  </h3>
+                  {allZero ? (
+                    <p className="text-xs text-center py-8" style={{ color: "#475569" }}>No scans in this period</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={adminStats.scans.by_day}>
+                        <CartesianGrid {...chartTheme.grid} />
+                        <XAxis dataKey="date" {...chartTheme.xAxis} />
+                        <YAxis {...chartTheme.yAxis} />
+                        <Tooltip {...chartTheme.tooltip} />
+                        <Bar dataKey="count" fill="#3B82F6" radius={[3, 3, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+
+                {/* Donut chart — alerts by severity */}
+                <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <h3 style={{ fontFamily: "Sora, sans-serif", fontSize: 14, fontWeight: 600, marginBottom: 14, color: "#c8d8f0" }}>
+                    Alert Severity Breakdown
+                  </h3>
+                  <div className="flex justify-center">
+                    <PieChart width={280} height={200}>
+                      <Pie
+                        data={adminStats.alerts.by_severity}
+                        cx={130} cy={90}
+                        innerRadius={50}
+                        outerRadius={75}
+                        dataKey="count"
+                        paddingAngle={2}
+                      >
+                        {adminStats.alerts.by_severity.map((_, idx) => (
+                          <Cell key={idx} fill={SEV_COLORS[idx % SEV_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip {...chartTheme.tooltip} />
+                      <Legend
+                        iconType="circle"
+                        iconSize={8}
+                        formatter={(value) => (
+                          <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "11px", color: "#8896a4" }}>
+                            {value}
+                          </span>
+                        )}
+                      />
+                    </PieChart>
+                  </div>
+                </div>
+              </div>
+
+              {/* Top active users table */}
+              {adminStats.top_scan_users?.length > 0 && (
+                <div style={{ marginTop: "20px" }}>
+                  <h3 style={{ fontFamily: "Sora, sans-serif", fontSize: "14px", fontWeight: 600, color: "var(--text-base)", marginBottom: "10px" }}>
+                    Top Active Users
+                  </h3>
+                  <div style={{ border: "1px solid var(--border)", borderRadius: "8px", overflow: "hidden" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "IBM Plex Sans, sans-serif", fontSize: "12px" }}>
+                      <thead>
+                        <tr style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid var(--border)" }}>
+                          <th style={{ padding: "8px 14px", textAlign: "left", color: "var(--text-muted)", fontWeight: 500 }}>#</th>
+                          <th style={{ padding: "8px 14px", textAlign: "left", color: "var(--text-muted)", fontWeight: 500 }}>User</th>
+                          <th style={{ padding: "8px 14px", textAlign: "right", color: "var(--text-muted)", fontWeight: 500 }}>Scans</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adminStats.top_scan_users.map((u, i) => (
+                          <tr key={u.email} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
+                            <td style={{ padding: "8px 14px", color: "var(--text-muted)", fontFamily: "IBM Plex Mono, monospace" }}>{i + 1}</td>
+                            <td style={{ padding: "8px 14px", color: "var(--text-base)" }}>{u.email}</td>
+                            <td style={{ padding: "8px 14px", textAlign: "right", color: "var(--accent)", fontFamily: "IBM Plex Mono, monospace", fontWeight: 600 }}>{u.scans}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </div>
 
       {/* Search */}
       <div className="relative">

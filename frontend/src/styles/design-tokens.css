@@ -65,11 +65,11 @@
   --ease-out:    cubic-bezier(0.0, 0, 0.2, 1);
   --ease-in:     cubic-bezier(0.4, 0, 1, 1);
 
-  /* ── Palette A defaults (Monochromatic — Electric Blue 220°) ── */
-  --color-accent:           hsl(220, 90%, 60%);
-  --color-accent-dim:       hsla(220, 90%, 60%, 0.15);
-  --color-accent-glow:      hsla(220, 90%, 60%, 0.25);
-  --color-accent-hover:     hsl(220, 90%, 67%);
+  /* ── Palette A defaults — alias to theme accent so all components stay in sync ── */
+  --color-accent:           var(--accent);
+  --color-accent-dim:       var(--accent-dim);
+  --color-accent-glow:      var(--accent-glow);
+  --color-accent-hover:     var(--accent-hover);
 
   /* Palette B/C extra tokens — undefined by default */
   --color-complement:       transparent;

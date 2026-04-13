@@ -43,6 +43,7 @@ import ResetPassword from "@/pages/ResetPassword";
 import Admin from "@/pages/Admin";
 import AuditLog from "@/pages/AuditLog";
 import Onboarding from "@/pages/Onboarding";
+import AdminNotifications from "@/pages/AdminNotifications";
 
 // React Query client — used for data fetching/caching (you'll use this later)
 const queryClient = new QueryClient();
@@ -135,6 +136,7 @@ function AppRoutes() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={<RoleRoute requiredRole="admin"><Admin /></RoleRoute>} />
         <Route path="/audit" element={<RoleRoute requiredRole="admin"><AuditLog /></RoleRoute>} />
+        <Route path="/admin/notifications" element={<RoleRoute requiredRole="admin"><AdminNotifications /></RoleRoute>} />
       </Route>
 
       {/* Default: redirect to landing */}
