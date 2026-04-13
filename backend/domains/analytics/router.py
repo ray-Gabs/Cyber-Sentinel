@@ -6,9 +6,10 @@
 # ============================================================
 
 import logging
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from core.dependencies import get_current_user
 from domains.auth.models import User
@@ -20,6 +21,53 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 RANGE_DAYS = {"7d": 7, "30d": 30, "90d": 90}
+
+
+def _level_to_severity(level: int) -> str:
+    if level >= 12: return "critical"
+    if level >= 8:  return "high"
+    if level >= 5:  return "medium"
+    if level >= 1:  return "low"
+    return "informational"
+
+
+@router.get("/admin-stats")
+async def get_admin_stats(current_user: User = Depends(get_current_user)):
+    """[Admin] Aggregated chart data: scans per day (7d) + alerts by severity."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+
+    # Scans per day — last 7 days (all users, admin view)
+    recent_scans = await Scan.find(Scan.created_at >= seven_days_ago).to_list()
+    scans_by_day: dict[str, int] = defaultdict(int)
+    for scan in recent_scans:
+        if scan.created_at:
+            ts = scan.created_at
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            scans_by_day[ts.strftime("%m/%d")] += 1
+
+    days_list = []
+    for i in range(6, -1, -1):
+        d = datetime.now(timezone.utc) - timedelta(days=i)
+        label = d.strftime("%m/%d")
+        days_list.append({"date": label, "count": scans_by_day.get(label, 0)})
+
+    # Alerts by severity (all alerts, classified from rule_level)
+    all_alerts = await Alert.find().to_list()
+    sev_counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "informational": 0}
+    for alert in all_alerts:
+        key = _level_to_severity(alert.rule_level)
+        sev_counts[key] += 1
+
+    by_severity = [{"name": k, "count": v} for k, v in sev_counts.items()]
+
+    return {
+        "scans":  {"by_day": days_list},
+        "alerts": {"by_severity": by_severity},
+    }
 
 
 @router.get("")
