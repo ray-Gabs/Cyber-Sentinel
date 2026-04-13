@@ -10,7 +10,13 @@ from pydantic import Field
 from pymongo import ASCENDING, IndexModel
 
 
-NotificationType = Literal["scan_complete", "scan_failed", "critical_finding"]
+NotificationType = Literal[
+    "scan_complete",
+    "scan_failed",
+    "critical_finding",
+    "soc_alert",
+    "soc_critical",
+]
 
 
 class Notification(Document):

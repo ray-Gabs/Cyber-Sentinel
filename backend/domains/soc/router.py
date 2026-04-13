@@ -81,18 +81,25 @@ async def list_alerts(
     rule_level_min: Optional[int] = Query(None, ge=0, le=15),
     ai_verdict: Optional[str] = Query(None),
     agent_name: Optional[str] = Query(None),
+    project_id: Optional[str] = Query(None, description="Filter alerts by project ID"),
     user: User = Depends(get_current_user),
 ):
     """List ingested Wazuh alerts (newest first) with optional filters."""
-    alerts = await service.list_alerts(page, size, rule_level_min, ai_verdict, agent_name, current_user=user)
+    alerts = await service.list_alerts(
+        page, size, rule_level_min, ai_verdict, agent_name,
+        project_id=project_id, current_user=user,
+    )
     return [_to_summary(a) for a in alerts]
 
 
 # Static paths must be registered BEFORE /{alert_id} — FastAPI matches in order.
 @router.get("/stats/summary")
-async def alert_stats(user: User = Depends(get_current_user)):
+async def alert_stats(
+    project_id: Optional[str] = Query(None, description="Scope stats to a specific project"),
+    user: User = Depends(get_current_user),
+):
     """Get aggregated alert statistics for the analytics dashboard."""
-    return await service.get_alert_stats()
+    return await service.get_alert_stats(project_id=project_id)
 
 
 @router.get("/health")

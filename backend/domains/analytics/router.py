@@ -33,13 +33,26 @@ def _level_to_severity(level: int) -> str:
 
 @router.get("/admin-stats")
 async def get_admin_stats(current_user: User = Depends(get_current_user)):
-    """[Admin] Aggregated chart data: scans per day (7d) + alerts by severity."""
+    """
+    [Admin] Aggregated chart data for the corporate admin dashboard.
+
+    Returns:
+      - scans.by_day          — last 7 days of scan activity (Recharts-ready)
+      - scans.total           — all-time scan count
+      - scans.active          — scans currently in 'running' or 'pending' state
+      - alerts.by_severity    — alert distribution by severity (Recharts-ready)
+      - alerts.total          — all-time alert count
+      - alerts.critical_count — shortcut for the KPI card
+      - users.total           — total registered user count
+    """
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin role required")
 
+    from domains.auth.models import User as UserModel
+
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
-    # Scans per day — last 7 days (all users, admin view)
+    # ── Scans ────────────────────────────────────────────────────────────────
     recent_scans = await Scan.find(Scan.created_at >= seven_days_ago).to_list()
     scans_by_day: dict[str, int] = defaultdict(int)
     for scan in recent_scans:
@@ -55,7 +68,10 @@ async def get_admin_stats(current_user: User = Depends(get_current_user)):
         label = d.strftime("%m/%d")
         days_list.append({"date": label, "count": scans_by_day.get(label, 0)})
 
-    # Alerts by severity (all alerts, classified from rule_level)
+    total_scans = await Scan.find().count()
+    active_scans = await Scan.find({"status": {"$in": ["running", "pending"]}}).count()
+
+    # ── Alerts ───────────────────────────────────────────────────────────────
     all_alerts = await Alert.find().to_list()
     sev_counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "informational": 0}
     for alert in all_alerts:
@@ -63,10 +79,26 @@ async def get_admin_stats(current_user: User = Depends(get_current_user)):
         sev_counts[key] += 1
 
     by_severity = [{"name": k, "count": v} for k, v in sev_counts.items()]
+    total_alerts = len(all_alerts)
+    critical_count = sev_counts["critical"]
+
+    # ── Users ─────────────────────────────────────────────────────────────────
+    total_users = await UserModel.find().count()
 
     return {
-        "scans":  {"by_day": days_list},
-        "alerts": {"by_severity": by_severity},
+        "scans": {
+            "by_day": days_list,
+            "total": total_scans,
+            "active": active_scans,
+        },
+        "alerts": {
+            "by_severity": by_severity,
+            "total": total_alerts,
+            "critical_count": critical_count,
+        },
+        "users": {
+            "total": total_users,
+        },
     }
 
 

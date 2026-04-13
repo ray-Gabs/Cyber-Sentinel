@@ -155,6 +155,7 @@ async def list_alerts(
     rule_level_min: Optional[int] = None,
     ai_verdict: Optional[str] = None,
     agent_name: Optional[str] = None,
+    project_id: Optional[str] = None,
     current_user: Optional[User] = None,
 ) -> list[Alert]:
     """
@@ -165,6 +166,7 @@ async def list_alerts(
     - Non-admin with a linked wazuh_agent_name: sees ONLY their agent's alerts.
     - Non-admin without a linked agent: sees all alerts (fallback — student hasn't linked yet).
     - The explicit agent_name filter param (from the request) always narrows further.
+    - project_id (optional): further restrict results to alerts tagged with that project.
     """
     query: dict = {}
 
@@ -179,6 +181,8 @@ async def list_alerts(
     # Explicit agent_name filter narrows on top of any scope already set
     if agent_name and "agent_name" not in query:
         query["agent_name"] = {"$regex": re.escape(agent_name), "$options": "i"}
+    if project_id:
+        query["project_id"] = project_id
 
     return (
         await Alert.find(query)
@@ -258,27 +262,40 @@ async def apply_mitre_mapping(alert: Alert) -> Alert:
     return alert
 
 
-async def get_alert_stats() -> dict:
-    """Get aggregated alert statistics for the analytics dashboard."""
-    total = await Alert.find().count()
+async def get_alert_stats(project_id: Optional[str] = None) -> dict:
+    """
+    Get aggregated alert statistics for the analytics dashboard.
+
+    Args:
+        project_id: If provided, restrict all counts to alerts tagged with
+                    this project (e.g. a specific intern/class project scope).
+    """
+    base: dict = {}
+    if project_id:
+        base["project_id"] = project_id
+
+    def _q(**extra: object) -> dict:
+        return {**base, **extra}
+
+    total = await Alert.find(base).count()
     by_verdict = {
-        "true_positive": await Alert.find({"ai_verdict": "TRUE_POSITIVE"}).count(),
-        "false_positive": await Alert.find({"ai_verdict": "FALSE_POSITIVE"}).count(),
-        "unknown": await Alert.find({"ai_verdict": "UNKNOWN"}).count(),
-        "unanalysed": await Alert.find({"ai_verdict": None}).count(),
+        "true_positive": await Alert.find(_q(ai_verdict="TRUE_POSITIVE")).count(),
+        "false_positive": await Alert.find(_q(ai_verdict="FALSE_POSITIVE")).count(),
+        "unknown": await Alert.find(_q(ai_verdict="UNKNOWN")).count(),
+        "unanalysed": await Alert.find(_q(ai_verdict=None)).count(),
     }
     by_action = {
-        "escalate": await Alert.find({"ai_action": "ESCALATE"}).count(),
-        "monitor": await Alert.find({"ai_action": "MONITOR"}).count(),
-        "dismiss": await Alert.find({"ai_action": "DISMISS"}).count(),
+        "escalate": await Alert.find(_q(ai_action="ESCALATE")).count(),
+        "monitor": await Alert.find(_q(ai_action="MONITOR")).count(),
+        "dismiss": await Alert.find(_q(ai_action="DISMISS")).count(),
     }
 
     # Severity distribution (Wazuh levels grouped)
     by_severity = {
-        "critical": await Alert.find({"rule_level": {"$gte": 12}}).count(),
-        "high": await Alert.find({"rule_level": {"$gte": 8, "$lt": 12}}).count(),
-        "medium": await Alert.find({"rule_level": {"$gte": 4, "$lt": 8}}).count(),
-        "low": await Alert.find({"rule_level": {"$lt": 4}}).count(),
+        "critical": await Alert.find(_q(rule_level={"$gte": 12})).count(),
+        "high": await Alert.find(_q(rule_level={"$gte": 8, "$lt": 12})).count(),
+        "medium": await Alert.find(_q(rule_level={"$gte": 4, "$lt": 8})).count(),
+        "low": await Alert.find(_q(rule_level={"$lt": 4})).count(),
     }
 
     # Recent alerts (last 7 days) per day
@@ -288,11 +305,13 @@ async def get_alert_stats() -> dict:
     for days_ago in range(6, -1, -1):
         day_start = (now - timedelta(days=days_ago)).replace(hour=0, minute=0, second=0, microsecond=0)
         day_end = day_start + timedelta(days=1)
-        count = await Alert.find({"timestamp": {"$gte": day_start, "$lt": day_end}}).count()
+        count = await Alert.find(_q(timestamp={"$gte": day_start, "$lt": day_end})).count()
         daily_counts.append({"date": day_start.strftime("%Y-%m-%d"), "count": count})
 
     # Top rule IDs
+    match_stage = {"$match": base} if base else {"$match": {}}
     pipeline = [
+        match_stage,
         {"$group": {"_id": "$rule_id", "count": {"$sum": 1}, "desc": {"$first": "$rule_description"}}},
         {"$sort": {"count": -1}},
         {"$limit": 10},
@@ -301,6 +320,7 @@ async def get_alert_stats() -> dict:
 
     # Top agents
     agent_pipeline = [
+        match_stage,
         {"$group": {"_id": "$agent_name", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
         {"$limit": 10},
@@ -315,4 +335,5 @@ async def get_alert_stats() -> dict:
         "daily_counts": daily_counts,
         "top_rules": top_rules,
         "top_agents": top_agents,
+        "project_id": project_id,
     }
