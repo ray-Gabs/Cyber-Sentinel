@@ -42,6 +42,7 @@ import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import Admin from "@/pages/Admin";
 import AuditLog from "@/pages/AuditLog";
+import Onboarding from "@/pages/Onboarding";
 
 // React Query client — used for data fetching/caching (you'll use this later)
 const queryClient = new QueryClient();
@@ -110,6 +111,7 @@ function AppRoutes() {
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/onboarding" element={<Onboarding />} />
 
       {/* Protected routes — wrapped in the sidebar/header layout */}
       <Route

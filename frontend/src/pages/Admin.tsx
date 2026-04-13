@@ -7,9 +7,13 @@
  *   - User cards with role badge + promote / demote actions
  *   - Responsive: cards stack on mobile, grid on desktop
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend,
+} from "recharts";
 import {
   Users, ShieldCheck, Activity,
   RefreshCw, CheckCircle2, AlertCircle, Clock,
@@ -67,13 +71,15 @@ export default function Admin() {
   const { user: me } = useAuth();
   const navigate      = useNavigate();
 
-  const [users,   setUsers]   = useState<UserResponse[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
-  const [filter,  setFilter]  = useState<FilterTab>("all");
-  const [search,  setSearch]  = useState("");
-  const [busy,    setBusy]    = useState<Record<string, boolean>>({});
-  const [toast,   setToast]   = useState<{ msg: string; ok: boolean } | null>(null);
+  const [users,      setUsers]      = useState<UserResponse[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState<string | null>(null);
+  const [filter,     setFilter]     = useState<FilterTab>("all");
+  const [search,     setSearch]     = useState("");
+  const [busy,       setBusy]       = useState<Record<string, boolean>>({});
+  const [toast,      setToast]      = useState<{ msg: string; ok: boolean } | null>(null);
+  const [adminStats, setAdminStats] = useState<{ scans: { by_day: {date:string;count:number}[] }; alerts: { by_severity: {name:string;count:number}[] } } | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   // Redirect non-admins immediately
   useEffect(() => {
@@ -92,7 +98,20 @@ export default function Admin() {
     }
   }
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+      const token = localStorage.getItem("access_token");
+      const res = await fetch(`${API}/api/analytics/admin-stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setAdminStats(await res.json());
+    } catch { /* stats are non-critical */ }
+    finally { setStatsLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); loadStats(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function showToast(msg: string, ok: boolean) {
     setToast({ msg, ok });
@@ -161,10 +180,10 @@ export default function Admin() {
   };
 
   const STATS = [
-    { label: "Total",    value: counts.all,     icon: Users,       color: "#64748b" },
-    { label: "Pending",  value: counts.pending, icon: Clock,       color: "#f59e0b" },
-    { label: "Analysts", value: counts.analyst, icon: Activity,    color: "#60a5fa" },
-    { label: "Admins",   value: counts.admin,   icon: ShieldCheck, color: "#f87171" },
+    { label: "Total",    value: counts.all,     icon: Users,       color: "#64748b", borderLeft: undefined },
+    { label: "Pending",  value: counts.pending, icon: Clock,       color: "#f59e0b", borderLeft: "3px solid #f59e0b" },
+    { label: "Analysts", value: counts.analyst, icon: Activity,    color: "#60a5fa", borderLeft: "3px solid #60a5fa" },
+    { label: "Admins",   value: counts.admin,   icon: ShieldCheck, color: "#f87171", borderLeft: "3px solid #f87171" },
   ];
 
   // ── Filter ─────────────────────────────────────────────────────────────────
@@ -222,13 +241,14 @@ export default function Admin() {
 
       {/* Stats bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {STATS.map(({ label, value, icon: Icon, color }) => (
+        {STATS.map(({ label, value, icon: Icon, color, borderLeft }) => (
           <div
             key={label}
             className="rounded-xl px-4 py-3 flex items-center gap-3"
             style={{
               background: "rgba(255,255,255,0.025)",
               border: "1px solid rgba(255,255,255,0.06)",
+              borderLeft: borderLeft ?? "1px solid rgba(255,255,255,0.06)",
             }}
           >
             <Icon size={16} style={{ color }} className="shrink-0" />
@@ -239,6 +259,77 @@ export default function Admin() {
           </div>
         ))}
       </div>
+
+      {/* Charts */}
+      {!statsLoading && adminStats && (() => {
+        const chartTheme = {
+          grid: { strokeDasharray: "3 3", stroke: "#1e2730", vertical: false } as const,
+          xAxis: { tick: { fill: "#8896a4", fontSize: 11, fontFamily: "IBM Plex Mono, monospace" }, axisLine: { stroke: "#1e2730" }, tickLine: false },
+          yAxis: { tick: { fill: "#8896a4", fontSize: 11, fontFamily: "IBM Plex Mono, monospace" }, axisLine: false, tickLine: false },
+          tooltip: {
+            contentStyle: { background: "#161c23", border: "1px solid #2a3540", borderRadius: "6px", fontFamily: "IBM Plex Mono, monospace", fontSize: "12px", color: "#e8edf2" },
+            cursor: { fill: "rgba(59,130,246,0.05)" },
+          },
+        };
+        const SEV_COLORS = ["#EF4444", "#F97316", "#EAB308", "#22C55E", "#3B82F6"];
+        const allZero = adminStats.scans.by_day.every((d) => d.count === 0);
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Bar chart — scans per day */}
+            <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <h3 style={{ fontFamily: "Sora, sans-serif", fontSize: 15, fontWeight: 600, marginBottom: 14, color: "#c8d8f0" }}>
+                Scan Activity — Last 7 Days
+              </h3>
+              {allZero ? (
+                <p className="text-xs text-center py-8" style={{ color: "#475569" }}>No scans in the last 7 days</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={adminStats.scans.by_day}>
+                    <CartesianGrid {...chartTheme.grid} />
+                    <XAxis dataKey="date" {...chartTheme.xAxis} />
+                    <YAxis {...chartTheme.yAxis} />
+                    <Tooltip {...chartTheme.tooltip} />
+                    <Bar dataKey="count" fill="#3B82F6" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Donut chart — alerts by severity */}
+            <div className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <h3 style={{ fontFamily: "Sora, sans-serif", fontSize: 15, fontWeight: 600, marginBottom: 14, color: "#c8d8f0" }}>
+                Alert Severity Breakdown
+              </h3>
+              <div className="flex justify-center">
+                <PieChart width={280} height={200}>
+                  <Pie
+                    data={adminStats.alerts.by_severity}
+                    cx={130} cy={90}
+                    innerRadius={50}
+                    outerRadius={75}
+                    dataKey="count"
+                    paddingAngle={2}
+                  >
+                    {adminStats.alerts.by_severity.map((_, idx) => (
+                      <Cell key={idx} fill={SEV_COLORS[idx % SEV_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip {...chartTheme.tooltip} />
+                  <Legend
+                    iconType="circle"
+                    iconSize={8}
+                    formatter={(value) => (
+                      <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: "11px", color: "#8896a4" }}>
+                        {value}
+                      </span>
+                    )}
+                  />
+                </PieChart>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Search */}
       <div className="relative">
