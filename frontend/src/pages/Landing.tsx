@@ -1,580 +1,639 @@
 /**
- * Landing.tsx — Public hero page at "/"
- * Minimal, authoritative, dark/light adaptive.
- * React Bits-inspired: circular text, card swap, chroma grid.
+ * Landing.tsx — Public marketing page for Cyber Sentinel.
+ * Dark-only, standalone (no AppLayout shell).
+ * Animated terminal uses safe DOM methods (no innerHTML).
  */
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
-import { useTheme } from "@/providers/ThemeProvider";
-import { useAuth } from "@/hooks/useAuth";
-import {
-  ShieldCheck, Radar, BrainCircuit, FileText,
-  ArrowRight, Terminal, Activity, Sun, Moon,
-  Zap, Lock, Globe, ChevronRight, Network,
-} from "lucide-react";
-import { DottedBackground } from "@/components/ui/DottedBackground";
-import { AnimatedGridPattern } from "@/components/ui/AnimatedGridPattern";
-import { FloatingParticles } from "@/components/ui/FloatingParticles";
-import { LightRays } from "@/components/ui/LightRays";
-import { cn } from "@/lib/utils";
-import { ROUTES } from "@/lib/constants";
 
-// ── Animation helpers ──────────────────────────────────────────────────────────
-const fade = (delay = 0) => ({
-  initial: { opacity: 0, y: 18 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] as const } },
-});
+// Brief's canonical dark palette — standalone, no CSS vars dependency
+const C = {
+  bg: "#080c10",
+  surface: "#111620",
+  border: "rgba(255,255,255,0.07)",
+  borderSolid: "#1a2030",
+  accent: "#00d4ff",
+  accentDim: "rgba(0,212,255,0.10)",
+  accentGlow: "rgba(0,212,255,0.22)",
+  text: "#e2e8f0",
+  muted: "#64748b",
+  critical: "#ef4444",
+  high: "#f97316",
+  medium: "#eab308",
+  low: "#22c55e",
+};
 
-// ── Circular SVG Text ──────────────────────────────────────────────────────────
-function CircularText({ text, radius = 52 }: { text: string; radius?: number }) {
-  const chars = text.split("");
-  const angleStep = 360 / chars.length;
-  return (
-    <svg
-      width={radius * 2 + 24}
-      height={radius * 2 + 24}
-      viewBox={`0 0 ${radius * 2 + 24} ${radius * 2 + 24}`}
-      className="absolute inset-0 w-full h-full"
-      style={{ animation: "cs-spin 18s linear infinite" }}
-    >
-      <style>{`@keyframes cs-spin { to { transform: rotate(360deg); } }`}</style>
-      {chars.map((char, i) => {
-        const angle = (angleStep * i - 90) * (Math.PI / 180);
-        const x = radius + 12 + radius * Math.cos(angle);
-        const y = radius + 12 + radius * Math.sin(angle);
-        return (
-          <text
-            key={i}
-            x={x}
-            y={y}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontSize="9"
-            fontFamily="JetBrains Mono, monospace"
-            fontWeight="600"
-            letterSpacing="0.05em"
-            fill="rgba(59,130,246,0.55)"
-            transform={`rotate(${angleStep * i}, ${x}, ${y})`}
-          >
-            {char}
-          </text>
-        );
-      })}
-    </svg>
-  );
+interface TerminalFinding {
+  label: string;
+  severity: string;
 }
 
-// ── Feature data ───────────────────────────────────────────────────────────────
-const FEATURES = [
-  {
-    icon: Radar,
-    title: "Automated Pentesting",
-    body: "17-tool pipeline — Nmap, Nuclei, ZAP, SSLyze and more. OWASP Top 10:2025 coverage out of the box.",
-    detail: "Scans run in parallel via Celery workers. Results stream live to your dashboard via WebSocket.",
-    color: "#3b82f6",
-    tag: "Intern A",
-  },
-  {
-    icon: Activity,
-    title: "Real-Time SOC",
-    body: "Wazuh agent integration with AI-powered alert triage, MITRE ATT&CK mapping, and per-student scoping.",
-    detail: "Alerts are enriched with VirusTotal + AbuseIPDB threat intel and correlated to pentest findings.",
-    color: "#22c55e",
-    tag: "Intern B",
-  },
-  {
-    icon: BrainCircuit,
-    title: "AI Analysis",
-    body: "LLM-generated executive summaries, CVE enrichment with EPSS scoring, and automated remediation guidance.",
-    detail: "Powered by Google Gemini 2.0 Flash. Migrating to Claude API for richer structured output.",
-    color: "#a855f7",
-    tag: "AI Layer",
-  },
-  {
-    icon: FileText,
-    title: "Export Reports",
-    body: "One-click PDF and HTML reports. Scan diff comparison to track remediation progress across assessments.",
-    detail: "Jinja2 templates + WeasyPrint for PDF. Structured reports match professional pentest standards.",
-    color: "#f59e0b",
-    tag: "Reports",
-  },
-] as const;
-
-// ── Tool list ──────────────────────────────────────────────────────────────────
-const TOOLS = [
-  "Nmap", "Nuclei", "ZAP", "SSLyze", "WhatWeb",
-  "NIST NVD", "FIRST EPSS", "Wazuh", "MITRE ATT&CK",
-  "VirusTotal", "AbuseIPDB", "Metasploit",
+const TERMINAL_FINDINGS: TerminalFinding[] = [
+  { label: "SQL Injection", severity: "CRITICAL" },
+  { label: "XSS Reflected", severity: "HIGH" },
+  { label: "SSL Weak Cipher", severity: "MEDIUM" },
+  { label: "Missing HSTS", severity: "LOW" },
+  { label: "Directory Listing", severity: "INFO" },
 ];
 
-// ── Stats ──────────────────────────────────────────────────────────────────────
-const STATS = [
-  { label: "Security Tools", value: "17+" },
-  { label: "OWASP Coverage", value: "Top 10" },
-  { label: "Alert Pipeline", value: "Real-time" },
-  { label: "AI Models", value: "Gemini + Claude" },
-];
+const SEV_COLOR: Record<string, string> = {
+  CRITICAL: C.critical,
+  HIGH: C.high,
+  MEDIUM: C.medium,
+  LOW: C.low,
+  INFO: C.muted,
+};
 
-// ── Card Swap Feature Card ─────────────────────────────────────────────────────
-function FeatureCard({ icon: Icon, title, body, detail, color, tag }: typeof FEATURES[number]) {
-  const [flipped, setFlipped] = useState(false);
-  return (
-    <div
-      className="relative cursor-pointer"
-      style={{ perspective: "1000px", minHeight: "200px" }}
-      onMouseEnter={() => setFlipped(true)}
-      onMouseLeave={() => setFlipped(false)}
-    >
-      <motion.div
-        animate={{ rotateY: flipped ? 180 : 0 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-        style={{ transformStyle: "preserve-3d", width: "100%", height: "100%", position: "relative", minHeight: "200px" }}
-      >
-        {/* Front */}
-        <div
-          className="absolute inset-0 flex flex-col p-5 text-left rounded-xl"
-          style={{
-            backfaceVisibility: "hidden",
-            backgroundColor: "var(--bg-card)",
-            border: "1px solid var(--border)",
-          }}
-        >
-          <div className="flex items-start justify-between mb-3">
-            <div
-              className="flex items-center justify-center rounded-lg w-9 h-9 shrink-0"
-              style={{ background: `${color}14`, border: `1px solid ${color}28` }}
-            >
-              <Icon size={16} style={{ color }} />
-            </div>
-            <span
-              className="text-[9px] uppercase tracking-widest font-semibold px-2 py-0.5 rounded-full"
-              style={{ background: `${color}12`, color, border: `1px solid ${color}22` }}
-            >
-              {tag}
-            </span>
-          </div>
-          <h3 className="text-sm font-semibold mb-1.5" style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}>
-            {title}
-          </h3>
-          <p className="flex-1 text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>{body}</p>
-          <div className="mt-3 flex items-center gap-1 text-[10px]" style={{ color }}>
-            Hover to learn more <ChevronRight size={10} />
-          </div>
-        </div>
+/** Animate children into view using IntersectionObserver (no framer-motion). */
+function useScrollIn(ref: React.RefObject<HTMLDivElement>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
 
-        {/* Back */}
-        <div
-          className="absolute inset-0 flex flex-col justify-center p-5 rounded-xl"
-          style={{
-            backfaceVisibility: "hidden",
-            transform: "rotateY(180deg)",
-            backgroundColor: `${color}08`,
-            border: `1px solid ${color}28`,
-          }}
-        >
-          <Icon size={20} style={{ color, marginBottom: "10px" }} />
-          <h3 className="mb-2 text-sm font-bold" style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}>
-            {title}
-          </h3>
-          <p className="text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>{detail}</p>
-        </div>
-      </motion.div>
-    </div>
-  );
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const target = entry.target as HTMLElement;
+            target.style.opacity = "1";
+            target.style.transform = "translateY(0)";
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12 }
+    );
+
+    Array.from(el.children).forEach((child, i) => {
+      const c = child as HTMLElement;
+      c.style.opacity = "0";
+      c.style.transform = "translateY(20px)";
+      c.style.transition = `opacity 0.5s cubic-bezier(0.16,1,0.3,1) ${i * 80}ms, transform 0.5s cubic-bezier(0.16,1,0.3,1) ${i * 80}ms`;
+      observer.observe(c);
+    });
+
+    return () => observer.disconnect();
+  }, [ref]);
 }
 
-// ── Chroma tool grid ───────────────────────────────────────────────────────────
-function ToolGrid() {
-  const colors = ["#3b82f6", "#22c55e", "#a855f7", "#f59e0b", "#ef4444", "#06b6d4"];
-  return (
-    <div className="flex flex-wrap justify-center gap-2">
-      {TOOLS.map((tool, i) => (
-        <motion.span
-          key={tool}
-          initial={{ opacity: 0, scale: 0.9 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true }}
-          transition={{ delay: i * 0.04, duration: 0.3 }}
-          whileHover={{ scale: 1.05, y: -1 }}
-          className="text-xs font-medium px-3 py-1.5 rounded-lg cursor-default"
-          style={{
-            backgroundColor: `${colors[i % colors.length]}10`,
-            border: `1px solid ${colors[i % colors.length]}22`,
-            color: `${colors[i % colors.length]}cc`,
-            fontFamily: "JetBrains Mono, monospace",
-          }}
-        >
-          {tool}
-        </motion.span>
-      ))}
-    </div>
-  );
-}
-
-// ── Mock dashboard preview ─────────────────────────────────────────────────────
-function DashboardPreview({ isDark }: { isDark: boolean }) {
-  const bars = [65, 85, 45, 92, 38, 71, 58];
-  return (
-    <div
-      className="w-full overflow-hidden rounded-2xl"
-      style={{
-        backgroundColor: isDark ? "#06091A" : "#ffffff",
-        border: `1px solid ${isDark ? "rgba(59,130,246,0.2)" : "rgba(59,130,246,0.15)"}`,
-        boxShadow: isDark
-          ? "0 32px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(59,130,246,0.08)"
-          : "0 24px 48px rgba(59,130,246,0.1), 0 4px 12px rgba(0,0,0,0.06)",
-      }}
-    >
-      {/* Titlebar */}
-      <div
-        className="flex items-center gap-1.5 px-4 py-3"
-        style={{ borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }}
-      >
-        <div className="w-2.5 h-2.5 rounded-full bg-red-400 opacity-60" />
-        <div className="w-2.5 h-2.5 rounded-full bg-yellow-400 opacity-60" />
-        <div className="w-2.5 h-2.5 rounded-full bg-green-400 opacity-60" />
-        <div className="flex-1 h-4 mx-3 rounded" style={{ backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)" }} />
-      </div>
-
-      {/* Mock content */}
-      <div className="p-4 space-y-3">
-        {/* Stat row */}
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { label: "Active Scans", val: "3", color: "#3b82f6" },
-            { label: "Critical", val: "7", color: "#ef4444" },
-            { label: "Alerts", val: "12", color: "#22c55e" },
-          ].map((s) => (
-            <div key={s.label} className="rounded-lg p-2.5"
-              style={{ backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)", border: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }}
-            >
-              <div className="text-[9px] mb-1" style={{ color: isDark ? "#607898" : "#6b7fa0" }}>{s.label}</div>
-              <div className="text-base font-bold" style={{ color: s.color, fontFamily: "Syne, sans-serif" }}>{s.val}</div>
-            </div>
-          ))}
-        </div>
-        {/* Bar chart mock */}
-        <div className="p-3 rounded-lg" style={{ backgroundColor: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px solid ${isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"}` }}>
-          <div className="text-[9px] mb-2 font-medium" style={{ color: isDark ? "#607898" : "#6b7fa0" }}>Vulnerability Trend</div>
-          <div className="flex items-end h-12 gap-1">
-            {bars.map((h, i) => (
-              <motion.div
-                key={i}
-                className="flex-1 rounded-sm"
-                initial={{ height: 0 }}
-                whileInView={{ height: `${h}%` }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.06, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                style={{
-                  background: `rgba(59,130,246,${0.3 + (i % 3) * 0.15})`,
-                  alignSelf: "flex-end",
-                }}
-              />
-            ))}
-          </div>
-        </div>
-        {/* Scan rows */}
-        {[
-          { target: "192.168.1.1", status: "Critical", color: "#ef4444" },
-          { target: "10.0.0.5", status: "Medium", color: "#f59e0b" },
-        ].map((row) => (
-          <div key={row.target} className="flex items-center justify-between px-3 py-2 rounded-lg"
-            style={{ backgroundColor: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px solid ${isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"}` }}
-          >
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: row.color }} />
-              <span className="text-[10px] font-mono" style={{ color: isDark ? "#607898" : "#6b7fa0" }}>{row.target}</span>
-            </div>
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded" style={{ color: row.color, background: `${row.color}14` }}>{row.status}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Steps ──────────────────────────────────────────────────────────────────────
-const STEPS = [
-  { icon: Globe,       step: "01", title: "Submit Target",   body: "Enter a URL or IP. The engine validates scope and creates a scan record." },
-  { icon: Zap,         step: "02", title: "Parallel Scan",   body: "17 tools run simultaneously via Celery workers. Results stream to your browser live." },
-  { icon: BrainCircuit,step: "03", title: "AI Analysis",     body: "CVEs are enriched, EPSS scores calculated, and an LLM narrative is generated." },
-  { icon: Lock,        step: "04", title: "Export Report",   body: "Download a professional PDF or HTML report. Track remediation with scan diffs." },
-];
-
-// ── Page ───────────────────────────────────────────────────────────────────────
 export default function Landing() {
-  const { isDark, toggleTheme } = useTheme();
-  const { user } = useAuth();
+  const problemRef  = useRef<HTMLDivElement>(null);
+  const pentestRef  = useRef<HTMLDivElement>(null);
+  const socRef      = useRef<HTMLDivElement>(null);
+  const statsRef    = useRef<HTMLDivElement>(null);
+  const terminalRef = useRef<HTMLDivElement>(null);
+
+  useScrollIn(problemRef);
+  useScrollIn(pentestRef);
+  useScrollIn(socRef);
+  useScrollIn(statsRef);
+
+  // Animated terminal — all DOM manipulation uses safe createElement/textContent
+  useEffect(() => {
+    const el = terminalRef.current;
+    if (!el) return;
+
+    let mounted = true;
+    let activeTimeout = 0;
+
+    function wait(ms: number): Promise<void> {
+      return new Promise((r) => {
+        activeTimeout = window.setTimeout(r, ms);
+      });
+    }
+
+    /** Clear the terminal safely (no innerHTML) */
+    function clearTerminal() {
+      while (el.firstChild) el.removeChild(el.firstChild);
+    }
+
+    function makeSpan(text: string, color: string): HTMLSpanElement {
+      const s = document.createElement("span");
+      s.textContent = text;
+      s.style.color = color;
+      return s;
+    }
+
+    async function animate() {
+      if (!mounted) return;
+
+      clearTerminal();
+
+      // — Command line —
+      const cmdLine = document.createElement("div");
+      cmdLine.style.cssText = "display:flex;align-items:center;gap:6px;margin-bottom:14px;";
+      const promptSpan = makeSpan("$ ", C.accent);
+      promptSpan.style.fontFamily = "'IBM Plex Mono', monospace";
+      promptSpan.style.fontWeight = "600";
+      const cmdSpan = document.createElement("span");
+      cmdSpan.style.cssText = `color:${C.text};font-family:'IBM Plex Mono',monospace;font-size:13px;`;
+      cmdLine.appendChild(promptSpan);
+      cmdLine.appendChild(cmdSpan);
+      el.appendChild(cmdLine);
+
+      const cmdText = "sentinel scan --target example.com --deep";
+      for (let i = 0; i <= cmdText.length; i++) {
+        if (!mounted) return;
+        cmdSpan.textContent = cmdText.slice(0, i);
+        await wait(30);
+      }
+
+      await wait(280);
+
+      // — Status line —
+      const statusLine = document.createElement("div");
+      statusLine.style.cssText = `color:${C.muted};font-family:'IBM Plex Mono',monospace;font-size:12px;margin-bottom:10px;`;
+      statusLine.textContent = "Running 5 scanner modules in parallel...";
+      el.appendChild(statusLine);
+
+      await wait(700);
+
+      // — Findings table header —
+      const header = document.createElement("div");
+      header.style.cssText = [
+        "display:flex",
+        "justify-content:space-between",
+        "padding:4px 0",
+        `border-bottom:1px solid ${C.border}`,
+        "margin-bottom:8px",
+        "font-size:10px",
+        `color:${C.muted}`,
+        "font-family:'IBM Plex Mono',monospace",
+        "letter-spacing:0.08em",
+      ].join(";");
+      header.appendChild(makeSpan("FINDING", C.muted));
+      header.appendChild(makeSpan("SEVERITY", C.muted));
+      el.appendChild(header);
+
+      // — Findings rows —
+      for (let i = 0; i < TERMINAL_FINDINGS.length; i++) {
+        if (!mounted) return;
+        await wait(280);
+
+        const f = TERMINAL_FINDINGS[i];
+        const row = document.createElement("div");
+        row.style.cssText = [
+          "display:flex",
+          "justify-content:space-between",
+          "align-items:center",
+          "padding:4px 0",
+          `border-bottom:1px solid ${C.border}`,
+          "font-size:12px",
+          "font-family:'IBM Plex Mono',monospace",
+          "opacity:0",
+          "transition:opacity 0.25s ease",
+        ].join(";");
+
+        const checkmark = makeSpan(`✓ ${f.label}`, C.text);
+        const badge = makeSpan(f.severity, SEV_COLOR[f.severity] ?? C.muted);
+
+        row.appendChild(checkmark);
+        row.appendChild(badge);
+        el.appendChild(row);
+
+        // Fade in row
+        requestAnimationFrame(() => { row.style.opacity = "1"; });
+      }
+
+      await wait(700);
+
+      // — Summary line —
+      const summary = document.createElement("div");
+      summary.style.cssText = [
+        "margin-top:12px",
+        `padding-top:10px`,
+        `border-top:1px solid ${C.border}`,
+        `color:${C.accent}`,
+        "font-family:'IBM Plex Mono',monospace",
+        "font-size:12px",
+        "opacity:0",
+        "transition:opacity 0.4s ease",
+      ].join(";");
+      summary.textContent = "✓ Scan complete — 5 findings detected (1 critical)";
+      el.appendChild(summary);
+      requestAnimationFrame(() => { summary.style.opacity = "1"; });
+
+      await wait(4500);
+      if (mounted) animate();
+    }
+
+    animate();
+    return () => {
+      mounted = false;
+      clearTimeout(activeTimeout);
+    };
+  }, []);
 
   return (
-    <div
-      className="relative flex flex-col min-h-screen overflow-hidden"
-      style={{ backgroundColor: isDark ? "#06091A" : "#f0f6ff" }}
-    >
-      {/* ── Dark mode background ───────────────────────────────────── */}
-      {isDark && (
-        <>
-          <DottedBackground isDark className="opacity-40" />
-          <div className="absolute inset-0 pointer-events-none" style={{ color: "rgba(59,130,246,0.10)" }}>
-            <AnimatedGridPattern
-              width={56} height={56} numSquares={18} maxOpacity={0.55} duration={5} repeatDelay={0.8}
-              className={cn("[mask-image:radial-gradient(ellipse_80%_60%_at_50%_20%,white,transparent)]",
-                "stroke-current fill-current w-full h-full absolute inset-0")}
-            />
-          </div>
-          <FloatingParticles count={12} color="rgba(59,130,246,0.20)" />
-        </>
-      )}
+    <div style={{ background: C.bg, color: C.text, minHeight: "100vh", fontFamily: "'Inter', 'DM Sans', sans-serif" }}>
 
-      {/* ── Light mode background ──────────────────────────────────── */}
-      {!isDark && (
-        <>
-          <div className="absolute inset-0 pointer-events-none"
-            style={{ background: "linear-gradient(160deg, #f0f6ff 0%, #eaf1ff 50%, #f4f0ff 100%)" }}
-          />
-          <LightRays />
-        </>
-      )}
-
-      {/* ── Nav ───────────────────────────────────────────────────── */}
-      <nav className="relative z-10 flex items-center justify-between px-5 py-5 sm:px-8 md:px-12">
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg"
-            style={{ background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.28)" }}
-          >
-            <ShieldCheck size={16} style={{ color: "#3b82f6" }} />
-          </div>
-          <span className="text-base font-bold tracking-tight"
-            style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.02em" }}
-          >
-            Cyber Sentinel
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button onClick={toggleTheme} className="p-2 rounded-lg btn-ghost" title={isDark ? "Light mode" : "Dark mode"}>
-            {isDark
-              ? <Sun  size={14} style={{ color: "var(--text-muted)" }} />
-              : <Moon size={14} style={{ color: "var(--accent)" }} />
-            }
-          </button>
-          {user ? (
-            <Link to={ROUTES.DASHBOARD}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-lg transition-all"
-              style={{ background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.25)", color: "#3b82f6" }}
-            >
-              Dashboard <ArrowRight size={12} />
-            </Link>
-          ) : (
-            <>
-              <Link to={ROUTES.LOGIN} className="px-4 py-2 text-sm font-medium transition-colors rounded-lg"
-                style={{ color: "var(--text-muted)" }}
-              >Sign in</Link>
-              <Link to={ROUTES.REGISTER}
-                className="px-4 py-2 text-sm font-semibold transition-all rounded-lg"
-                style={{ background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.25)", color: "#3b82f6" }}
-              >Register</Link>
-            </>
-          )}
+      {/* ── Nav ── */}
+      <nav style={{
+        position: "sticky", top: 0, zIndex: 50,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 48px", height: "56px",
+        background: "rgba(8,12,16,0.90)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        borderBottom: `1px solid ${C.border}`,
+      }}>
+        <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 700, fontSize: "15px", letterSpacing: "-0.02em" }}>
+          <span style={{ color: C.accent }}>Cyber</span>
+          <span style={{ color: C.text }}>Sentinel</span>
+        </span>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <Link to="/login" style={{
+            padding: "6px 16px", borderRadius: "6px",
+            border: `1px solid ${C.border}`,
+            color: C.text, textDecoration: "none",
+            fontSize: "13px", fontWeight: 500,
+          }}>
+            Log in
+          </Link>
+          <Link to="/register" style={{
+            padding: "6px 16px", borderRadius: "6px",
+            background: C.accent, color: C.bg,
+            textDecoration: "none", fontSize: "13px", fontWeight: 600,
+          }}>
+            Get started
+          </Link>
         </div>
       </nav>
 
-      {/* ── Hero ──────────────────────────────────────────────────── */}
-      <main className="relative z-10 flex flex-col items-center flex-1 px-5 sm:px-8 md:px-12">
+      {/* ── Hero ── */}
+      <section style={{
+        display: "grid", gridTemplateColumns: "1fr 1fr",
+        gap: "48px", alignItems: "center",
+        maxWidth: "1100px", margin: "0 auto",
+        padding: "88px 48px 72px",
+      }}>
+        <div>
+          <div style={{
+            display: "inline-flex", alignItems: "center",
+            padding: "3px 12px", borderRadius: "9999px",
+            border: `1px solid ${C.accentGlow}`,
+            background: C.accentDim,
+            marginBottom: "22px",
+            fontSize: "10px", fontFamily: "'IBM Plex Mono', monospace",
+            color: C.accent, letterSpacing: "0.08em",
+          }}>
+            SMART CITY & CYBERSECURITY LAB · ITS
+          </div>
 
-        <div className="flex flex-col items-center w-full max-w-6xl pt-12 pb-16 sm:pt-20">
+          <h1 style={{
+            fontFamily: "'Sora', sans-serif",
+            fontSize: "clamp(30px, 4vw, 46px)",
+            fontWeight: 800, lineHeight: 1.12,
+            letterSpacing: "-0.03em",
+            margin: "0 0 18px",
+          }}>
+            AI-Powered<br />
+            <span style={{ color: C.accent }}>Web Security</span><br />
+            Assessment Platform
+          </h1>
 
-          {/* Circular text badge */}
-          <motion.div {...fade(0.04)} className="relative flex items-center justify-center mb-8 w-28 h-28">
-            <CircularText text="CYBER·SENTINEL·ITS·SMU·2026·" radius={48} />
-            <div className="relative z-10 flex items-center justify-center w-14 h-14 rounded-2xl"
-              style={{ background: "rgba(59,130,246,0.10)", border: "1px solid rgba(59,130,246,0.25)" }}
-            >
-              <ShieldCheck size={22} style={{ color: "#3b82f6" }} />
-            </div>
-          </motion.div>
+          <p style={{
+            fontSize: "15px", color: C.muted, lineHeight: 1.7,
+            margin: "0 0 32px", maxWidth: "400px",
+          }}>
+            Automated pentest scanning and real-time SOC monitoring,
+            unified in one platform for security operations teams.
+          </p>
 
-          {/* Badge */}
-          <motion.div {...fade(0.08)} className="mb-5">
-            <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] font-semibold px-3 py-1.5 rounded-full"
-              style={{ background: "rgba(59,130,246,0.07)", border: "1px solid rgba(59,130,246,0.18)", color: "#3b82f6" }}
-            >
-              <Terminal size={9} /> Smart City &amp; Cybersecurity Lab · ITS
-            </span>
-          </motion.div>
-
-          {/* Headline */}
-          <motion.h1 {...fade(0.12)}
-            className="text-4xl sm:text-5xl md:text-6xl font-bold max-w-3xl leading-[1.08] tracking-tight text-center"
-            style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.03em" }}
-          >
-            Unified Security
-            <br />
-            <span style={{ color: "#3b82f6" }}>Assessment Platform</span>
-          </motion.h1>
-
-          {/* Subtext */}
-          <motion.p {...fade(0.18)}
-            className="max-w-xl mt-5 text-base leading-relaxed text-center sm:text-lg"
-            style={{ color: "var(--text-muted)" }}
-          >
-            Automated pentesting, AI-powered SOC monitoring, and real-time threat analysis
-            — purpose-built for web security education at SMU ITS Lab.
-          </motion.p>
-
-          {/* CTAs */}
-          <motion.div {...fade(0.24)} className="flex flex-col items-center gap-3 mt-8 sm:flex-row">
-            <Link to={user ? ROUTES.DASHBOARD : ROUTES.LOGIN}
-              className="inline-flex items-center justify-center w-full gap-2 px-6 py-3 text-sm font-semibold transition-all rounded-xl sm:w-auto"
-              style={{ background: "#2563eb", color: "#fff" }}
-            >
-              {user ? "Open Dashboard" : "Sign in to dashboard"}
-              <ArrowRight size={14} />
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <Link to="/register" style={{
+              display: "inline-flex", alignItems: "center", gap: "8px",
+              padding: "10px 22px", borderRadius: "6px",
+              background: C.accent, color: C.bg,
+              textDecoration: "none", fontSize: "14px", fontWeight: 600,
+              boxShadow: `0 0 24px ${C.accentGlow}`,
+            }}>
+              Start scanning →
             </Link>
-            {!user && (
-              <Link to={ROUTES.REGISTER}
-                className="inline-flex items-center justify-center w-full gap-2 px-6 py-3 text-sm font-medium transition-all rounded-xl sm:w-auto"
-                style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-muted)" }}
-              >
-                Create an account
-              </Link>
-            )}
-          </motion.div>
-
-          {/* Stats strip */}
-          <motion.div {...fade(0.3)}
-            className="grid w-full max-w-2xl grid-cols-2 gap-3 mt-12 sm:grid-cols-4"
-          >
-            {STATS.map(({ label, value }) => (
-              <div key={label} className="p-4 text-center rounded-xl"
-                style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
-              >
-                <div className="text-lg font-bold mb-0.5"
-                  style={{ fontFamily: "Syne, sans-serif", color: "#3b82f6" }}
-                >{value}</div>
-                <div className="text-[10px] uppercase tracking-wide" style={{ color: "var(--text-subtle)" }}>{label}</div>
-              </div>
-            ))}
-          </motion.div>
-
-          {/* Dashboard preview */}
-          <motion.div {...fade(0.36)} className="w-full max-w-3xl mt-14">
-            <div className="mb-4 text-center">
-              <span className="text-xs font-semibold tracking-widest uppercase" style={{ color: "var(--text-subtle)" }}>
-                Live Dashboard Preview
-              </span>
-            </div>
-            <DashboardPreview isDark={isDark} />
-          </motion.div>
+            <Link to="/login" style={{
+              display: "inline-flex", alignItems: "center",
+              padding: "10px 22px", borderRadius: "6px",
+              border: `1px solid ${C.border}`,
+              color: C.text, textDecoration: "none", fontSize: "14px",
+            }}>
+              Sign in
+            </Link>
+          </div>
         </div>
 
-        {/* ── Feature cards (card swap) ──────────────────────────── */}
-        <section className="w-full max-w-6xl pb-20">
-          <motion.div {...fade(0.1)} className="mb-10 text-center">
-            <h2 className="text-2xl font-bold sm:text-3xl" style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}>
-              What's inside
-            </h2>
-            <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
-              Hover any card to see implementation details
-            </p>
-          </motion.div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {FEATURES.map((f, i) => (
-              <motion.div
-                key={f.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.08, duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <FeatureCard {...f} />
-              </motion.div>
+        {/* Terminal widget */}
+        <div style={{
+          background: C.surface,
+          border: `1px solid ${C.border}`,
+          borderRadius: "10px",
+          overflow: "hidden",
+          boxShadow: `0 0 48px rgba(0,212,255,0.07)`,
+        }}>
+          {/* Chrome bar */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: "6px",
+            padding: "10px 16px",
+            borderBottom: `1px solid ${C.border}`,
+            background: "rgba(255,255,255,0.025)",
+          }}>
+            {(["#ef4444", "#f59e0b", "#22c55e"] as const).map((c, i) => (
+              <div key={i} style={{ width: "10px", height: "10px", borderRadius: "50%", background: c, opacity: 0.75 }} />
+            ))}
+            <span style={{ marginLeft: "10px", fontSize: "11px", color: C.muted, fontFamily: "'IBM Plex Mono', monospace" }}>
+              sentinel — scan
+            </span>
+          </div>
+          {/* Terminal body */}
+          <div
+            ref={terminalRef}
+            style={{ padding: "16px 20px", minHeight: "220px" }}
+          />
+        </div>
+      </section>
+
+      {/* ── Problem ── */}
+      <section style={{
+        background: C.surface,
+        borderTop: `1px solid ${C.border}`,
+        borderBottom: `1px solid ${C.border}`,
+        padding: "72px 48px",
+      }}>
+        <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
+          <p style={{
+            textAlign: "center", fontSize: "10px",
+            fontFamily: "'IBM Plex Mono', monospace",
+            color: C.accent, letterSpacing: "0.12em",
+            marginBottom: "10px",
+          }}>
+            THE PROBLEM
+          </p>
+          <h2 style={{
+            textAlign: "center",
+            fontFamily: "'Sora', sans-serif",
+            fontSize: "clamp(22px, 2.8vw, 30px)",
+            fontWeight: 700, letterSpacing: "-0.02em",
+            color: C.text, margin: "0 0 52px",
+          }}>
+            Security ops is scattered across too many tools
+          </h2>
+
+          <div
+            ref={problemRef}
+            style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "20px" }}
+          >
+            {[
+              {
+                icon: "⚡",
+                title: "Manual pentesting",
+                desc: "Running Nmap, Nuclei, and ZAP separately, then manually correlating results takes hours.",
+              },
+              {
+                icon: "🔔",
+                title: "Alert fatigue",
+                desc: "Wazuh produces hundreds of raw alerts. No triage means critical events get buried.",
+              },
+              {
+                icon: "🔗",
+                title: "No correlation",
+                desc: "Pentest findings and SOC alerts exist in silos. Attackers exploit the blind spot.",
+              },
+            ].map((card) => (
+              <div key={card.title} style={{
+                background: C.bg,
+                border: `1px solid ${C.border}`,
+                borderRadius: "8px",
+                padding: "28px 24px",
+              }}>
+                <div style={{ fontSize: "22px", marginBottom: "12px" }}>{card.icon}</div>
+                <h3 style={{
+                  fontFamily: "'Sora', sans-serif",
+                  fontSize: "15px", fontWeight: 600,
+                  color: C.text, margin: "0 0 8px",
+                }}>{card.title}</h3>
+                <p style={{ fontSize: "13px", color: C.muted, margin: 0, lineHeight: 1.65 }}>
+                  {card.desc}
+                </p>
+              </div>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ── How it works ────────────────────────────────────────── */}
-        <section className="w-full max-w-6xl pb-20">
-          <motion.div
-            initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
-            className="mb-10 text-center"
-          >
-            <h2 className="text-2xl font-bold sm:text-3xl" style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}>
-              How it works
+      {/* ── Pentest module ── */}
+      <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "80px 48px" }}>
+        <div ref={pentestRef} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "56px", alignItems: "center" }}>
+          <div>
+            <p style={{
+              fontSize: "10px", fontFamily: "'IBM Plex Mono', monospace",
+              color: C.accent, letterSpacing: "0.12em", marginBottom: "8px",
+            }}>PENTEST ENGINE</p>
+            <h2 style={{
+              fontFamily: "'Sora', sans-serif",
+              fontSize: "clamp(20px, 2.5vw, 26px)", fontWeight: 700,
+              color: C.text, margin: "0 0 14px", letterSpacing: "-0.02em",
+            }}>
+              Automated multi-tool<br />vulnerability scanning
             </h2>
-          </motion.div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {STEPS.map(({ icon: Icon, step, title, body }, i) => (
-              <motion.div
-                key={step}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.09, duration: 0.4 }}
-                className="p-5 rounded-xl"
-                style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-[10px] font-bold" style={{ color: "#3b82f6", fontFamily: "JetBrains Mono, monospace" }}>{step}</span>
-                  <div className="flex-1 h-px" style={{ background: "var(--border)" }} />
-                  <Icon size={13} style={{ color: "var(--text-subtle)" }} />
+            <p style={{ fontSize: "14px", color: C.muted, lineHeight: 1.7, margin: "0 0 22px" }}>
+              Nmap, Nuclei, SSLyze, WhatWeb, and OWASP ZAP run in parallel.
+              Results are aggregated, CVE-mapped, and EPSS-ranked.
+              Gemini AI generates a plain-English remediation report.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {[
+                "Parallel scanner execution",
+                "CVE mapping via NIST NVD",
+                "AI-generated report narrative",
+                "PDF + HTML export",
+              ].map((f) => (
+                <div key={f} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ color: C.accent, fontSize: "13px", fontWeight: 700 }}>✓</span>
+                  <span style={{ fontSize: "13px", color: C.muted }}>{f}</span>
                 </div>
-                <h3 className="text-sm font-semibold mb-1.5" style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}>{title}</h3>
-                <p className="text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>{body}</p>
-              </motion.div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: "8px", padding: "22px 24px",
+          }}>
+            <div style={{
+              fontSize: "11px", fontFamily: "'IBM Plex Mono', monospace",
+              color: C.muted, marginBottom: "14px",
+            }}>
+              Active scan — example.com
+            </div>
+            {[
+              { tool: "nmap",    status: "done",    findings: 3 },
+              { tool: "nuclei",  status: "done",    findings: 12 },
+              { tool: "sslyze",  status: "done",    findings: 2 },
+              { tool: "whatweb", status: "done",    findings: 5 },
+              { tool: "zap",     status: "running", findings: null },
+            ].map((t) => (
+              <div key={t.tool} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "9px 0", borderBottom: `1px solid ${C.border}`,
+              }}>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px", color: C.text }}>
+                  {t.tool}
+                </span>
+                <span style={{
+                  fontSize: "11px", fontFamily: "'IBM Plex Mono', monospace",
+                  color: t.status === "running" ? C.accent : C.low,
+                }}>
+                  {t.status === "running" ? "scanning..." : `${t.findings} findings`}
+                </span>
+              </div>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ── Security tools chroma grid ───────────────────────────── */}
-        <section className="w-full max-w-4xl pb-20 text-center">
-          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}>
-            <h2 className="mb-2 text-lg font-bold" style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}>
-              Integrated Security Tools
-            </h2>
-            <p className="mb-8 text-xs" style={{ color: "var(--text-muted)" }}>
-              17-tool pipeline running in parallel — all orchestrated automatically
-            </p>
-            <ToolGrid />
-          </motion.div>
-        </section>
+      {/* ── SOC module ── */}
+      <section style={{
+        background: C.surface,
+        borderTop: `1px solid ${C.border}`,
+        borderBottom: `1px solid ${C.border}`,
+        padding: "80px 48px",
+      }}>
+        <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
+          <div ref={socRef} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "56px", alignItems: "center" }}>
 
-        {/* ── Network pipeline section ─────────────────────────────── */}
-        <section className="w-full max-w-4xl pb-20">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="p-8 text-center rounded-2xl"
-            style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
-          >
-            <Network size={28} style={{ color: "#3b82f6", margin: "0 auto 12px" }} />
-            <h2 className="mb-3 text-xl font-bold" style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}>
-              Correlation Engine
-            </h2>
-            <p className="max-w-lg mx-auto text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>
-              Pentest findings from Intern A's pipeline are automatically cross-referenced with Intern B's
-              Wazuh SOC alerts — linking CVEs to real attack telemetry for a complete threat picture.
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-4 mt-6 font-mono text-xs" style={{ color: "var(--text-subtle)" }}>
-              <span style={{ color: "#3b82f6" }}>Pentest Engine</span>
-              <span>→</span>
-              <span style={{ color: "#a855f7" }}>Correlation Engine</span>
-              <span>→</span>
-              <span style={{ color: "#22c55e" }}>SOC Dashboard</span>
+            {/* Alert mockup — left */}
+            <div style={{
+              background: C.bg,
+              border: `1px solid ${C.border}`,
+              borderRadius: "8px", padding: "22px 24px",
+            }}>
+              <div style={{
+                fontSize: "11px", fontFamily: "'IBM Plex Mono', monospace",
+                color: C.muted, marginBottom: "14px",
+              }}>
+                Live alerts — last 5 minutes
+              </div>
+              {[
+                { rule: "SQL injection attempt",  level: 12, agent: "web-01" },
+                { rule: "Multiple auth failures", level: 8,  agent: "web-01" },
+                { rule: "Port scan detected",     level: 7,  agent: "web-02" },
+                { rule: "Config file accessed",   level: 5,  agent: "db-01"  },
+              ].map((a, i) => (
+                <div key={i} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "9px 0", borderBottom: `1px solid ${C.border}`,
+                }}>
+                  <div>
+                    <div style={{ fontSize: "12px", color: C.text }}>{a.rule}</div>
+                    <div style={{
+                      fontSize: "10px", color: C.muted,
+                      fontFamily: "'IBM Plex Mono', monospace", marginTop: "2px",
+                    }}>{a.agent}</div>
+                  </div>
+                  <span style={{
+                    padding: "2px 8px", borderRadius: "9999px",
+                    fontSize: "10px", fontFamily: "'IBM Plex Mono', monospace",
+                    background: a.level >= 12 ? "rgba(239,68,68,0.15)"
+                      : a.level >= 8 ? "rgba(249,115,22,0.15)"
+                      : "rgba(234,179,8,0.15)",
+                    color: a.level >= 12 ? C.critical : a.level >= 8 ? C.high : C.medium,
+                    border: `1px solid ${
+                      a.level >= 12 ? "rgba(239,68,68,0.4)"
+                      : a.level >= 8 ? "rgba(249,115,22,0.4)"
+                      : "rgba(234,179,8,0.4)"
+                    }`,
+                  }}>
+                    {a.level >= 12 ? "CRITICAL" : a.level >= 8 ? "HIGH" : "MEDIUM"}
+                  </span>
+                </div>
+              ))}
             </div>
-          </motion.div>
-        </section>
 
-      </main>
+            {/* Text — right */}
+            <div>
+              <p style={{
+                fontSize: "10px", fontFamily: "'IBM Plex Mono', monospace",
+                color: C.accent, letterSpacing: "0.12em", marginBottom: "8px",
+              }}>SOC MONITOR</p>
+              <h2 style={{
+                fontFamily: "'Sora', sans-serif",
+                fontSize: "clamp(20px, 2.5vw, 26px)", fontWeight: 700,
+                color: C.text, margin: "0 0 14px", letterSpacing: "-0.02em",
+              }}>
+                Real-time threat detection<br />via Wazuh SIEM
+              </h2>
+              <p style={{ fontSize: "14px", color: C.muted, lineHeight: 1.7, margin: "0 0 22px" }}>
+                Wazuh agents stream security events to your dashboard in real-time.
+                AI triages every alert, suppresses false positives, and flags
+                exactly what needs attention.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {[
+                  "AI-powered alert triage",
+                  "False positive suppression",
+                  "MITRE ATT&CK tagging",
+                  "Correlation with pentest findings",
+                ].map((f) => (
+                  <div key={f} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span style={{ color: C.accent, fontSize: "13px", fontWeight: 700 }}>✓</span>
+                    <span style={{ fontSize: "13px", color: C.muted }}>{f}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-      {/* ── Footer ────────────────────────────────────────────────── */}
-      <footer className="relative z-10 px-5 py-6 text-center border-t" style={{ borderColor: "var(--border)" }}>
-        <p className="text-[10px] uppercase tracking-[0.2em] font-medium" style={{ color: "var(--text-subtle)" }}>
-          Smart City &amp; Cybersecurity Lab · ITS · San Miguel University · v1.0
-        </p>
+      {/* ── Stats bar ── */}
+      <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "60px 48px" }}>
+        <div
+          ref={statsRef}
+          style={{
+            display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
+            gap: "1px", background: C.border,
+            border: `1px solid ${C.border}`, borderRadius: "8px",
+            overflow: "hidden",
+          }}
+        >
+          {[
+            { value: "5+",       label: "Security scanners"  },
+            { value: "100+",     label: "Nuclei templates"   },
+            { value: "Real-time",label: "Alert streaming"    },
+            { value: "AI",       label: "Triage & reporting" },
+          ].map((stat) => (
+            <div key={stat.label} style={{ background: C.surface, padding: "32px 24px", textAlign: "center" }}>
+              <div style={{
+                fontFamily: "'Sora', sans-serif",
+                fontSize: "26px", fontWeight: 700,
+                color: C.accent, marginBottom: "4px",
+              }}>{stat.value}</div>
+              <div style={{ fontSize: "12px", color: C.muted }}>{stat.label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Footer ── */}
+      <footer style={{
+        borderTop: `1px solid ${C.border}`,
+        padding: "28px 48px",
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        maxWidth: "1100px", margin: "0 auto",
+      }}>
+        <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 700, fontSize: "14px" }}>
+          <span style={{ color: C.accent }}>Cyber</span>
+          <span style={{ color: C.text }}>Sentinel</span>
+        </span>
+        <span style={{ fontSize: "12px", color: C.muted }}>
+          Built at Smart City & Cybersecurity Lab · ITS
+        </span>
+        <div style={{ display: "flex", gap: "12px" }}>
+          <Link to="/login"    style={{ fontSize: "12px", color: C.muted, textDecoration: "none" }}>Log in</Link>
+          <Link to="/register" style={{ fontSize: "12px", color: C.muted, textDecoration: "none" }}>Register</Link>
+        </div>
       </footer>
+
     </div>
   );
 }
