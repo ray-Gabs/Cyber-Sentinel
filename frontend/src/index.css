@@ -16,47 +16,47 @@
 .dark {
   color-scheme: dark;
 
-  /* Backgrounds — deep navy-black with blue undertone */
-  --bg-base:    #020817;
-  --bg-surface: #06091A;
-  --bg-card:    #0A0F20;
-  --bg-muted:   #0E1428;
-  --bg-input:   #080D1C;
-  --bg-hover:   #111928;
+  /* Backgrounds — deep charcoal-black matching landing page */
+  --bg-base:    #080c10;
+  --bg-surface: #0e1520;
+  --bg-card:    #111620;
+  --bg-muted:   #1a2030;
+  --bg-input:   #0b0f18;
+  --bg-hover:   #1e2535;
   /* Aliases used by ScanDiff and other components */
-  --surface:    #06091A;
-  --surface-2:  #0E1428;
+  --surface:    #0e1520;
+  --surface-2:  #1a2030;
 
-  /* Borders — blue-tinted, subtle */
-  --border:       #182138;
-  --border-muted: #1E2C48;
-  --border-focus: #3B82F6;
+  /* Borders — subtle charcoal */
+  --border:       #1a2535;
+  --border-muted: #243040;
+  --border-focus: #00d4ff;
 
-  /* Text — slightly blue-tinted whites */
-  --text-base:    #E4EEFF;
-  --text-muted:   #607898;
-  --text-subtle:  #283D5C;
-  --text-inverse: #020817;
+  /* Text — clean neutrals matching landing page */
+  --text-base:    #e2e8f0;
+  --text-muted:   #64748b;
+  --text-subtle:  #374151;
+  --text-inverse: #080c10;
 
-  /* Accent — electric blue */
-  --accent:       #3B82F6;
-  --accent-dim:   rgba(59,130,246,0.10);
-  --accent-hover: #60A5FA;
-  --accent-glow:  rgba(59,130,246,0.25);
+  /* Accent — cyan matching landing page */
+  --accent:       #00d4ff;
+  --accent-dim:   rgba(0,212,255,0.10);
+  --accent-hover: #38d9f5;
+  --accent-glow:  rgba(0,212,255,0.22);
 
   /* Severity — base colors (for borders, bars, dividers) */
   --sev-critical: #EF4444;
   --sev-high:     #F97316;
   --sev-medium:   #EAB308;
   --sev-low:      #22C55E;
-  --sev-info:     #3B82F6;
+  --sev-info:     #00d4ff;
 
   /* Severity text colors (lighter, for text on dark bg) */
   --sev-critical-text: #f87171;
   --sev-high-text:     #fb923c;
   --sev-medium-text:   #fbbf24;
   --sev-low-text:      #4ade80;
-  --sev-info-text:     #60a5fa;
+  --sev-info-text:     #38d9f5;
 
   /* Purple accent (MITRE ATT&CK, analytics) */
   --color-purple-text:   #c084fc;
@@ -68,13 +68,13 @@
   --color-success-border: rgba(34,197,94,0.25);
 
   /* Scrollbar */
-  --scrollbar-track: #06091A;
-  --scrollbar-thumb: #182138;
+  --scrollbar-track: #0e1520;
+  --scrollbar-thumb: #1a2535;
 
   /* React Bits UI effects */
   --glare-color:      rgba(255,255,255,0.06);
-  --spotlight-color:  rgba(59,130,246,0.08);
-  --beam-color:       rgba(59,130,246,0.40);
+  --spotlight-color:  rgba(0,212,255,0.06);
+  --beam-color:       rgba(0,212,255,0.35);
   --stepper-track:    var(--border);
   --stepper-active:   var(--accent);
   --stepper-complete: var(--sev-low);
@@ -99,7 +99,7 @@
   /* Borders */
   --border:       #D0DCFA;
   --border-muted: #B8CCF0;
-  --border-focus: #2563EB;
+  --border-focus: #0891b2;
 
   /* Text */
   --text-base:    #08152E;
@@ -107,25 +107,25 @@
   --text-subtle:  #8CA3C2;
   --text-inverse: #F2F6FF;
 
-  /* Accent */
-  --accent:       #2563EB;
-  --accent-dim:   rgba(37,99,235,0.08);
-  --accent-hover: #1D4ED8;
-  --accent-glow:  rgba(37,99,235,0.18);
+  /* Accent — teal/cyan for light mode */
+  --accent:       #0891b2;
+  --accent-dim:   rgba(8,145,178,0.08);
+  --accent-hover: #0e7490;
+  --accent-glow:  rgba(8,145,178,0.15);
 
   /* Severity — base colors */
   --sev-critical: #DC2626;
   --sev-high:     #EA580C;
   --sev-medium:   #D97706;
   --sev-low:      #16A34A;
-  --sev-info:     #2563EB;
+  --sev-info:     #0891b2;
 
   /* Severity text colors */
   --sev-critical-text: #dc2626;
   --sev-high-text:     #ea580c;
   --sev-medium-text:   #d97706;
   --sev-low-text:      #16a34a;
-  --sev-info-text:     #2563eb;
+  --sev-info-text:     #0891b2;
 
   /* Purple accent */
   --color-purple-text:   #9333ea;
@@ -142,8 +142,8 @@
 
   /* React Bits UI effects */
   --glare-color:      rgba(255,255,255,0.15);
-  --spotlight-color:  rgba(37,99,235,0.06);
-  --beam-color:       rgba(37,99,235,0.25);
+  --spotlight-color:  rgba(8,145,178,0.06);
+  --beam-color:       rgba(8,145,178,0.25);
   --stepper-track:    var(--border);
   --stepper-active:   var(--accent);
   --stepper-complete: var(--sev-low);
@@ -210,12 +210,12 @@
     @apply card cursor-pointer;
   }
   .card-hover:hover {
-    border-color: rgba(59,130,246,0.25);
+    border-color: var(--accent-dim);
     box-shadow: 0 8px 24px rgba(0,0,0,0.12);
     transform: translateY(-2px);
   }
   .dark .card-hover:hover {
-    box-shadow: 0 0 0 1px rgba(59,130,246,0.10), 0 8px 28px rgba(0,0,0,0.3);
+    box-shadow: 0 0 0 1px var(--accent-dim), 0 8px 28px rgba(0,0,0,0.3);
   }
 
   /* ── Buttons ── */
@@ -344,7 +344,7 @@
   .badge-high     { @apply badge; background: rgba(249,115,22,0.15); color: var(--sev-high-text);     border: 1px solid rgba(249,115,22,0.3); }
   .badge-medium   { @apply badge; background: rgba(234,179,8,0.15);  color: var(--sev-medium-text);   border: 1px solid rgba(234,179,8,0.3); }
   .badge-low      { @apply badge; background: rgba(34,197,94,0.15);  color: var(--sev-low-text);      border: 1px solid rgba(34,197,94,0.3); }
-  .badge-info     { @apply badge; background: rgba(59,130,246,0.12); color: var(--sev-info-text);     border: 1px solid rgba(59,130,246,0.22); }
+  .badge-info     { @apply badge; background: rgba(0,212,255,0.10); color: var(--sev-info-text);     border: 1px solid rgba(0,212,255,0.22); }
 
   /* ── Nav icon (colored bg on active) ── */
   .nav-icon {
@@ -360,7 +360,7 @@
 
   /* ── Story ring (Instagram-style gradient avatar border) ── */
   .story-ring {
-    background: linear-gradient(135deg, #3B82F6 0%, #A855F7 50%, #22C55E 100%);
+    background: linear-gradient(135deg, #00d4ff 0%, #A855F7 50%, #22C55E 100%);
     padding: 2px;
     border-radius: 9999px;
     display: inline-flex;
@@ -389,8 +389,8 @@
   }
   .scan-grid-card:hover {
     transform: translateY(-3px);
-    border-color: rgba(59,130,246,0.35);
-    box-shadow: 0 12px 36px rgba(0,0,0,0.3), 0 0 0 1px rgba(59,130,246,0.12);
+    border-color: rgba(0,212,255,0.35);
+    box-shadow: 0 12px 36px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,212,255,0.12);
   }
 
   /* ── Search bar ── */
@@ -517,9 +517,9 @@
 
 @layer utilities {
 
-  /* Electric blue gradient text */
+  /* Cyan gradient text */
   .text-gradient {
-    background: linear-gradient(135deg, var(--accent), #93C5FD);
+    background: linear-gradient(135deg, var(--accent), #a5f3fc);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -570,6 +570,64 @@
   .row-medium   { border-left: 2px solid var(--sev-medium); }
   .row-low      { border-left: 2px solid var(--sev-low); }
   .row-info     { border-left: 2px solid var(--sev-info); }
+
+  /* ── Landing page responsive grid helpers ───────────────── */
+  /* Mobile-first: single column, then expand at sm (640px)   */
+  .landing-hero {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 32px;
+    align-items: center;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: clamp(48px, 8vw, 88px) clamp(16px, 4vw, 48px) clamp(40px, 6vw, 72px);
+  }
+  @media (min-width: 640px) {
+    .landing-hero { grid-template-columns: 1fr 1fr; gap: 48px; }
+  }
+
+  .landing-problem-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  @media (min-width: 640px) {
+    .landing-problem-grid { grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  }
+
+  .landing-feature-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 32px;
+    align-items: center;
+  }
+  @media (min-width: 640px) {
+    .landing-feature-row { grid-template-columns: 1fr 1fr; gap: 56px; }
+  }
+
+  .landing-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  @media (min-width: 640px) {
+    .landing-stats { grid-template-columns: repeat(4, 1fr); }
+  }
+
+  .landing-footer-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    align-items: flex-start;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px clamp(16px, 4vw, 48px);
+  }
+  @media (min-width: 640px) {
+    .landing-footer-inner { flex-direction: row; justify-content: space-between; align-items: center; gap: 0; }
+  }
 
   /* ── Responsive layout (AppLayout) ──────────────────────── */
   /* Mobile: no left margin (sidebar is overlay drawer) */

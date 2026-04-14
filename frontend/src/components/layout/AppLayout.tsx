@@ -67,7 +67,7 @@ export default function AppLayout() {
       {/* ── Animated grid — full-screen fixed background ─────────── */}
       <div
         className="fixed inset-0 pointer-events-none z-0 overflow-hidden"
-        style={{ color: isDark ? "rgba(59,130,246,0.22)" : "rgba(37,99,235,0.12)" }}
+        style={{ color: isDark ? "rgba(0,212,255,0.14)" : "rgba(8,145,178,0.10)" }}
       >
         <AnimatedGridPattern
           width={44}

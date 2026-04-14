@@ -8,7 +8,7 @@ import { LayoutDashboard, Crosshair, ShieldAlert, BarChart3, Settings } from "lu
 import { ROUTES } from "@/lib/constants";
 
 const NAV_ITEMS = [
-  { to: ROUTES.DASHBOARD,    label: "Home",      icon: LayoutDashboard, color: "#3B82F6" },
+  { to: ROUTES.DASHBOARD,    label: "Home",      icon: LayoutDashboard, color: "#00d4ff" },
   { to: ROUTES.ALERTS,       label: "Alerts",    icon: ShieldAlert,     color: "#EF4444" },
   { to: ROUTES.SCANS,        label: "Scans",     icon: Crosshair,       color: "#F59E0B" },
   { to: ROUTES.ANALYTICS,    label: "Analytics", icon: BarChart3,       color: "#A855F7" },
@@ -31,7 +31,7 @@ export default function BottomNav() {
         <NavLink
           key={to}
           to={to}
-          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 min-h-[3.25rem] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50"
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 min-h-[3.25rem] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00d4ff]/40"
         >
           {({ isActive }) => (
             <>

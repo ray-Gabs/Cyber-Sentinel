@@ -90,7 +90,7 @@ export default function Landing() {
 
   // Animated terminal — all DOM manipulation uses safe createElement/textContent
   useEffect(() => {
-    const el = terminalRef.current;
+    const el = terminalRef.current as HTMLDivElement;
     if (!el) return;
 
     let mounted = true;
@@ -231,7 +231,7 @@ export default function Landing() {
       <nav style={{
         position: "sticky", top: 0, zIndex: 50,
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 48px", height: "56px",
+        padding: "0 clamp(16px, 4vw, 48px)", height: "56px",
         background: "rgba(8,12,16,0.90)",
         backdropFilter: "blur(12px)",
         WebkitBackdropFilter: "blur(12px)",
@@ -261,12 +261,7 @@ export default function Landing() {
       </nav>
 
       {/* ── Hero ── */}
-      <section style={{
-        display: "grid", gridTemplateColumns: "1fr 1fr",
-        gap: "48px", alignItems: "center",
-        maxWidth: "1100px", margin: "0 auto",
-        padding: "88px 48px 72px",
-      }}>
+      <section className="landing-hero">
         <div>
           <div style={{
             display: "inline-flex", alignItems: "center",
@@ -356,7 +351,7 @@ export default function Landing() {
         background: C.surface,
         borderTop: `1px solid ${C.border}`,
         borderBottom: `1px solid ${C.border}`,
-        padding: "72px 48px",
+        padding: "clamp(40px, 7vw, 72px) clamp(16px, 4vw, 48px)",
       }}>
         <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
           <p style={{
@@ -377,10 +372,7 @@ export default function Landing() {
             Security ops is scattered across too many tools
           </h2>
 
-          <div
-            ref={problemRef}
-            style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "20px" }}
-          >
+          <div ref={problemRef} className="landing-problem-grid">
             {[
               {
                 icon: "⚡",
@@ -420,8 +412,8 @@ export default function Landing() {
       </section>
 
       {/* ── Pentest module ── */}
-      <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "80px 48px" }}>
-        <div ref={pentestRef} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "56px", alignItems: "center" }}>
+      <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "clamp(48px, 7vw, 80px) clamp(16px, 4vw, 48px)" }}>
+        <div ref={pentestRef} className="landing-feature-row">
           <div>
             <p style={{
               fontSize: "10px", fontFamily: "'IBM Plex Mono', monospace",
@@ -496,10 +488,10 @@ export default function Landing() {
         background: C.surface,
         borderTop: `1px solid ${C.border}`,
         borderBottom: `1px solid ${C.border}`,
-        padding: "80px 48px",
+        padding: "clamp(48px, 7vw, 80px) clamp(16px, 4vw, 48px)",
       }}>
         <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-          <div ref={socRef} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "56px", alignItems: "center" }}>
+          <div ref={socRef} className="landing-feature-row">
 
             {/* Alert mockup — left */}
             <div style={{
@@ -586,15 +578,11 @@ export default function Landing() {
       </section>
 
       {/* ── Stats bar ── */}
-      <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "60px 48px" }}>
+      <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "clamp(40px, 6vw, 60px) clamp(16px, 4vw, 48px)" }}>
         <div
           ref={statsRef}
-          style={{
-            display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
-            gap: "1px", background: C.border,
-            border: `1px solid ${C.border}`, borderRadius: "8px",
-            overflow: "hidden",
-          }}
+          className="landing-stats"
+          style={{ background: C.border, border: `1px solid ${C.border}` }}
         >
           {[
             { value: "5+",       label: "Security scanners"  },
@@ -615,12 +603,8 @@ export default function Landing() {
       </section>
 
       {/* ── Footer ── */}
-      <footer style={{
-        borderTop: `1px solid ${C.border}`,
-        padding: "28px 48px",
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        maxWidth: "1100px", margin: "0 auto",
-      }}>
+      <footer style={{ borderTop: `1px solid ${C.border}` }}>
+        <div className="landing-footer-inner">
         <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 700, fontSize: "14px" }}>
           <span style={{ color: C.accent }}>Cyber</span>
           <span style={{ color: C.text }}>Sentinel</span>
@@ -631,6 +615,7 @@ export default function Landing() {
         <div style={{ display: "flex", gap: "12px" }}>
           <Link to="/login"    style={{ fontSize: "12px", color: C.muted, textDecoration: "none" }}>Log in</Link>
           <Link to="/register" style={{ fontSize: "12px", color: C.muted, textDecoration: "none" }}>Register</Link>
+        </div>
         </div>
       </footer>
 

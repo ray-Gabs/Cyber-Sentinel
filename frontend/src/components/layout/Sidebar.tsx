@@ -33,7 +33,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   {
     to: ROUTES.DASHBOARD,    label: "Dashboard",  icon: LayoutDashboard,
-    section: null,             color: "#3B82F6", iconBg: "rgba(59,130,246,0.18)",
+    section: null,             color: "#00d4ff", iconBg: "rgba(0,212,255,0.15)",
   },
   // ── SOC Platform first ──
   {
@@ -77,7 +77,7 @@ const navItems: NavItem[] = [
   },
   {
     to: ROUTES.ADMIN_NOTIFICATIONS, label: "Notifications", icon: Bell,
-    section: null,                   color: "#60A5FA", iconBg: "rgba(96,165,250,0.15)",
+    section: null,                   color: "#00d4ff", iconBg: "rgba(0,212,255,0.12)",
     adminOnly: true,
   },
 ];
@@ -108,7 +108,7 @@ function SidebarNav({
 
   const ROLE_PILL: Record<string, { label: string; color: string; bg: string }> = {
     admin:   { label: "Admin",   color: "#f87171", bg: "rgba(239,68,68,0.12)"   },
-    analyst: { label: "Analyst", color: "#60a5fa", bg: "rgba(59,130,246,0.12)"  },
+    analyst: { label: "Analyst", color: "#00d4ff", bg: "rgba(0,212,255,0.10)"   },
     viewer:  { label: "Viewer",  color: "#94a3b8", bg: "rgba(148,163,184,0.10)" },
   };
   const rolePill = user ? ROLE_PILL[user.role] : null;
@@ -244,9 +244,9 @@ function SidebarLogo({ collapsed, showClose, onClose }: { collapsed: boolean; sh
       <div
         className="relative flex items-center justify-center w-9 h-9 rounded-xl shrink-0"
         style={{
-          background: "linear-gradient(135deg, rgba(59,130,246,0.25) 0%, rgba(168,85,247,0.2) 100%)",
-          border: "1px solid rgba(59,130,246,0.35)",
-          boxShadow: "0 0 16px rgba(59,130,246,0.2), inset 0 1px 0 rgba(255,255,255,0.05)",
+          background: "linear-gradient(135deg, rgba(0,212,255,0.20) 0%, rgba(168,85,247,0.18) 100%)",
+          border: "1px solid rgba(0,212,255,0.30)",
+          boxShadow: "0 0 16px rgba(0,212,255,0.15), inset 0 1px 0 rgba(255,255,255,0.05)",
         }}
       >
         <ShieldCheck size={18} style={{ color: "var(--accent)" }} />
@@ -328,7 +328,7 @@ export default function Sidebar({ collapsed, onToggle: _onToggle, mobileOpen, on
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-            className="fixed left-0 top-0 z-50 h-screen w-60 flex flex-col overflow-hidden border-r md:hidden"
+            className="fixed left-0 top-0 z-50 h-screen w-[75vw] max-w-[280px] flex flex-col overflow-hidden border-r md:hidden"
             style={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border)" }}
           >
             <SidebarLogo collapsed={false} showClose onClose={onMobileClose} />
