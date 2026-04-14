@@ -70,14 +70,14 @@ async def lifespan(app: FastAPI):
                     target_url=_js_url,
                     description="OWASP Juice Shop — intentionally vulnerable web app",
                     wazuh_agent_registered=True, wazuh_agent_id="001",
-                    wazuh_agent_name="juice-shop-agent",
+                    wazuh_agent_name="juice-shop",
                 ).insert()
                 await _SocProject(
                     owner_id=str(_demo.id), name="DVWA", slug="dvwa",
                     target_url=_dvwa_url,
                     description="Damn Vulnerable Web Application",
                     wazuh_agent_registered=True, wazuh_agent_id="002",
-                    wazuh_agent_name="dvwa-agent",
+                    wazuh_agent_name="dvwa",
                 ).insert()
                 log.info("Seeded 2 demo projects for %s", _demo_email)
 
