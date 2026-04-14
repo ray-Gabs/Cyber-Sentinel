@@ -252,12 +252,12 @@ export default function Admin() {
         <div>
           <h1
             className="text-xl sm:text-2xl font-bold tracking-tight"
-            style={{ fontFamily: "Syne, sans-serif", color: "#E4EEFF", letterSpacing: "-0.02em" }}
+            style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)", letterSpacing: "-0.02em" }}
           >
-            User Management
+            Admin Panel
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: "#475569" }}>
-            Approve accounts · promote students to analyst
+          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
+            Manage users · review platform analytics · export reports
           </p>
         </div>
         <button
