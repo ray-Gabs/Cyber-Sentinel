@@ -8,15 +8,13 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
 import { getMe } from "@/services/authService";
-import { useTheme } from "@/providers/ThemeProvider";
 import {
   ShieldCheck, LogIn, AlertCircle, Eye, EyeOff,
-  Lock, User, Sun, Moon, CheckCircle2,
+  Lock, User, CheckCircle2,
 } from "lucide-react";
 import { ROUTES } from "@/lib/constants";
 import { DottedBackground } from "@/components/ui/DottedBackground";
 import { AnimatedGridPattern } from "@/components/ui/AnimatedGridPattern";
-import { LightRays } from "@/components/ui/LightRays";
 import { Beams } from "@/components/ui/reactbits/Beams";
 import { cn } from "@/lib/utils";
 
@@ -34,7 +32,6 @@ export default function Login() {
   const { login }  = useAuth();
   const navigate   = useNavigate();
   const location   = useLocation();
-  const { isDark, toggleTheme } = useTheme();
 
   const justRegistered = (location.state as { registered?: boolean } | null)?.registered ?? false;
 
@@ -77,60 +74,42 @@ export default function Login() {
   return (
     <div
       className="relative min-h-screen flex items-center justify-center overflow-hidden"
-      style={{ backgroundColor: isDark ? "#06091A" : "var(--bg-base)" }}
+      style={{ backgroundColor: "var(--bg-base)" }}
     >
-      {/* ── Dark mode only: animated background layers ───────────── */}
-      {isDark && (
-        <>
-          <DottedBackground isDark={true} className="opacity-60" />
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{ color: "rgba(59,130,246,0.16)" }}
-          >
-            <AnimatedGridPattern
-              width={52}
-              height={52}
-              numSquares={24}
-              maxOpacity={0.75}
-              duration={4.5}
-              repeatDelay={0.6}
-              className={cn(
-                "[mask-image:radial-gradient(ellipse_85%_85%_at_50%_50%,white,transparent)]",
-                "stroke-current fill-current w-full h-full absolute inset-0",
-              )}
-            />
-          </div>
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background: "radial-gradient(ellipse 65% 55% at 50% 50%, rgba(59,130,246,0.09) 0%, transparent 65%)",
-            }}
-          />
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background: "radial-gradient(ellipse 90% 90% at 50% 50%, transparent 35%, rgba(2,8,23,0.82) 100%)",
-            }}
-          />
-          {/* Beam layer — subtle animated light streaks */}
-          <Beams count={5} opacity={0.8} className="z-[1]" />
-        </>
-      )}
+      {/* ── Background layers ─────────────────────────────────────── */}
+      <DottedBackground isDark={true} className="opacity-60" />
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ color: "rgba(0,212,255,0.12)" }}
+      >
+        <AnimatedGridPattern
+          width={52}
+          height={52}
+          numSquares={24}
+          maxOpacity={0.75}
+          duration={4.5}
+          repeatDelay={0.6}
+          className={cn(
+            "[mask-image:radial-gradient(ellipse_85%_85%_at_50%_50%,white,transparent)]",
+            "stroke-current fill-current w-full h-full absolute inset-0",
+          )}
+        />
+      </div>
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: "radial-gradient(ellipse 65% 55% at 50% 50%, rgba(0,212,255,0.07) 0%, transparent 65%)",
+        }}
+      />
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: "radial-gradient(ellipse 90% 90% at 50% 50%, transparent 35%, rgba(8,12,16,0.82) 100%)",
+        }}
+      />
+      <Beams count={5} opacity={0.8} className="z-[1]" />
 
-      {/* ── Light mode: soft gradient + light rays ─────────────────── */}
-      {!isDark && (
-        <>
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background: "linear-gradient(160deg, #f0f6ff 0%, #eaf1ff 50%, #f4f0ff 100%)",
-            }}
-          />
-          <LightRays />
-        </>
-      )}
-
-      {/* ── Top controls ─────────────────────────────────────────── */}
+      {/* ── Back to home ──────────────────────────────────────────── */}
       <Link
         to="/"
         className="absolute top-5 left-5 btn-ghost rounded-lg px-3 py-1.5 z-20 text-xs flex items-center gap-1.5"
@@ -138,16 +117,6 @@ export default function Login() {
       >
         ← Home
       </Link>
-      <button
-        onClick={toggleTheme}
-        className="absolute top-5 right-5 btn-ghost rounded-full p-2 z-20"
-        title={isDark ? "Light mode" : "Dark mode"}
-      >
-        {isDark
-          ? <Sun  size={15} style={{ color: "rgba(96,120,152,0.9)" }} />
-          : <Moon size={15} style={{ color: "rgba(96,120,152,0.9)" }} />
-        }
-      </button>
 
       {/* ── Main content — centered, above all layers ────────────── */}
       <motion.div
@@ -166,12 +135,12 @@ export default function Login() {
             <div
               className="w-16 h-16 rounded-2xl flex items-center justify-center relative"
               style={{
-                background: "linear-gradient(135deg, rgba(59,130,246,0.35) 0%, rgba(168,85,247,0.22) 100%)",
-                border: "1px solid rgba(59,130,246,0.45)",
-                boxShadow: "0 0 40px rgba(59,130,246,0.28), 0 0 12px rgba(59,130,246,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
+                background: "linear-gradient(135deg, rgba(0,212,255,0.25) 0%, rgba(168,85,247,0.18) 100%)",
+                border: "1px solid rgba(0,212,255,0.35)",
+                boxShadow: "0 0 40px rgba(0,212,255,0.20), 0 0 12px rgba(0,212,255,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
               }}
             >
-              <ShieldCheck size={28} style={{ color: "#93c5fd" }} />
+              <ShieldCheck size={28} style={{ color: "var(--accent)" }} />
             </div>
           </motion.div>
 
@@ -183,7 +152,7 @@ export default function Login() {
           </h1>
           <p
             className="text-[10px] uppercase tracking-[0.22em] font-semibold mt-1.5"
-            style={{ color: "#60a5fa", opacity: 0.65 }}
+            style={{ color: "var(--accent)", opacity: 0.65 }}
           >
             v1.0 · ITS Lab
           </p>
@@ -194,13 +163,11 @@ export default function Login() {
           variants={itemVariants}
           className="w-full rounded-2xl p-7 space-y-5"
           style={{
-            backgroundColor: isDark ? "rgba(6,9,26,0.82)" : "rgba(255,255,255,0.92)",
+            backgroundColor: "rgba(14,21,32,0.85)",
             backdropFilter: "blur(24px)",
             WebkitBackdropFilter: "blur(24px)",
-            border: isDark ? "1px solid rgba(59,130,246,0.18)" : "1px solid var(--border)",
-            boxShadow: isDark
-              ? "0 0 0 1px rgba(59,130,246,0.06), 0 32px 72px rgba(0,0,0,0.70), 0 0 80px rgba(59,130,246,0.05)"
-              : "0 8px 40px rgba(37,99,235,0.08), 0 2px 8px rgba(0,0,0,0.06)",
+            border: "1px solid rgba(0,212,255,0.14)",
+            boxShadow: "0 0 0 1px rgba(0,212,255,0.05), 0 32px 72px rgba(0,0,0,0.70), 0 0 80px rgba(0,212,255,0.04)",
           }}
         >
           {/* Heading */}
@@ -344,7 +311,7 @@ export default function Login() {
         <motion.p
           variants={itemVariants}
           className="text-[10px] uppercase tracking-[0.18em] font-medium mt-6"
-          style={{ color: isDark ? "#1E3A5F" : "var(--text-subtle)" }}
+          style={{ color: "var(--text-subtle)" }}
         >
           Smart City &amp; Cybersecurity Lab · ITS
         </motion.p>

@@ -9,7 +9,7 @@ import { useTheme } from "@/providers/ThemeProvider";
 import { useNotifications } from "@/hooks/useNotifications";
 import { AnimatePresence } from "framer-motion";
 import NotificationPanel, { NotificationBell } from "@/components/layout/NotificationPanel";
-import { LogOut, Sun, Moon, Menu, X, Search } from "lucide-react";
+import { LogOut, Menu, X, Search } from "lucide-react";
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -18,7 +18,7 @@ interface HeaderProps {
 
 export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
   const { user, logout } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
+  useTheme(); // keep provider wired; dark-only, no toggle needed
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -105,19 +105,6 @@ export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
 
       {/* ── Right controls ──────────────────────── */}
       <div className="flex items-center gap-0 sm:gap-1">
-        {/* Theme toggle */}
-        <button
-          onClick={toggleTheme}
-          className="btn-ghost p-2 rounded-lg"
-          title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-          aria-label="Toggle theme"
-        >
-          {isDark
-            ? <Sun  size={14} style={{ color: "var(--text-muted)" }} />
-            : <Moon size={14} style={{ color: "var(--accent)" }} />
-          }
-        </button>
-
         {/* Notification bell + panel */}
         <div className="relative" ref={notifRef}>
           <NotificationBell

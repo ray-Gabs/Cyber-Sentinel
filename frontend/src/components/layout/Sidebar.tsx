@@ -27,15 +27,14 @@ interface NavItem {
   section: string | null;
   color: string;
   iconBg: string;
-  adminOnly?: boolean;
 }
 
+/** Nav for non-admin users — SOC + Pentest */
 const navItems: NavItem[] = [
   {
     to: ROUTES.DASHBOARD,    label: "Dashboard",  icon: LayoutDashboard,
     section: null,             color: "#00d4ff", iconBg: "rgba(0,212,255,0.15)",
   },
-  // ── SOC Platform first ──
   {
     to: ROUTES.ALERTS,       label: "SOC Alerts",  icon: ShieldAlert,
     section: "SOC Platform",   color: "#EF4444", iconBg: "rgba(239,68,68,0.18)",
@@ -52,7 +51,6 @@ const navItems: NavItem[] = [
     to: ROUTES.ANALYTICS,    label: "Analytics",   icon: BarChart3,
     section: null,             color: "#A855F7", iconBg: "rgba(168,85,247,0.18)",
   },
-  // ── Pentest Engine second ──
   {
     to: ROUTES.SCANS,        label: "Scans",       icon: Crosshair,
     section: "Pentest Engine", color: "#F59E0B", iconBg: "rgba(245,158,11,0.18)",
@@ -65,20 +63,45 @@ const navItems: NavItem[] = [
     to: ROUTES.SETTINGS,     label: "Settings",    icon: Settings,
     section: "System",         color: "#94A3B8", iconBg: "rgba(148,163,184,0.15)",
   },
+];
+
+/** Nav for admin users — admin panel first, no pentest scanning */
+const adminNavItems: NavItem[] = [
   {
-    to: ROUTES.ADMIN,        label: "Users",       icon: Users,
-    section: "Admin",          color: "#F87171", iconBg: "rgba(239,68,68,0.15)",
-    adminOnly: true,
+    to: ROUTES.DASHBOARD,    label: "Dashboard",     icon: LayoutDashboard,
+    section: null,             color: "#00d4ff", iconBg: "rgba(0,212,255,0.15)",
   },
   {
-    to: ROUTES.AUDIT,        label: "Audit Log",   icon: ClipboardList,
+    to: ROUTES.ADMIN,        label: "Users",         icon: Users,
+    section: "Admin Panel",    color: "#F87171", iconBg: "rgba(239,68,68,0.15)",
+  },
+  {
+    to: ROUTES.AUDIT,        label: "Audit Log",     icon: ClipboardList,
     section: null,             color: "#F59E0B", iconBg: "rgba(245,158,11,0.15)",
-    adminOnly: true,
   },
   {
     to: ROUTES.ADMIN_NOTIFICATIONS, label: "Notifications", icon: Bell,
     section: null,                   color: "#00d4ff", iconBg: "rgba(0,212,255,0.12)",
-    adminOnly: true,
+  },
+  {
+    to: ROUTES.ALERTS,       label: "SOC Alerts",    icon: ShieldAlert,
+    section: "SOC Monitor",    color: "#EF4444", iconBg: "rgba(239,68,68,0.18)",
+  },
+  {
+    to: ROUTES.ANALYTICS,    label: "Analytics",     icon: BarChart3,
+    section: null,             color: "#A855F7", iconBg: "rgba(168,85,247,0.18)",
+  },
+  {
+    to: ROUTES.AGENTS,       label: "Agents",        icon: Monitor,
+    section: null,             color: "#22C55E", iconBg: "rgba(34,197,94,0.18)",
+  },
+  {
+    to: ROUTES.PROJECTS,     label: "Projects",      icon: Layers,
+    section: null,             color: "#A78BFA", iconBg: "rgba(167,139,250,0.18)",
+  },
+  {
+    to: ROUTES.SETTINGS,     label: "Settings",      icon: Settings,
+    section: "System",         color: "#94A3B8", iconBg: "rgba(148,163,184,0.15)",
   },
 ];
 
@@ -104,7 +127,8 @@ function SidebarNav({
 }) {
   const { user } = useAuth();
   const renderedSections = new Set<string>();
-  const visibleItems = navItems.filter((item) => !item.adminOnly || user?.role === "admin");
+  // Admin gets admin-first nav (no pentest); everyone else gets standard nav
+  const visibleItems = user?.role === "admin" ? adminNavItems : navItems;
 
   const ROLE_PILL: Record<string, { label: string; color: string; bg: string }> = {
     admin:   { label: "Admin",   color: "#f87171", bg: "rgba(239,68,68,0.12)"   },

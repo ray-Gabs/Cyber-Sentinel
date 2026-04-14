@@ -28,7 +28,7 @@ import { ROUTES } from "@/lib/constants";
 
 const ROLE_CONFIG: Record<UserRole, { label: string; color: string; bg: string }> = {
   admin:   { label: "Admin",   color: "#f87171", bg: "rgba(239,68,68,0.10)"   },
-  analyst: { label: "Analyst", color: "#60a5fa", bg: "rgba(59,130,246,0.10)"  },
+  analyst: { label: "Analyst", color: "#00d4ff", bg: "rgba(0,212,255,0.10)"   },
   viewer:  { label: "Viewer",  color: "#94a3b8", bg: "rgba(148,163,184,0.10)" },
 };
 
@@ -49,9 +49,9 @@ function UserInitial({ username }: { username: string }) {
     <div
       className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0"
       style={{
-        background: "rgba(59,130,246,0.12)",
-        border: "1px solid rgba(59,130,246,0.2)",
-        color: "#60a5fa",
+        background: "rgba(0,212,255,0.10)",
+        border: "1px solid rgba(0,212,255,0.20)",
+        color: "#00d4ff",
         fontFamily: "Syne, sans-serif",
       }}
     >
@@ -218,7 +218,7 @@ export default function Admin() {
   const STATS = [
     { label: "Total",    value: counts.all,     icon: Users,       color: "#64748b", borderLeft: undefined },
     { label: "Pending",  value: counts.pending, icon: Clock,       color: "#f59e0b", borderLeft: "3px solid #f59e0b" },
-    { label: "Analysts", value: counts.analyst, icon: Activity,    color: "#60a5fa", borderLeft: "3px solid #60a5fa" },
+    { label: "Analysts", value: counts.analyst, icon: Activity,    color: "#00d4ff", borderLeft: "3px solid #00d4ff" },
     { label: "Admins",   value: counts.admin,   icon: ShieldCheck, color: "#f87171", borderLeft: "3px solid #f87171" },
   ];
 
@@ -369,10 +369,10 @@ export default function Admin() {
             yAxis: { tick: { fill: "#8896a4", fontSize: 11, fontFamily: "IBM Plex Mono, monospace" }, axisLine: false, tickLine: false },
             tooltip: {
               contentStyle: { background: "#161c23", border: "1px solid #2a3540", borderRadius: "6px", fontFamily: "IBM Plex Mono, monospace", fontSize: "12px", color: "#e8edf2" },
-              cursor: { fill: "rgba(59,130,246,0.05)" },
+              cursor: { fill: "rgba(0,212,255,0.04)" },
             },
           };
-          const SEV_COLORS = ["#EF4444", "#F97316", "#EAB308", "#22C55E", "#3B82F6"];
+          const SEV_COLORS = ["#EF4444", "#F97316", "#EAB308", "#22C55E", "#00d4ff"];
           const allZero = adminStats.scans.by_day.every((d) => d.count === 0);
           return (
             <>
@@ -391,7 +391,7 @@ export default function Admin() {
                         <XAxis dataKey="date" {...chartTheme.xAxis} />
                         <YAxis {...chartTheme.yAxis} />
                         <Tooltip {...chartTheme.tooltip} />
-                        <Bar dataKey="count" fill="#3B82F6" radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="count" fill="#00d4ff" radius={[3, 3, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -490,7 +490,7 @@ export default function Admin() {
             className="text-xs font-medium px-3 py-1.5 rounded-lg transition-all"
             style={
               filter === key
-                ? { background: "rgba(59,130,246,0.15)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.3)" }
+                ? { background: "rgba(0,212,255,0.12)", color: "#00d4ff", border: "1px solid rgba(0,212,255,0.28)" }
                 : { background: "transparent", color: "#475569", border: "1px solid transparent" }
             }
           >
@@ -542,8 +542,8 @@ export default function Admin() {
               transition={{ delay: i * 0.04, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl px-4 py-3"
               style={{
-                background: u.id === me?.id ? "rgba(59,130,246,0.05)" : "rgba(255,255,255,0.025)",
-                border: u.id === me?.id ? "1px solid rgba(59,130,246,0.18)" : "1px solid rgba(255,255,255,0.06)",
+                background: u.id === me?.id ? "rgba(0,212,255,0.05)" : "rgba(255,255,255,0.025)",
+                border: u.id === me?.id ? "1px solid rgba(0,212,255,0.18)" : "1px solid rgba(255,255,255,0.06)",
               }}
             >
               {/* Avatar + info */}
@@ -558,7 +558,7 @@ export default function Admin() {
                       {u.username}
                     </span>
                     {u.id === me?.id && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(59,130,246,0.15)", color: "#60a5fa" }}>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(0,212,255,0.12)", color: "#00d4ff" }}>
                         you
                       </span>
                     )}
