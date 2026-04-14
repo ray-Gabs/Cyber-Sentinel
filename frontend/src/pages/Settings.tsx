@@ -4,13 +4,14 @@
  */
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { getCustomRules, deployRules } from "@/services/alertService";
+import { getCustomRules } from "@/services/alertService";
 import { useWazuhConfig } from "@/hooks/useWazuhConfig";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
+import { Link } from "react-router-dom";
 import {
-  FileCode2, Upload, CheckCircle, AlertCircle, Terminal,
+  FileCode2, CheckCircle, AlertCircle, Terminal,
   RefreshCw, Server, Save, Eye, EyeOff, Trash2, Info,
-  Lock, Globe, User, CheckCircle2, Circle,
+  Lock, Globe, User, CheckCircle2, Circle, ArrowRight,
 } from "lucide-react";
 
 function InfoTooltip({ text }: { text: string }) {
@@ -60,16 +61,12 @@ export default function Settings() {
     setTimeout(() => setWazuhSaveMsg(""), 3000);
   };
 
-  // ── SIEM rules ────────────────────────────────────────────────────────
+  // ── SIEM rules (read-only viewer — editing moved to SIEM Config page) ───
   const [rulesXml, setRulesXml]         = useState("");
   const [loadingRules, setLoadingRules] = useState(false);
-  const [deploying, setDeploying]       = useState(false);
-  const [deployMsg, setDeployMsg]       = useState("");
-  const [deployError, setDeployError]   = useState(false);
 
   const handleLoadRules = async () => {
     setLoadingRules(true);
-    setDeployMsg("");
     try {
       const xml = await getCustomRules();
       setRulesXml(typeof xml === "string" ? xml : JSON.stringify(xml, null, 2));
@@ -77,21 +74,6 @@ export default function Settings() {
       setRulesXml("Failed to load rules. Is the backend running?");
     } finally {
       setLoadingRules(false);
-    }
-  };
-
-  const handleDeploy = async () => {
-    setDeploying(true);
-    setDeployMsg("");
-    setDeployError(false);
-    try {
-      const result = await deployRules();
-      setDeployMsg(result.message || "Rules deployed successfully");
-    } catch {
-      setDeployMsg("Failed to deploy rules. Check Wazuh connection above.");
-      setDeployError(true);
-    } finally {
-      setDeploying(false);
     }
   };
 
@@ -360,46 +342,25 @@ export default function Settings() {
                 {loadingRules ? <LoadingSpinner size="sm" /> : <RefreshCw size={13} />}
                 {rulesXml ? "Refresh" : "Load"}
               </button>
-              <button
-                onClick={handleDeploy}
-                disabled={deploying || !rulesXml}
-                className="btn-primary gap-1.5"
+              <Link
+                to="/soc/siem-config"
+                className="btn-primary gap-1.5 flex items-center"
                 style={{ fontSize: "0.8125rem", padding: "0.4rem 0.875rem" }}
               >
-                {deploying ? <LoadingSpinner size="sm" /> : <Upload size={13} />}
-                Deploy
-              </button>
+                <ArrowRight size={13} />
+                SIEM Config
+              </Link>
             </div>
           </div>
 
           {/* Hint */}
           <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>
-            Fetch{" "}
-            <code className="font-mono px-1 py-0.5 rounded" style={{ backgroundColor: "var(--bg-muted)", color: "var(--accent)" }}>
-              custom_rules.xml
-            </code>
-            {" "}from Wazuh, edit inline, then Deploy to push. Requires an active connection on the left.
+            Read-only view of the backend's built-in custom rules XML. To create
+            and manage per-project detection rules, use{" "}
+            <Link to="/soc/siem-config" className="underline" style={{ color: "var(--accent)" }}>
+              SIEM Config
+            </Link>.
           </p>
-
-          {/* Deploy status message */}
-          {deployMsg && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
-              style={{
-                backgroundColor: deployError ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)",
-                border: `1px solid ${deployError ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.2)"}`,
-                color: deployError ? "#f87171" : "#4ade80",
-              }}
-            >
-              {deployError
-                ? <AlertCircle size={12} className="shrink-0" />
-                : <CheckCircle size={12} className="shrink-0" />
-              }
-              {deployMsg}
-            </motion.div>
-          )}
 
           {/* Rules viewer or empty state — grows to fill card */}
           {rulesXml ? (

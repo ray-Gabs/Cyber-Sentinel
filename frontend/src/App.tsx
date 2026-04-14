@@ -44,6 +44,8 @@ import Admin from "@/pages/Admin";
 import AuditLog from "@/pages/AuditLog";
 import Onboarding from "@/pages/Onboarding";
 import AdminNotifications from "@/pages/AdminNotifications";
+import SocDashboard from "@/pages/soc/SocDashboard";
+import SiemConfig from "@/pages/soc/SiemConfig";
 
 // React Query client — used for data fetching/caching (you'll use this later)
 const queryClient = new QueryClient();
@@ -131,6 +133,8 @@ function AppRoutes() {
         <Route path="/alerts/:id" element={<AlertDetail />} />
         <Route path="/agents" element={<AgentsMonitor />} />
         <Route path="/projects" element={<UserProjects />} />
+        <Route path="/soc/dashboard" element={<SocDashboard />} />
+        <Route path="/soc/siem-config" element={<SiemConfig />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/correlations" element={<Correlation />} />
         <Route path="/settings" element={<Settings />} />

@@ -7,7 +7,8 @@ import { NavLink } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Crosshair, ShieldAlert, BarChart3,
-  Settings, ShieldCheck, Link2, Monitor, X, Users, ClipboardList, Layers, Bell,
+  Settings, ShieldCheck, Link2, X, Users, ClipboardList, Layers, Bell,
+  Activity, SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
@@ -32,76 +33,76 @@ interface NavItem {
 /** Nav for non-admin users — SOC + Pentest */
 const navItems: NavItem[] = [
   {
-    to: ROUTES.DASHBOARD,    label: "Dashboard",  icon: LayoutDashboard,
-    section: null,             color: "#00d4ff", iconBg: "rgba(0,212,255,0.15)",
+    to: ROUTES.DASHBOARD,     label: "Dashboard",     icon: LayoutDashboard,
+    section: null,              color: "#00d4ff", iconBg: "rgba(0,212,255,0.15)",
   },
   {
-    to: ROUTES.ALERTS,       label: "SOC Alerts",  icon: ShieldAlert,
+    to: ROUTES.ALERTS,        label: "SOC Alerts",    icon: ShieldAlert,
     section: "SOC Platform",   color: "#EF4444", iconBg: "rgba(239,68,68,0.18)",
   },
   {
-    to: ROUTES.AGENTS,       label: "Agents",      icon: Monitor,
-    section: null,             color: "#22C55E", iconBg: "rgba(34,197,94,0.18)",
+    to: ROUTES.SOC_DASHBOARD, label: "SOC Dashboard", icon: Activity,
+    section: null,              color: "#00d4ff", iconBg: "rgba(0,212,255,0.12)",
   },
   {
-    to: ROUTES.PROJECTS,     label: "Projects",    icon: Layers,
-    section: null,             color: "#A78BFA", iconBg: "rgba(167,139,250,0.18)",
+    to: ROUTES.SIEM_CONFIG,   label: "SIEM Config",   icon: SlidersHorizontal,
+    section: null,              color: "#22C55E", iconBg: "rgba(34,197,94,0.18)",
   },
   {
-    to: ROUTES.ANALYTICS,    label: "Analytics",   icon: BarChart3,
-    section: null,             color: "#A855F7", iconBg: "rgba(168,85,247,0.18)",
+    to: ROUTES.PROJECTS,      label: "Projects",      icon: Layers,
+    section: null,              color: "#A78BFA", iconBg: "rgba(167,139,250,0.18)",
   },
   {
-    to: ROUTES.SCANS,        label: "Scans",       icon: Crosshair,
+    to: ROUTES.ANALYTICS,     label: "Analytics",     icon: BarChart3,
+    section: null,              color: "#A855F7", iconBg: "rgba(168,85,247,0.18)",
+  },
+  {
+    to: ROUTES.SCANS,         label: "Scans",         icon: Crosshair,
     section: "Pentest Engine", color: "#F59E0B", iconBg: "rgba(245,158,11,0.18)",
   },
   {
-    to: ROUTES.CORRELATIONS, label: "Correlation", icon: Link2,
+    to: ROUTES.CORRELATIONS,  label: "Correlation",   icon: Link2,
     section: "Intelligence",   color: "#22C55E", iconBg: "rgba(34,197,94,0.18)",
   },
   {
-    to: ROUTES.SETTINGS,     label: "Settings",    icon: Settings,
+    to: ROUTES.SETTINGS,      label: "Settings",      icon: Settings,
     section: "System",         color: "#94A3B8", iconBg: "rgba(148,163,184,0.15)",
   },
 ];
 
-/** Nav for admin users — admin panel first, no pentest scanning */
+/** Nav for admin users — admin panel first, SOC monitor section */
 const adminNavItems: NavItem[] = [
   {
-    to: ROUTES.DASHBOARD,    label: "Dashboard",     icon: LayoutDashboard,
-    section: null,             color: "#00d4ff", iconBg: "rgba(0,212,255,0.15)",
+    to: ROUTES.DASHBOARD,          label: "Dashboard",     icon: LayoutDashboard,
+    section: null,                  color: "#00d4ff", iconBg: "rgba(0,212,255,0.15)",
   },
   {
-    to: ROUTES.ADMIN,        label: "Users",         icon: Users,
-    section: "Admin Panel",    color: "#F87171", iconBg: "rgba(239,68,68,0.15)",
+    to: ROUTES.ADMIN,              label: "Users",         icon: Users,
+    section: "Admin Panel",         color: "#F87171", iconBg: "rgba(239,68,68,0.15)",
   },
   {
-    to: ROUTES.AUDIT,        label: "Audit Log",     icon: ClipboardList,
-    section: null,             color: "#F59E0B", iconBg: "rgba(245,158,11,0.15)",
+    to: ROUTES.AUDIT,              label: "Audit Log",     icon: ClipboardList,
+    section: null,                  color: "#F59E0B", iconBg: "rgba(245,158,11,0.15)",
   },
   {
     to: ROUTES.ADMIN_NOTIFICATIONS, label: "Notifications", icon: Bell,
     section: null,                   color: "#00d4ff", iconBg: "rgba(0,212,255,0.12)",
   },
   {
-    to: ROUTES.ALERTS,       label: "SOC Alerts",    icon: ShieldAlert,
-    section: "SOC Monitor",    color: "#EF4444", iconBg: "rgba(239,68,68,0.18)",
+    to: ROUTES.ALERTS,             label: "SOC Alerts",    icon: ShieldAlert,
+    section: "SOC Monitor",         color: "#EF4444", iconBg: "rgba(239,68,68,0.18)",
   },
   {
-    to: ROUTES.ANALYTICS,    label: "Analytics",     icon: BarChart3,
-    section: null,             color: "#A855F7", iconBg: "rgba(168,85,247,0.18)",
+    to: ROUTES.SOC_DASHBOARD,      label: "SOC Dashboard", icon: Activity,
+    section: null,                  color: "#00d4ff", iconBg: "rgba(0,212,255,0.12)",
   },
   {
-    to: ROUTES.AGENTS,       label: "Agents",        icon: Monitor,
-    section: null,             color: "#22C55E", iconBg: "rgba(34,197,94,0.18)",
+    to: ROUTES.ANALYTICS,          label: "Analytics",     icon: BarChart3,
+    section: null,                  color: "#A855F7", iconBg: "rgba(168,85,247,0.18)",
   },
   {
-    to: ROUTES.PROJECTS,     label: "Projects",      icon: Layers,
-    section: null,             color: "#A78BFA", iconBg: "rgba(167,139,250,0.18)",
-  },
-  {
-    to: ROUTES.SETTINGS,     label: "Settings",      icon: Settings,
-    section: "System",         color: "#94A3B8", iconBg: "rgba(148,163,184,0.15)",
+    to: ROUTES.SETTINGS,           label: "Settings",      icon: Settings,
+    section: "System",              color: "#94A3B8", iconBg: "rgba(148,163,184,0.15)",
   },
 ];
 

@@ -95,4 +95,6 @@ export const ROUTES = {
   AUDIT: "/audit",
   ADMIN_NOTIFICATIONS: "/admin/notifications",
   PROJECTS: "/projects",
+  SOC_DASHBOARD: "/soc/dashboard",
+  SIEM_CONFIG: "/soc/siem-config",
 } as const;
