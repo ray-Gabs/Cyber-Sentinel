@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     # Shared secret for the incoming Wazuh webhook. Leave empty to skip verification
     # (acceptable on isolated lab networks). Set to a random token in production.
     wazuh_webhook_token: str = ""
+    # Public-facing IP for Wazuh agent docker-compose files (what students put in WAZUH_MANAGER)
+    # May differ from wazuh_api_url if behind NAT (e.g. wazuh_api_url uses https:// + port)
+    wazuh_host_public: str = "10.4.89.178"
+    # Agent registration password — find with: cat /var/ossec/etc/authd.pass on Wazuh VM
+    wazuh_reg_password: str = ""
 
     # ---- ZAP ----
     zap_api_url: str = "http://localhost:8080"

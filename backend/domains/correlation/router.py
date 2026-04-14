@@ -70,16 +70,30 @@ async def get_correlation(
     return _to_response(result)
 
 
-@router.get("/", response_model=list[CorrelationResponse])
+@router.get("/")
 async def list_correlations(
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     user: User = Depends(get_current_user),
 ):
-    """List correlations for the current user's scans (newest first)."""
+    """
+    List correlations for the current user's scans (newest first).
+    Returns paginated envelope: { items, total, skip, limit }.
+    Empty list → 200 with items: [] — never 404.
+    """
     scoped_user_id = None if user.role == "admin" else str(user.id)
-    results = await service.list_correlations(page, size, user_id=scoped_user_id)
-    return [_to_response(c) for c in results]
+
+    # Convert skip/limit to page/size for the service
+    page = (skip // limit) + 1 if limit else 1
+    results = await service.list_correlations(page, limit, user_id=scoped_user_id)
+    total = await service.count_correlations(user_id=scoped_user_id)
+
+    return {
+        "items": [_to_response(c) for c in results],
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
 
 
 @router.delete("/", status_code=200)
@@ -94,6 +108,6 @@ async def delete_single_correlation(
     correlation_id: str,
     user: User = Depends(get_current_user),
 ):
-    """Delete a single correlation by ID."""
+    """Delete a single correlation by ID (owner only)."""
     await service.delete_correlation(correlation_id, str(user.id))
     return {"deleted": correlation_id}

@@ -125,6 +125,15 @@ async def list_correlations(
     )
 
 
+async def count_correlations(user_id: Optional[str] = None) -> int:
+    """Count correlations scoped to a user's scans."""
+    if user_id is not None:
+        user_scans = await Scan.find({"user_id": user_id}).to_list()
+        scan_ids = [str(s.id) for s in user_scans]
+        return await Correlation.find({"scan_id": {"$in": scan_ids}}).count()
+    return await Correlation.find().count()
+
+
 async def delete_correlation(correlation_id: str, user_id: str) -> None:
     """Delete a single correlation, verifying the user owns the related scan."""
     from beanie import PydanticObjectId

@@ -126,6 +126,23 @@ class WazuhClient:
         items = data.get("data", {}).get("affected_items", [])
         return items[0] if items else None
 
+    async def get_agent_by_name(self, name: str) -> dict | None:
+        """Get agent details by agent name. Returns None if not found."""
+        try:
+            data = await self._request("GET", "/agents", params={"name": name})
+            items = data.get("data", {}).get("affected_items", [])
+            return items[0] if items else None
+        except Exception:
+            return None
+
+    async def check_reachable(self) -> bool:
+        """Check if the Wazuh manager is reachable. Safe — never raises."""
+        try:
+            await self._get_token()
+            return True
+        except Exception:
+            return False
+
     # --------------- Rules ---------------
 
     async def get_rules(self, limit: int = 500) -> list[dict]:

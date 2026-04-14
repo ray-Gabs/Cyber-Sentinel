@@ -6,7 +6,7 @@ import asyncio
 import hmac
 import logging
 
-from fastapi import APIRouter, Depends, Query, HTTPException, Header, Request, status
+from fastapi import APIRouter, Depends, Query, HTTPException, Request, status
 from typing import Any, Optional
 
 log = logging.getLogger(__name__)
@@ -105,15 +105,8 @@ async def alert_stats(
 @router.get("/health")
 async def wazuh_health(user: User = Depends(get_current_user)):
     """
-    Test Wazuh Manager connectivity and return a structured status.
-
-    Useful for the SOC dashboard "connection indicator" and for debugging
-    the 2-VM lab setup where Wazuh runs on the host (not in Docker).
-
-    Returns:
-        status: "connected" | "disconnected"
-        wazuh_url: the URL Cyber Sentinel is trying to reach
-        error: human-readable error if disconnected
+    Test Wazuh Manager connectivity — does NOT expose credentials or the manager URL.
+    Use /api/soc/health for the richer dashboard health endpoint.
     """
     from domains.soc.wazuh_client import wazuh_client
     try:
@@ -121,13 +114,11 @@ async def wazuh_health(user: User = Depends(get_current_user)):
         agents = await wazuh_client.get_agents(limit=1)
         return {
             "status": "connected",
-            "wazuh_url": settings.wazuh_api_url,
             "agent_count": len(agents),
         }
     except Exception as exc:
         return {
             "status": "disconnected",
-            "wazuh_url": settings.wazuh_api_url,
             "error": str(exc)[:200],
         }
 
@@ -209,28 +200,6 @@ async def delete_detection_rule(rule_id: str, user: User = Depends(get_current_u
     """Delete a single detection rule by ID."""
     await service.delete_rule(rule_id, str(user.id))
     return {"deleted": rule_id}
-
-
-@router.post("/rules/deploy")
-async def deploy_custom_rules(
-    user: User = Depends(get_current_user),
-    x_wazuh_url: Optional[str] = Header(None, alias="X-Wazuh-Url"),
-    x_wazuh_username: Optional[str] = Header(None, alias="X-Wazuh-Username"),
-    x_wazuh_password: Optional[str] = Header(None, alias="X-Wazuh-Password"),
-):
-    """Deploy custom SIEM rules to Wazuh.
-    Admin role required, unless the user supplies their own Wazuh credentials
-    via X-Wazuh-* headers (lab mode — each student deploys to their own instance).
-    """
-    has_user_credentials = bool(x_wazuh_url)
-    if not has_user_credentials and user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin role required to deploy SIEM rules")
-    from domains.soc.wazuh_rules import deploy_rules_to_wazuh
-    return await deploy_rules_to_wazuh(
-        wazuh_url=x_wazuh_url,
-        wazuh_user=x_wazuh_username,
-        wazuh_password=x_wazuh_password,
-    )
 
 
 _MAX_WEBHOOK_BYTES = 10 * 1024 * 1024  # 10 MB — prevents memory DoS from huge payloads
