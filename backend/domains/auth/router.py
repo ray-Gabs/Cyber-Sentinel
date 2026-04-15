@@ -11,6 +11,7 @@ from core.rate_limit import limiter
 from core.config import settings
 from core.security import create_access_token
 from domains.auth.models import User
+from domains.soc.project_models import SocProject
 from domains.auth.schemas import (
     RegisterRequest,
     LoginRequest,
@@ -252,6 +253,27 @@ async def suspend_user(user_id: str, user: User = Depends(get_current_user)):
     except Exception:
         pass
     return _user_response(target)
+
+
+@router.get("/users/{user_id}/agent-configs")
+async def get_user_agent_configs(user_id: str, user: User = Depends(get_current_user)):
+    """[Admin] List all SOC projects belonging to a user, with Wazuh agent info."""
+    _require_admin(user)
+    from bson import ObjectId
+    target = await User.get(ObjectId(user_id))
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    projects = await SocProject.find(SocProject.owner_id == user_id).to_list()
+    return [
+        {
+            "project_id": str(p.id),
+            "project_name": p.name,
+            "slug": p.slug,
+            "wazuh_agent_name": p.wazuh_agent_name,
+            "wazuh_agent_registered": p.wazuh_agent_registered,
+        }
+        for p in projects
+    ]
 
 
 @router.patch("/me", response_model=UserResponse)

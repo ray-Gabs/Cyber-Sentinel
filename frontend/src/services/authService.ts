@@ -88,6 +88,20 @@ export async function suspendUser(userId: string): Promise<UserResponse> {
   return res.data;
 }
 
+export interface AgentConfig {
+  project_id: string;
+  project_name: string;
+  slug: string;
+  wazuh_agent_name: string | null;
+  wazuh_agent_registered: boolean;
+}
+
+/** GET /api/auth/users/:id/agent-configs → list user's SOC projects with agent info (admin only) */
+export async function getUserAgentConfigs(userId: string): Promise<AgentConfig[]> {
+  const res = await api.get<AgentConfig[]>(`/auth/users/${userId}/agent-configs`);
+  return res.data;
+}
+
 /** GET /api/audit/ → list audit log entries (admin only) */
 export async function getAuditLogs(page = 1, size = 50): Promise<AuditLogEntry[]> {
   const res = await api.get<AuditLogEntry[]>(`/audit/?page=${page}&size=${size}`);

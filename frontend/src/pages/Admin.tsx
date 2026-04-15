@@ -17,10 +17,11 @@ import {
 import {
   Users, ShieldCheck, Activity,
   RefreshCw, CheckCircle2, AlertCircle, Clock,
-  UserX, Search, Wifi, WifiOff, UserCheck, UserMinus,
+  UserX, Search, Wifi, WifiOff, UserCheck, UserMinus, Download,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { listUsers, updateUserRole, toggleUserStatus, approveUser, suspendUser } from "@/services/authService";
+import { listUsers, updateUserRole, toggleUserStatus, approveUser, suspendUser, getUserAgentConfigs } from "@/services/authService";
+import { downloadAgentCompose } from "@/services/socService";
 import type { UserResponse, UserRole } from "@/types";
 import { ROUTES, TOKEN_KEY } from "@/lib/constants";
 
@@ -203,6 +204,26 @@ export default function Admin() {
       showToast("Failed to suspend user", false);
     } finally {
       setBusy((b) => ({ ...b, [`suspend_${userId}`]: false }));
+    }
+  }
+
+  async function handleDownloadAgentCompose(userId: string) {
+    setBusy((b) => ({ ...b, [`agent_${userId}`]: true }));
+    try {
+      const configs = await getUserAgentConfigs(userId);
+      const registered = configs.filter((c) => c.wazuh_agent_registered);
+      if (registered.length === 0) {
+        showToast("No registered Wazuh agents for this user", false);
+        return;
+      }
+      for (const cfg of registered) {
+        await downloadAgentCompose(cfg.project_id, cfg.slug);
+      }
+      showToast(`Downloaded ${registered.length} agent compose file${registered.length > 1 ? "s" : ""}`, true);
+    } catch {
+      showToast("Failed to download agent compose", false);
+    } finally {
+      setBusy((b) => ({ ...b, [`agent_${userId}`]: false }));
     }
   }
 
@@ -588,6 +609,23 @@ export default function Admin() {
                   {u.wazuh_agent_name ? <Wifi size={9} /> : <WifiOff size={9} />}
                   {u.wazuh_agent_name ?? "No agent"}
                 </span>
+
+                {/* Download agent compose — non-admin users only */}
+                {u.id !== me?.id && u.role !== "admin" && (
+                  <button
+                    disabled={!!busy[`agent_${u.id}`]}
+                    onClick={() => handleDownloadAgentCompose(u.id)}
+                    title="Download Wazuh agent compose"
+                    className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full transition-all disabled:opacity-50"
+                    style={{ backgroundColor: "rgba(167,139,250,0.1)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.2)" }}
+                  >
+                    {busy[`agent_${u.id}`]
+                      ? <RefreshCw size={9} className="animate-spin" />
+                      : <Download size={9} />
+                    }
+                    Agent
+                  </button>
+                )}
 
                 {/* Status badge */}
                 <span
