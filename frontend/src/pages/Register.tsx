@@ -4,12 +4,12 @@
  * Glassy form card with confirm password, strength indicator.
  */
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
 import {
   ShieldCheck, UserPlus, AlertCircle, Eye, EyeOff,
-  Lock, Mail, User, Check, X, CheckCircle2,
+  Lock, Mail, User, Check, X,
 } from "lucide-react";
 import { ROUTES } from "@/lib/constants";
 import { DottedBackground } from "@/components/ui/DottedBackground";
@@ -43,6 +43,7 @@ function getPasswordStrength(pwd: string): { level: number; label: string; color
 
 export default function Register() {
   const { register } = useAuth();
+  const navigate = useNavigate();
 
   const [username,            setUsername]            = useState("");
   const [email,               setEmail]               = useState("");
@@ -52,7 +53,6 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error,               setError]               = useState("");
   const [loading,             setLoading]             = useState(false);
-  const [submitted,           setSubmitted]           = useState(false);
 
   const strength       = getPasswordStrength(password);
   const confirmTouched = confirmPassword.length > 0;
@@ -65,7 +65,7 @@ export default function Register() {
     setLoading(true);
     try {
       await register({ username, email, password });
-      setSubmitted(true);
+      navigate("/?registered=pending");
     } catch (err: unknown) {
       setError(
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -171,44 +171,6 @@ export default function Register() {
             boxShadow: "0 0 0 1px rgba(0,212,255,0.05), 0 32px 72px rgba(0,0,0,0.70), 0 0 80px rgba(0,212,255,0.04)",
           }}
         >
-          {/* ── Pending state — shown after successful registration ── */}
-          {submitted ? (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.97 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-              className="flex flex-col items-center text-center py-4 space-y-4"
-            >
-              <div
-                className="w-14 h-14 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)" }}
-              >
-                <CheckCircle2 size={26} style={{ color: "var(--sev-low-text, #4ade80)" }} />
-              </div>
-              <div>
-                <h2
-                  className="text-xl font-bold mb-1"
-                  style={{ fontFamily: "Syne, sans-serif", color: "var(--text-base)" }}
-                >
-                  Registration Submitted
-                </h2>
-                <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                  Your account is pending admin approval.
-                </p>
-                <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-                  You will be notified once your account is approved.
-                </p>
-              </div>
-              <Link
-                to={ROUTES.LOGIN}
-                className="text-sm hover:underline transition-opacity hover:opacity-80"
-                style={{ color: "var(--accent)" }}
-              >
-                ← Back to Login
-              </Link>
-            </motion.div>
-          ) : (
-          <>
           {/* Heading */}
           <div>
             <h2
@@ -389,8 +351,6 @@ export default function Register() {
               Sign in
             </Link>
           </p>
-          </>
-          )}
         </motion.div>
 
         {/* Footer */}

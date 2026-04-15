@@ -3,8 +3,8 @@
  * Dark-only, standalone (no AppLayout shell).
  * Animated terminal uses safe DOM methods (no innerHTML).
  */
-import { useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 // Brief's canonical dark palette — standalone, no CSS vars dependency
 const C = {
@@ -77,6 +77,18 @@ function useScrollIn(ref: React.RefObject<HTMLDivElement>) {
 }
 
 export default function Landing() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [showPendingBanner, setShowPendingBanner] = useState(
+    searchParams.get("registered") === "pending"
+  );
+
+  function dismissBanner() {
+    setShowPendingBanner(false);
+    const next = new URLSearchParams(searchParams);
+    next.delete("registered");
+    setSearchParams(next, { replace: true });
+  }
+
   const problemRef  = useRef<HTMLDivElement>(null);
   const pentestRef  = useRef<HTMLDivElement>(null);
   const socRef      = useRef<HTMLDivElement>(null);
@@ -241,7 +253,7 @@ export default function Landing() {
           <span style={{ color: C.accent }}>Cyber</span>
           <span style={{ color: C.text }}>Sentinel</span>
         </span>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <Link to="/login" style={{
             padding: "6px 16px", borderRadius: "6px",
             border: `1px solid ${C.border}`,
@@ -259,6 +271,41 @@ export default function Landing() {
           </Link>
         </div>
       </nav>
+
+      {/* ── Pending registration banner ── */}
+      {showPendingBanner && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "10px clamp(16px, 4vw, 48px)",
+          background: "rgba(0,212,255,0.07)",
+          borderBottom: `1px solid rgba(0,212,255,0.18)`,
+          gap: "12px",
+        }}>
+          <p style={{ fontSize: "13px", color: C.text, margin: 0 }}>
+            <span style={{ color: C.accent, fontWeight: 600 }}>Registration submitted.</span>
+            {" "}Your account is pending admin approval — you'll be notified once approved.
+          </p>
+          <button
+            onClick={dismissBanner}
+            aria-label="Dismiss"
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: C.muted,
+              fontSize: "18px",
+              lineHeight: 1,
+              padding: "0 4px",
+              flexShrink: 0,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
 
       {/* ── Hero ── */}
       <section className="landing-hero">
