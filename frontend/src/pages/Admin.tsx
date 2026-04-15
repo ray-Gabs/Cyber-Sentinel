@@ -22,7 +22,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { listUsers, updateUserRole, toggleUserStatus, approveUser, suspendUser } from "@/services/authService";
 import type { UserResponse, UserRole } from "@/types";
-import { ROUTES } from "@/lib/constants";
+import { ROUTES, TOKEN_KEY } from "@/lib/constants";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -112,7 +112,7 @@ export default function Admin() {
     setStatsLoading(true);
     try {
       const API   = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-      const token = localStorage.getItem("access_token");
+      const token = localStorage.getItem(TOKEN_KEY);
       const res   = await fetch(`${API}/api/analytics/admin-stats?range=${range}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -125,7 +125,7 @@ export default function Admin() {
     setExporting(true);
     try {
       const API   = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-      const token = localStorage.getItem("access_token");
+      const token = localStorage.getItem(TOKEN_KEY);
       const res   = await fetch(`${API}/api/analytics/admin-stats/export?range=${statsRange}`, {
         headers: { Authorization: `Bearer ${token}` },
       });

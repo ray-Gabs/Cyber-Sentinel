@@ -10,6 +10,7 @@ import {
   AlertTriangle, UserPlus, ShieldAlert, CheckCircle,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { TOKEN_KEY } from "@/lib/constants";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ export default function AdminNotifications() {
     setFetching(true);
     try {
       const API   = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-      const token = localStorage.getItem("access_token");
+      const token = localStorage.getItem(TOKEN_KEY);
       const qs    = filter === "unread" ? "?unread_only=true" : "";
       const res   = await fetch(`${API}/api/notifications${qs}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -91,7 +92,7 @@ export default function AdminNotifications() {
   async function markRead(id: string) {
     try {
       const API   = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-      const token = localStorage.getItem("access_token");
+      const token = localStorage.getItem(TOKEN_KEY);
       await fetch(`${API}/api/notifications/${id}/read`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}` },
