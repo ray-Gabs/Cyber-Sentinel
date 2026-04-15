@@ -32,74 +32,176 @@ def _level_to_severity(level: int) -> str:
 
 
 @router.get("/admin-stats")
-async def get_admin_stats(current_user: User = Depends(get_current_user)):
+async def get_admin_stats(
+    range: str = Query("7d", pattern="^(7d|30d|90d)$"),
+    current_user: User = Depends(get_current_user),
+):
     """
-    [Admin] Aggregated chart data for the corporate admin dashboard.
+    [Admin] Full aggregated stats for the admin dashboard.
 
-    Returns:
-      - scans.by_day          — last 7 days of scan activity (Recharts-ready)
-      - scans.total           — all-time scan count
-      - scans.active          — scans currently in 'running' or 'pending' state
-      - alerts.by_severity    — alert distribution by severity (Recharts-ready)
-      - alerts.total          — all-time alert count
-      - alerts.critical_count — shortcut for the KPI card
-      - users.total           — total registered user count
+    Returns the complete shape consumed by Admin.tsx:
+      scans / alerts / users — KPI counts, trends, per-day breakdowns
+      top_scan_users         — top 5 users by scan count in the period
+      top_alert_agents       — top 5 Wazuh agents by alert count (all-time)
     """
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin role required")
 
     from domains.auth.models import User as UserModel
+    from bson import ObjectId
 
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    days = RANGE_DAYS.get(range, 7)
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=days)
+    prev_since = now - timedelta(days=days * 2)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # ── Scans ────────────────────────────────────────────────────────────────
-    recent_scans = await Scan.find(Scan.created_at >= seven_days_ago).to_list()
-    scans_by_day: dict[str, int] = defaultdict(int)
-    for scan in recent_scans:
-        if scan.created_at:
-            ts = scan.created_at
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            scans_by_day[ts.strftime("%m/%d")] += 1
-
-    days_list = []
-    for i in range(6, -1, -1):
-        d = datetime.now(timezone.utc) - timedelta(days=i)
-        label = d.strftime("%m/%d")
-        days_list.append({"date": label, "count": scans_by_day.get(label, 0)})
-
     total_scans = await Scan.find().count()
     active_scans = await Scan.find({"status": {"$in": ["running", "pending"]}}).count()
+    scans_today = await Scan.find(Scan.created_at >= today_start).count()
+    scans_period = await Scan.find(Scan.created_at >= since).count()
+    scans_prev = await Scan.find(
+        Scan.created_at >= prev_since, Scan.created_at < since
+    ).count()
+    scans_trend = round((scans_period - scans_prev) / max(scans_prev, 1) * 100, 1)
+
+    # Scans by day + top users — one list fetch, two uses
+    period_scans = await Scan.find(Scan.created_at >= since).to_list()
+    scans_day_map: dict[str, int] = defaultdict(int)
+    user_scan_counts: dict[str, int] = defaultdict(int)
+    for s in period_scans:
+        if s.created_at:
+            ts = s.created_at if s.created_at.tzinfo else s.created_at.replace(tzinfo=timezone.utc)
+            scans_day_map[ts.strftime("%m/%d")] += 1
+        if s.user_id:
+            user_scan_counts[s.user_id] += 1
+
+    scans_by_day = [
+        {"date": (now - timedelta(days=i)).strftime("%m/%d"),
+         "count": scans_day_map.get((now - timedelta(days=i)).strftime("%m/%d"), 0)}
+        for i in range(days - 1, -1, -1)
+    ]
+
+    # Top 5 users by scan count
+    top_scan_users: list[dict] = []
+    for uid, count in sorted(user_scan_counts.items(), key=lambda x: x[1], reverse=True)[:5]:
+        try:
+            u = await UserModel.get(ObjectId(uid))
+            top_scan_users.append({"email": u.username if u else uid, "scans": count})
+        except Exception:
+            top_scan_users.append({"email": uid, "scans": count})
 
     # ── Alerts ───────────────────────────────────────────────────────────────
-    all_alerts = await Alert.find().to_list()
+    # All-time severity breakdown — use Motor aggregation to avoid loading everything
+    alert_coll = Alert.get_motor_collection()
+    sev_pipeline = [
+        {"$group": {
+            "_id": {
+                "$switch": {
+                    "branches": [
+                        {"case": {"$gte": ["$rule_level", 12]}, "then": "critical"},
+                        {"case": {"$gte": ["$rule_level", 8]},  "then": "high"},
+                        {"case": {"$gte": ["$rule_level", 5]},  "then": "medium"},
+                        {"case": {"$gte": ["$rule_level", 1]},  "then": "low"},
+                    ],
+                    "default": "informational",
+                }
+            },
+            "count": {"$sum": 1},
+        }}
+    ]
+    sev_raw = await alert_coll.aggregate(sev_pipeline).to_list(length=None)
     sev_counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "informational": 0}
-    for alert in all_alerts:
-        key = _level_to_severity(alert.rule_level)
-        sev_counts[key] += 1
-
+    for row in sev_raw:
+        if row.get("_id") in sev_counts:
+            sev_counts[row["_id"]] = row["count"]
     by_severity = [{"name": k, "count": v} for k, v in sev_counts.items()]
-    total_alerts = len(all_alerts)
-    critical_count = sev_counts["critical"]
+    total_alerts = sum(sev_counts.values())
+
+    alerts_today = await Alert.find(Alert.timestamp >= today_start).count()
+    alerts_period = await Alert.find(Alert.timestamp >= since).count()
+    alerts_prev = await Alert.find(
+        Alert.timestamp >= prev_since, Alert.timestamp < since
+    ).count()
+    alerts_trend = round((alerts_period - alerts_prev) / max(alerts_prev, 1) * 100, 1)
+
+    # Alerts by day + top agents — one list fetch, two uses
+    period_alerts = await Alert.find(Alert.timestamp >= since).to_list()
+    alerts_day_map: dict[str, int] = defaultdict(int)
+    agent_counts: dict[str, int] = defaultdict(int)
+    for a in period_alerts:
+        try:
+            ts = a.timestamp if a.timestamp.tzinfo else a.timestamp.replace(tzinfo=timezone.utc)
+            alerts_day_map[ts.strftime("%m/%d")] += 1
+        except Exception:
+            pass
+        if a.agent_name:
+            agent_counts[a.agent_name] += 1
+
+    alerts_by_day = [
+        {"date": (now - timedelta(days=i)).strftime("%m/%d"),
+         "count": alerts_day_map.get((now - timedelta(days=i)).strftime("%m/%d"), 0)}
+        for i in range(days - 1, -1, -1)
+    ]
+    top_alert_agents = [
+        {"agent": agent, "count": count}
+        for agent, count in sorted(agent_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+    ]
 
     # ── Users ─────────────────────────────────────────────────────────────────
     total_users = await UserModel.find().count()
+    pending_users = await UserModel.find(UserModel.status == "pending").count()
+    active_users = await UserModel.find(UserModel.status == "active").count()
+    new_today = await UserModel.find(UserModel.created_at >= today_start).count()
+    new_period = await UserModel.find(UserModel.created_at >= since).count()
+    new_prev = await UserModel.find(
+        UserModel.created_at >= prev_since, UserModel.created_at < since
+    ).count()
+    users_trend = round((new_period - new_prev) / max(new_prev, 1) * 100, 1)
 
     return {
         "scans": {
-            "by_day": days_list,
-            "total": total_scans,
-            "active": active_scans,
+            "total":     total_scans,
+            "active":    active_scans,
+            "today":     scans_today,
+            "period":    scans_period,
+            "trend_pct": scans_trend,
+            "by_day":    scans_by_day,
         },
         "alerts": {
+            "total":       total_alerts,
+            "today":       alerts_today,
+            "critical":    sev_counts["critical"],
+            "period":      alerts_period,
+            "trend_pct":   alerts_trend,
             "by_severity": by_severity,
-            "total": total_alerts,
-            "critical_count": critical_count,
+            "by_day":      alerts_by_day,
         },
         "users": {
-            "total": total_users,
+            "total":      total_users,
+            "pending":    pending_users,
+            "active":     active_users,
+            "new_today":  new_today,
+            "new_period": new_period,
+            "trend_pct":  users_trend,
         },
+        "top_scan_users":   top_scan_users,
+        "top_alert_agents": top_alert_agents,
+        "range":            range,
+        "generated_at":     now.isoformat(),
     }
+
+
+@router.get("/admin-stats/export")
+async def export_admin_stats(
+    range: str = Query("7d", pattern="^(7d|30d|90d)$"),
+    current_user: User = Depends(get_current_user),
+):
+    """[Admin] CSV export of admin stats. Returns 501 until implemented."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
+    raise HTTPException(status_code=501, detail="CSV export not yet implemented")
 
 
 @router.get("")
