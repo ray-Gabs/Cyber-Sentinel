@@ -6,7 +6,7 @@ import asyncio
 import hmac
 import logging
 
-from fastapi import APIRouter, Depends, Query, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, Query, HTTPException, Request, status
 from typing import Any, Optional
 
 log = logging.getLogger(__name__)

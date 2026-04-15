@@ -97,6 +97,14 @@ const adminNavItems: NavItem[] = [
     section: null,                  color: "#00d4ff", iconBg: "rgba(0,212,255,0.12)",
   },
   {
+    to: ROUTES.SIEM_CONFIG,        label: "SIEM Config",   icon: SlidersHorizontal,
+    section: null,                  color: "#22C55E", iconBg: "rgba(34,197,94,0.15)",
+  },
+  {
+    to: ROUTES.PROJECTS,           label: "Projects",      icon: Layers,
+    section: null,                  color: "#A78BFA", iconBg: "rgba(167,139,250,0.15)",
+  },
+  {
     to: ROUTES.ANALYTICS,          label: "Analytics",     icon: BarChart3,
     section: null,                  color: "#A855F7", iconBg: "rgba(168,85,247,0.18)",
   },

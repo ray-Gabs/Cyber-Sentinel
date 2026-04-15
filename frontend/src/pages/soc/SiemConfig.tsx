@@ -691,17 +691,26 @@ export default function SiemConfig() {
               {projects.length === 0 ? (
                 <p className="px-4 py-2.5 text-xs" style={{ color: "var(--text-subtle)" }}>No projects</p>
               ) : (
-                projects.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => { setSelectedId(p.id); setProjectOpen(false); }}
-                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors hover:bg-[var(--bg-muted)]"
-                    style={{ color: p.id === selectedId ? "#00d4ff" : "var(--text-base)" }}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${p.wazuh_agent_registered ? "bg-green-500" : "bg-slate-500"}`} />
-                    {p.name}
-                  </button>
-                ))
+                projects.map((p) => {
+                  // owner_username is present when admin fetches all projects
+                  const ownerUsername = (p as Record<string, unknown>).owner_username as string | undefined;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => { setSelectedId(p.id); setProjectOpen(false); }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors hover:bg-[var(--bg-muted)]"
+                      style={{ color: p.id === selectedId ? "#00d4ff" : "var(--text-base)" }}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${p.wazuh_agent_registered ? "bg-green-500" : "bg-slate-500"}`} />
+                      <span className="flex-1 truncate">{p.name}</span>
+                      {ownerUsername && (
+                        <span className="text-[10px] font-medium shrink-0 px-1.5 py-0.5 rounded" style={{ color: "var(--accent)", background: "rgba(0,212,255,0.08)" }}>
+                          {ownerUsername}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
               )}
             </div>
           )}

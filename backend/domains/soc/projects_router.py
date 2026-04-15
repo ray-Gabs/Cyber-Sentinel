@@ -77,6 +77,19 @@ async def _get_owned(project_id: str, user: User) -> SocProject:
     return project
 
 
+async def _get_accessible(project_id: str, user: User) -> SocProject:
+    """Fetch project for read access. Admin can access any project; others must own it."""
+    try:
+        project = await SocProject.get(ObjectId(project_id))
+    except Exception:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if user.role != "admin" and project.owner_id != str(user.id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
 def _validate_xml(xml_content: str, rule_name: str) -> None:
     """Raises 422 if xml_content cannot be parsed."""
     try:
@@ -200,7 +213,21 @@ async def _get_global_health_issues(owner_id: str) -> list[dict]:
 
 @router.get("/")
 async def list_projects(user: User = Depends(get_current_user)):
-    """List all SOC projects owned by the current user."""
+    """List SOC projects. Admin: all projects with owner info. Others: own projects only."""
+    if user.role == "admin":
+        projects = await SocProject.find().sort("+created_at").to_list()
+        # Pre-fetch owners to avoid N+1
+        owner_ids = list({p.owner_id for p in projects})
+        owners = await User.find({"_id": {"$in": [ObjectId(oid) for oid in owner_ids]}}).to_list()
+        owner_map = {str(o.id): o for o in owners}
+        result = []
+        for p in projects:
+            resp = _project_to_response(p)
+            owner = owner_map.get(p.owner_id)
+            resp["owner_username"] = owner.username if owner else p.owner_id
+            resp["owner_email"] = owner.email if owner else None
+            result.append(resp)
+        return result
     projects = await SocProject.find(
         SocProject.owner_id == str(user.id)
     ).sort("+created_at").to_list()
@@ -269,8 +296,17 @@ async def soc_health(_: User = Depends(get_current_user)):
 
 @router.get("/dashboard")
 async def soc_dashboard(user: User = Depends(get_current_user)):
-    """Unified SOC overview: agent counts, alert totals, per-project cards, recent alerts."""
-    projects = await SocProject.find(SocProject.owner_id == str(user.id)).to_list()
+    """Unified SOC overview: agent counts, alert totals, per-project cards, recent alerts.
+    Admin: all users' projects with owner attribution. Others: own projects only."""
+    if user.role == "admin":
+        projects = await SocProject.find().to_list()
+        # Pre-fetch owners for admin attribution
+        owner_ids = list({p.owner_id for p in projects})
+        owners = await User.find({"_id": {"$in": [ObjectId(oid) for oid in owner_ids]}}).to_list()
+        owner_map: dict[str, str] = {str(o.id): o.username for o in owners}
+    else:
+        projects = await SocProject.find(SocProject.owner_id == str(user.id)).to_list()
+        owner_map = {}
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
     active_agents = 0
@@ -323,7 +359,7 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
         health_issues = await _get_project_health_issues(project)
         agent_ip = agent.get("ip") if agent else None
 
-        per_project.append({
+        entry: dict = {
             "project_id": str(project.id),
             "project_name": project.name,
             "agent_name": project.slug,
@@ -333,7 +369,10 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
             "critical_today": proj_critical,
             "last_alert_at": last_alert.timestamp.isoformat() if last_alert else None,
             "health_issues": health_issues,
-        })
+        }
+        if owner_map:
+            entry["owner_username"] = owner_map.get(project.owner_id, project.owner_id)
+        per_project.append(entry)
 
     # Severity breakdown across all user's projects
     agent_names = [p.slug for p in projects]
@@ -375,7 +414,8 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
                 "ai_action": a.ai_action,
             })
 
-    system_notifications = await _get_global_health_issues(str(user.id))
+    # Admin sees per-project health in the cards; skip the user-scoped global check
+    system_notifications = [] if user.role == "admin" else await _get_global_health_issues(str(user.id))
 
     return {
         "summary": {
@@ -398,7 +438,7 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
 @router.get("/{project_id}/agent-status")
 async def agent_status(project_id: str, user: User = Depends(get_current_user)):
     """Rich agent status from Wazuh API. Returns health_issues array."""
-    project = await _get_owned(project_id, user)
+    project = await _get_accessible(project_id, user)
 
     reachable = await wazuh_client.check_reachable()
     if not reachable:
@@ -455,7 +495,7 @@ async def agent_status(project_id: str, user: User = Depends(get_current_user)):
 @router.get("/{project_id}/agent-compose")
 async def agent_compose(project_id: str, user: User = Depends(get_current_user)):
     """Download a docker-compose.yml that connects a Wazuh agent to the lab manager."""
-    project = await _get_owned(project_id, user)
+    project = await _get_accessible(project_id, user)
     agent_name = project.slug
 
     compose = (
@@ -496,8 +536,9 @@ async def agent_compose(project_id: str, user: User = Depends(get_current_user))
 @router.get("/{project_id}/siem-config")
 async def get_siem_config(project_id: str, user: User = Depends(get_current_user)):
     """Get or create SIEM config for a project. Never returns 404."""
-    project = await _get_owned(project_id, user)
-    config = await _get_or_create_siem_config(str(project.id), str(user.id))
+    project = await _get_accessible(project_id, user)
+    # Use the project's actual owner_id so auto-created configs belong to the owner, not admin
+    config = await _get_or_create_siem_config(str(project.id), project.owner_id)
     return {
         "project_id": str(project.id),
         "custom_rules": [r.model_dump() for r in config.custom_rules],
