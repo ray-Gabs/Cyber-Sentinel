@@ -105,15 +105,19 @@ export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
 
       {/* ── Right controls ──────────────────────── */}
       <div className="flex items-center gap-0 sm:gap-1">
-        {/* Notification bell + panel */}
+        {/* Notification bell — admin navigates to full-page view; others use dropdown */}
         <div className="relative" ref={notifRef}>
           <NotificationBell
             unreadCount={unreadCount}
             isOpen={notifOpen}
-            onClick={() => setNotifOpen((o) => !o)}
+            onClick={
+              user?.role === "admin"
+                ? () => navigate("/admin/notifications")
+                : () => setNotifOpen((o) => !o)
+            }
           />
           <AnimatePresence>
-            {notifOpen && (
+            {notifOpen && user?.role !== "admin" && (
               <NotificationPanel
                 notifications={notifications}
                 unreadCount={unreadCount}
