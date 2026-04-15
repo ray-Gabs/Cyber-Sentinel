@@ -16,6 +16,9 @@ NotificationType = Literal[
     "critical_finding",
     "soc_alert",
     "soc_critical",
+    "new_registration",
+    "user_approved",
+    "user_suspended",
 ]
 
 

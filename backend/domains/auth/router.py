@@ -23,6 +23,7 @@ from domains.auth.schemas import (
 )
 from domains.auth import service
 from domains.audit import service as audit_service
+from domains.notifications import service as notif_service
 
 router = APIRouter()
 
@@ -39,6 +40,18 @@ async def register(request: Request, data: RegisterRequest):
         action="user.registered",
         ip_address=ip,
     )
+    # Notify all admin users of the new registration
+    try:
+        admins = await User.find(User.role == "admin").to_list()
+        for admin in admins:
+            await notif_service.create_notification(
+                user_id=str(admin.id),
+                type="new_registration",
+                title=f"New registration: {user.username}",
+                body=f"{user.email} is awaiting admin approval",
+            )
+    except Exception:
+        pass  # Notifications are non-critical; don't fail the registration
     return {"message": "Registration received — awaiting admin approval", "status": "pending"}
 
 
@@ -196,6 +209,15 @@ async def approve_user(user_id: str, user: User = Depends(get_current_user)):
         resource_id=user_id,
         details=f"Approved: {target.username}",
     )
+    try:
+        await notif_service.create_notification(
+            user_id=str(target.id),
+            type="user_approved",
+            title="Account approved",
+            body="Your account has been approved. You can now log in.",
+        )
+    except Exception:
+        pass
     return _user_response(target)
 
 
@@ -220,6 +242,15 @@ async def suspend_user(user_id: str, user: User = Depends(get_current_user)):
         resource_id=user_id,
         details=f"Suspended: {target.username}",
     )
+    try:
+        await notif_service.create_notification(
+            user_id=str(target.id),
+            type="user_suspended",
+            title="Account suspended",
+            body="Your account has been suspended. Contact an administrator.",
+        )
+    except Exception:
+        pass
     return _user_response(target)
 
 

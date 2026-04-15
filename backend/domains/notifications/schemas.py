@@ -8,7 +8,16 @@ from typing import Literal, Optional
 from pydantic import BaseModel
 
 
-NotificationType = Literal["scan_complete", "scan_failed", "critical_finding"]
+NotificationType = Literal[
+    "scan_complete",
+    "scan_failed",
+    "critical_finding",
+    "soc_alert",
+    "soc_critical",
+    "new_registration",
+    "user_approved",
+    "user_suspended",
+]
 
 
 class NotificationOut(BaseModel):

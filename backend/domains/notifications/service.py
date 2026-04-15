@@ -15,8 +15,11 @@ log = logging.getLogger(__name__)
 
 NotificationType = Literal[
     "scan_complete", "scan_failed", "critical_finding",
-    "soc_alert",    # medium+ Wazuh alert for this user's linked agent
-    "soc_critical", # high-severity Wazuh alert (level >= 12)
+    "soc_alert",         # medium+ Wazuh alert for this user's linked agent
+    "soc_critical",      # high-severity Wazuh alert (level >= 12)
+    "new_registration",  # admin: a new user has registered and awaits approval
+    "user_approved",     # user: their account was approved
+    "user_suspended",    # user: their account was suspended
 ]
 
 
