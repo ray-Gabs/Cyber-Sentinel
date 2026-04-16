@@ -18,8 +18,8 @@ export async function getCorrelationByScan(scanId: string): Promise<Correlation>
 
 /** GET /api/correlations/ → list all correlations */
 export async function getCorrelations(): Promise<Correlation[]> {
-  const res = await api.get<Correlation[]>("/correlations/");
-  return res.data;
+  const res = await api.get<{ items: Correlation[]; total: number; skip: number; limit: number }>("/correlations/");
+  return res.data.items ?? [];
 }
 
 /** DELETE /api/correlations/:id → delete a single correlation */

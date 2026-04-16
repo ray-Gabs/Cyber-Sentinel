@@ -693,7 +693,7 @@ export default function SiemConfig() {
               ) : (
                 projects.map((p) => {
                   // owner_username is present when admin fetches all projects
-                  const ownerUsername = (p as Record<string, unknown>).owner_username as string | undefined;
+                  const ownerUsername = (p as unknown as Record<string, unknown>).owner_username as string | undefined;
                   return (
                     <button
                       key={p.id}

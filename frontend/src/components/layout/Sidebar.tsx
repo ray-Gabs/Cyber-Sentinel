@@ -7,7 +7,7 @@ import { NavLink } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Crosshair, ShieldAlert, BarChart3,
-  Settings, ShieldCheck, Link2, X, Users, ClipboardList, Layers, Bell,
+  Settings, ShieldCheck, Link2, X, Users, ClipboardList, Layers,
   Activity, SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -83,10 +83,6 @@ const adminNavItems: NavItem[] = [
   {
     to: ROUTES.AUDIT,              label: "Audit Log",     icon: ClipboardList,
     section: null,                  color: "#F59E0B", iconBg: "rgba(245,158,11,0.15)",
-  },
-  {
-    to: ROUTES.ADMIN_NOTIFICATIONS, label: "Notifications", icon: Bell,
-    section: null,                   color: "#00d4ff", iconBg: "rgba(0,212,255,0.12)",
   },
   {
     to: ROUTES.ALERTS,             label: "SOC Alerts",    icon: ShieldAlert,
@@ -236,26 +232,19 @@ function SidebarNav({
       })}
       </div>
 
-      {/* Role pill at bottom of nav */}
+      {/* Role indicator — label only, no username (user card lives in Header) */}
       {!collapsed && rolePill && (
         <div
-          className="mx-2 mt-2 mb-1 px-3 py-2 rounded-lg flex items-center gap-2"
+          className="mx-2 mt-2 mb-1 px-3 py-1.5 rounded-lg flex items-center gap-2"
           style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}
         >
           <div
             className="w-2 h-2 rounded-full shrink-0"
             style={{ backgroundColor: rolePill.color }}
           />
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.14em] font-semibold" style={{ color: rolePill.color }}>
-              {rolePill.label}
-            </p>
-            {user && (
-              <p className="text-[10px] truncate" style={{ color: "var(--text-subtle)" }}>
-                {user.username}
-              </p>
-            )}
-          </div>
+          <p className="text-[10px] uppercase tracking-[0.14em] font-semibold" style={{ color: rolePill.color }}>
+            {rolePill.label}
+          </p>
         </div>
       )}
     </nav>
