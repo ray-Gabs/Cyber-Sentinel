@@ -450,20 +450,8 @@
 
 @layer utilities {
 
-  /* Cyan gradient text */
-  .text-gradient {
-    background: linear-gradient(135deg, var(--accent), #a5f3fc);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .text-gradient-danger {
-    background: linear-gradient(135deg, #f87171, #fbbf24);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
+  /* text-gradient and text-gradient-danger removed — gradient clip-path text violates design tokens.
+     Use color: var(--accent) or var(--sev-critical-text) for emphasis instead. */
 
   /* Accent glow ring — dark mode only */
   .glow-sentinel {
@@ -473,16 +461,13 @@
     box-shadow: 0 0 0 1px var(--accent-dim), 0 0 28px var(--accent-glow);
   }
 
-  /* Subtle glass surface */
+  /* glass — backdrop-blur surface. Use ONLY on modal overlays and floating panels.
+     Do NOT use on cards, sections, or decorative containers. */
   .glass {
     background: rgba(255,255,255,0.025);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255,255,255,0.06);
-  }
-  .light .glass {
-    background: rgba(255,255,255,0.75);
-    border: 1px solid rgba(0,0,0,0.07);
   }
 
   /* Staggered animation delays */

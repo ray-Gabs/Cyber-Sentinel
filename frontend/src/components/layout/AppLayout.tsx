@@ -1,20 +1,16 @@
 /**
- * AppLayout — main shell with collapsible sidebar, animated page transitions,
- * and AnimatedGridPattern background behind all content.
+ * AppLayout — main shell with collapsible sidebar and animated page transitions.
  * Desktop: persistent collapsible sidebar.
  * Mobile: overlay drawer triggered by hamburger in Header + bottom nav bar.
  * Sidebar state is persisted in localStorage.
  */
 import { useState, useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
-import { useTheme } from "@/providers/ThemeProvider";
 import { TransitionProvider } from "@/components/transitions/TransitionProvider";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import BottomNav from "./BottomNav";
-import { AnimatedGridPattern } from "@/components/ui/AnimatedGridPattern";
 import { ScrollVelocity } from "@/components/ui/reactbits/ScrollVelocity";
-import { cn } from "@/lib/utils";
 
 const SECURITY_TOOLS = [
   "Nmap", "Nuclei", "SSLyze", "WhatWeb", "OWASP ZAP",
@@ -24,7 +20,6 @@ const SECURITY_TOOLS = [
 const SIDEBAR_KEY = "cs_sidebar_open";
 
 export default function AppLayout() {
-  const { isDark } = useTheme();
   const location = useLocation();
 
   // Desktop: collapsed vs expanded
@@ -63,25 +58,6 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen relative" style={{ backgroundColor: "var(--bg-base)" }}>
-
-      {/* ── Animated grid — full-screen fixed background ─────────── */}
-      <div
-        className="fixed inset-0 pointer-events-none z-0 overflow-hidden"
-        style={{ color: isDark ? "rgba(0,212,255,0.14)" : "rgba(8,145,178,0.10)" }}
-      >
-        <AnimatedGridPattern
-          width={44}
-          height={44}
-          numSquares={35}
-          maxOpacity={0.85}
-          duration={4}
-          repeatDelay={0.5}
-          className={cn(
-            "[mask-image:radial-gradient(ellipse_90%_85%_at_50%_50%,white,transparent)]",
-            "stroke-current fill-current"
-          )}
-        />
-      </div>
 
       {/* ── Sidebar (desktop fixed + mobile overlay drawer) ───────── */}
       <Sidebar

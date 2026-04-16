@@ -2,11 +2,22 @@
 
 **AI-Powered Web Application Security Assessment & SOC Platform**
 
-Built for the Smart City and Cybersecurity Lab internship (ITS), Cyber Sentinel combines an automated penetration testing engine with a real-time Security Operations Center (SOC) powered by Wazuh SIEM and AI-driven analysis.
+Cyber Sentinel is an AI-powered web application security assessment and SOC platform. Built for the ITS Smart City and Cybersecurity Lab internship (SMU), covering both Intern A (Penetration Testing Engine) and Intern B (Wazuh SOC). It combines an automated penetration testing pipeline with a real-time Security Operations Center powered by Wazuh SIEM and multi-provider AI analysis.
 
-> **Live instance:** `http://10.4.89.178:5173/`
-> API backend: `http://10.4.89.178:8000/`
-> Interactive API docs: `http://10.4.89.178:8000/docs`
+> **Local frontend:** `http://localhost:5173`
+> **API backend:** `http://localhost:8000`
+> **Interactive API docs:** `http://localhost:8000/docs`
+
+---
+
+## Architecture
+
+```
+Browser → nginx (port 80) → Frontend (React)
+                          → Backend API (FastAPI, port 8000) → MongoDB
+                                                             → Redis (Celery)
+                                                             → Wazuh Manager (port 55000)
+```
 
 ---
 
@@ -85,6 +96,40 @@ Real-time security monitoring powered by Wazuh SIEM with AI triage.
 | Reports | WeasyPrint / xhtml2pdf (PDF), Jinja2 (HTML) |
 | Auth | JWT (HS256), bcrypt password hashing |
 | Infra | Docker Compose (MongoDB + Redis) |
+
+---
+
+## Quick Start with Docker
+
+```bash
+git clone https://github.com/ray-Gabs/Cyber-Sentinel
+cd Cyber-Sentinel
+cp .env.example .env    # fill in required vars (see Configuration section)
+docker compose up -d --build
+# App: http://localhost | API docs: http://localhost:8000/docs
+```
+
+---
+
+## Manual Development Setup
+
+```bash
+# 1. Start infrastructure
+docker compose up -d mongo redis
+
+# 2. Backend
+cd backend
+python -m venv venv && venv/Scripts/activate  # Windows
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+
+# 3. Celery worker (new terminal)
+cd backend && venv/Scripts/activate
+celery -A core.celery_app worker --loglevel=info --pool=solo  # pool=solo required on Windows
+
+# 4. Frontend (new terminal)
+cd frontend && npm install && npm run dev
+```
 
 ---
 
@@ -201,9 +246,9 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
-## VM Deployment (How the hosted instance is set up)
+## VM Deployment
 
-This documents exactly how the platform runs at `http://10.4.89.178:5173/`.
+This documents how to deploy the platform on a remote Linux VM.
 
 ### What you need on the VM
 
@@ -292,14 +337,14 @@ Or create systemd unit files for production-style management (see systemd sectio
 
 ---
 
-## Network / Live Instance
+## Local Endpoints
 
 | Service | URL |
 |---------|-----|
-| **Frontend** | `http://10.4.89.178:5173/` |
-| **Backend API** | `http://10.4.89.178:8000/` |
-| **Swagger Docs** | `http://10.4.89.178:8000/docs` |
-| **Health Check** | `http://10.4.89.178:8000/api/health` |
+| **Frontend** | `http://localhost:5173` |
+| **Backend API** | `http://localhost:8000` |
+| **Swagger Docs** | `http://localhost:8000/docs` |
+| **Health Check** | `http://localhost:8000/api/health` |
 
 ---
 
@@ -464,6 +509,26 @@ sudo systemctl status cyber-sentinel-backend  # check they're running
 
 ---
 
+## Wazuh Integration
+
+To push alerts from Wazuh manager into Cyber Sentinel via webhook, add the following to the Wazuh manager `ossec.conf`:
+
+```xml
+<!-- Add to Wazuh manager ossec.conf to push alerts via webhook: -->
+<integration>
+  <name>custom-webhook</name>
+  <hook_url>http://YOUR_SERVER_IP:8000/api/alerts/webhook</hook_url>
+  <level>3</level>
+  <alert_format>json</alert_format>
+</integration>
+```
+
+Optional: set `WAZUH_WEBHOOK_TOKEN` in `.env` and add `<api_key>YOUR_TOKEN</api_key>` to the integration config to authenticate webhook requests.
+
+Swagger UI available at `http://localhost:8000/docs` after starting the backend.
+
+---
+
 ## Project Structure
 
 ```
@@ -594,27 +659,34 @@ curl http://localhost:8000/api/health
 
 ## Environment Variables Reference
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `JWT_SECRET` | (auto-generated) | **Set this** — sessions don't persist across restarts without it |
-| `AI_PROVIDER` | `groq` | Active AI provider: `groq` / `gemini` / `claude` / `openai` |
-| `GROQ_API_KEY` | — | Groq API key (free at console.groq.com) |
-| `GEMINI_API_KEY` | — | Google Gemini API key |
-| `CLAUDE_API_KEY` | — | Anthropic Claude API key |
-| `OPENAI_API_KEY` | — | OpenAI API key |
-| `MONGO_URI` | `mongodb://localhost:27017` | MongoDB connection string |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection string |
-| `FRONTEND_URL` | `http://localhost:5173` | Used in CORS + email links |
-| `CORS_EXTRA_ORIGINS` | — | Comma-separated additional CORS origins |
-| `ALLOW_PRIVATE_TARGETS` | `false` | Set `true` in lab environments to scan private IPs |
-| `NVD_API_KEY` | — | NIST NVD key (optional — increases CVE lookup rate limit) |
-| `VIRUSTOTAL_API_KEY` | — | Threat intel enrichment |
-| `ABUSEIPDB_API_KEY` | — | Threat intel enrichment |
-| `ZAP_API_URL` | `http://localhost:8080` | OWASP ZAP API endpoint |
-| `ZAP_API_KEY` | — | ZAP API key |
-| `WAZUH_API_URL` | `https://localhost:55000` | Wazuh REST API |
-| `WAZUH_API_USER` | `wazuh-wui` | Wazuh API username |
-| `WAZUH_API_PASSWORD` | — | Wazuh API password |
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `JWT_SECRET` | Yes | — | Secret key for JWT signing (min 32 chars) |
+| `GEMINI_API_KEY` | If AI_PROVIDER=gemini | — | Google AI Studio API key |
+| `GROQ_API_KEY` | If AI_PROVIDER=groq | — | Groq API key (Llama 3.3 70B) |
+| `ANTHROPIC_API_KEY` | If AI_PROVIDER=claude | — | Anthropic API key |
+| `CLAUDE_API_KEY` | If AI_PROVIDER=claude | — | Anthropic Claude API key (alias) |
+| `OPENAI_API_KEY` | If AI_PROVIDER=openai | — | OpenAI API key |
+| `AI_PROVIDER` | No | `groq` | AI backend: `groq`, `claude`, `gemini`, `openai` |
+| `MONGODB_URI` | No | `mongodb://localhost:27017` | MongoDB connection string |
+| `MONGO_URI` | No | `mongodb://localhost:27017` | MongoDB connection string (alias) |
+| `REDIS_URL` | No | `redis://localhost:6379/0` | Redis connection string |
+| `FRONTEND_URL` | No | `http://localhost:5173` | Used in CORS + email links |
+| `CORS_EXTRA_ORIGINS` | No | — | Comma-separated additional CORS origins |
+| `ALLOW_PRIVATE_TARGETS` | No | `false` | Set `true` in lab environments to scan private IPs |
+| `NVD_API_KEY` | No | — | NIST NVD key (optional — increases CVE lookup rate limit) |
+| `VIRUSTOTAL_API_KEY` | No | — | VirusTotal API key for threat intel enrichment |
+| `ABUSEIPDB_API_KEY` | No | — | AbuseIPDB API key for threat intel enrichment |
+| `ZAP_API_URL` | No | `http://localhost:8080` | OWASP ZAP API endpoint |
+| `ZAP_API_KEY` | No | — | ZAP API key |
+| `WAZUH_API_URL` | No | `https://localhost:55000` | Wazuh manager API URL |
+| `WAZUH_API_USER` | No | `wazuh-wui` | Wazuh API username |
+| `WAZUH_API_PASSWORD` | No | — | Wazuh API password |
+| `WAZUH_VERIFY_SSL` | No | `false` | Verify Wazuh SSL certificate |
+| `WAZUH_WEBHOOK_TOKEN` | No | — | Shared secret for webhook auth (optional) |
+| `FIRST_ADMIN_USERNAME` | No | `admin` | Username for auto-seeded admin on first boot |
+| `FIRST_ADMIN_EMAIL` | No | — | Email for auto-seeded admin |
+| `FIRST_ADMIN_PASSWORD` | No | — | Password for auto-seeded admin |
 
 ---
 
@@ -630,4 +702,4 @@ curl http://localhost:8000/api/health
 
 ## License
 
-Internal project — Smart City and Cybersecurity Lab, ITS internship.
+MIT License — ITS Smart City and Cybersecurity Lab, SMU, 2026

@@ -93,6 +93,39 @@ function SectionLabel({ label, accent, icon: Icon }: { label: string; accent: st
   );
 }
 
+// ── Skeleton helpers ───────────────────────────────────────────────────────
+function StatCardSkeleton({ i }: { i: number }) {
+  return (
+    <div
+      className="card animate-pulse"
+      style={{ minHeight: 90, borderTop: "2px solid var(--border)", animationDelay: `${i * 0.07}s` }}
+    >
+      <div className="flex items-start justify-between">
+        <div className="space-y-2.5 flex-1">
+          <div style={{ height: 10, width: "50%", backgroundColor: "var(--bg-muted)", borderRadius: 4 }} />
+          <div style={{ height: 28, width: "55%", backgroundColor: "var(--bg-muted)", borderRadius: 6 }} />
+        </div>
+        <div style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: "var(--bg-muted)" }} />
+      </div>
+    </div>
+  );
+}
+
+function ScanGridCardSkeleton() {
+  return (
+    <div
+      className="scan-grid-card animate-pulse"
+      style={{ minHeight: 96, borderTop: "2px solid var(--border)" }}
+    >
+      <div className="px-3 pt-3 pb-2.5 flex flex-col gap-2">
+        <div style={{ height: 16, width: "50%", backgroundColor: "var(--bg-muted)", borderRadius: 4 }} />
+        <div style={{ height: 12, width: "70%", backgroundColor: "var(--bg-muted)", borderRadius: 4 }} />
+        <div style={{ height: 10, width: "40%", backgroundColor: "var(--bg-muted)", borderRadius: 4 }} />
+      </div>
+    </div>
+  );
+}
+
 // ── Stat card ──────────────────────────────────────────────────────────────
 interface StatCardProps {
   label: string;
@@ -145,7 +178,7 @@ function StatCard({ label, value, icon: Icon, color, iconBg, accent, pulse = fal
         >
           {pulse && (
             <span
-              className="absolute inset-0 rounded-xl animate-ping opacity-25"
+              className="absolute inset-0 rounded-xl opacity-20"
               style={{ backgroundColor: accent }}
             />
           )}
@@ -247,7 +280,6 @@ interface QuickAction {
   icon: React.ElementType;
   label: string;
   accent: string;
-  ringGradient: string;
 }
 
 // SOC actions listed first
@@ -257,28 +289,24 @@ const quickActions: QuickAction[] = [
     icon: ShieldAlert,
     label: "SOC Alerts",
     accent: "#EF4444",
-    ringGradient: "linear-gradient(135deg, #EF4444, #F87171)",
   },
   {
     to: "/analytics",
     icon: BarChart3,
     label: "Analytics",
     accent: "#A855F7",
-    ringGradient: "linear-gradient(135deg, #A855F7, #C084FC)",
   },
   {
     to: "/scans/new",
     icon: Rocket,
     label: "New Scan",
     accent: "#3B82F6",
-    ringGradient: "linear-gradient(135deg, #3B82F6, #60A5FA)",
   },
   {
     to: "/correlations",
     icon: Link2,
     label: "Correlate",
     accent: "#22C55E",
-    ringGradient: "linear-gradient(135deg, #22C55E, #4ADE80)",
   },
 ];
 
@@ -297,6 +325,7 @@ export default function Dashboard() {
   const [scans, setScans]           = useState<ScanSummary[]>([]);
   const [alertStats, setAlertStats] = useState<AlertStats | null>(null);
   const [alertError, setAlertError] = useState(false);
+  const [scanError, setScanError]   = useState(false);
   const [loading, setLoading]       = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -304,7 +333,12 @@ export default function Dashboard() {
       getScans(1, 50),
       getAlertStats(),
     ]);
-    if (scanData.status  === "fulfilled") setScans(scanData.value);
+    if (scanData.status === "fulfilled") {
+      setScans(scanData.value);
+      setScanError(false);
+    } else {
+      setScanError(true);
+    }
     if (statsData.status === "fulfilled") {
       setAlertStats(statsData.value);
       setAlertError(false);
@@ -337,15 +371,6 @@ export default function Dashboard() {
   const socTotal     = alertStats?.total ?? 0;
   const socEscalated = alertStats?.by_action?.["ESCALATE"] ?? 0;
   const socTP        = alertStats?.by_verdict?.["TRUE_POSITIVE"] ?? 0;
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 gap-3">
-        <LoadingSpinner size="lg" />
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading security telemetry...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-5 relative">
@@ -447,7 +472,7 @@ export default function Dashboard() {
           className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium shrink-0"
           style={{ backgroundColor: "var(--color-success-dim)", color: "var(--sev-low-text)", border: "1px solid var(--color-success-border)" }}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+          <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
           Platform Online
         </div>
       </motion.div>
@@ -459,18 +484,19 @@ export default function Dashboard() {
         <SectionLabel label="SOC Platform" accent="#EF4444" icon={ShieldAlert} />
       </motion.div>
 
-      {/* SOC stat cards */}
-      <motion.div
-        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
-        initial="hidden"
-        animate="show"
-        variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
-      >
-        <StatCard label="Total Alerts"   value={socTotal}     icon={ShieldAlert}    color={socTotal > 0 ? "var(--sev-critical-text)" : "var(--text-muted)"} iconBg={socTotal > 0 ? "rgba(239,68,68,0.12)" : "var(--bg-muted)"} accent={socTotal > 0 ? "#EF4444" : "var(--border-muted)"} i={0} />
-        <StatCard label="True Positives" value={socTP}        icon={TriangleAlert}  color={socTP > 0 ? "var(--sev-high-text)" : "var(--text-muted)"}      iconBg={socTP > 0 ? "rgba(249,115,22,0.12)" : "var(--bg-muted)"}  accent={socTP > 0 ? "#F97316" : "var(--border-muted)"}   i={1} />
-        <StatCard label="Escalated"      value={socEscalated} icon={Zap}            color={socEscalated > 0 ? "var(--sev-medium-text)" : "var(--text-muted)"} iconBg={socEscalated > 0 ? "rgba(234,179,8,0.12)" : "var(--bg-muted)"} accent={socEscalated > 0 ? "#EAB308" : "var(--border-muted)"} i={2} />
-        <StatCard label="Monitored"      value={alertStats?.by_action?.["MONITOR"] ?? 0} icon={Eye} color="var(--color-purple-text)" iconBg="var(--color-purple-dim)" accent="#A855F7" i={3} />
-      </motion.div>
+      {/* SOC stat cards — skeleton on initial load */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {loading ? (
+          [0, 1, 2, 3].map((i) => <StatCardSkeleton key={i} i={i} />)
+        ) : (
+          <>
+            <StatCard label="Total Alerts"   value={socTotal}     icon={ShieldAlert}    color={socTotal > 0 ? "var(--sev-critical-text)" : "var(--text-muted)"} iconBg={socTotal > 0 ? "rgba(239,68,68,0.12)" : "var(--bg-muted)"} accent={socTotal > 0 ? "#EF4444" : "var(--border-muted)"} i={0} />
+            <StatCard label="True Positives" value={socTP}        icon={TriangleAlert}  color={socTP > 0 ? "var(--sev-high-text)" : "var(--text-muted)"}      iconBg={socTP > 0 ? "rgba(249,115,22,0.12)" : "var(--bg-muted)"}  accent={socTP > 0 ? "#F97316" : "var(--border-muted)"}   i={1} />
+            <StatCard label="Escalated"      value={socEscalated} icon={Zap}            color={socEscalated > 0 ? "var(--sev-medium-text)" : "var(--text-muted)"} iconBg={socEscalated > 0 ? "rgba(234,179,8,0.12)" : "var(--bg-muted)"} accent={socEscalated > 0 ? "#EAB308" : "var(--border-muted)"} i={2} />
+            <StatCard label="Monitored"      value={alertStats?.by_action?.["MONITOR"] ?? 0} icon={Eye} color="var(--color-purple-text)" iconBg="var(--color-purple-dim)" accent="#A855F7" i={3} />
+          </>
+        )}
+      </div>
 
       {/* SOC overview card — always visible */}
       <motion.div
@@ -505,7 +531,19 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {alertStats && alertStats.total > 0 ? (
+        {loading ? (
+          /* Skeleton for the SOC overview card body */
+          <div className="space-y-3 animate-pulse">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="rounded-xl p-3" style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}>
+                  <div style={{ height: 10, width: "60%", backgroundColor: "var(--border)", borderRadius: 3, marginBottom: 8 }} />
+                  <div style={{ height: 22, width: "40%", backgroundColor: "var(--border)", borderRadius: 4 }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : alertStats && alertStats.total > 0 ? (
           <div className="space-y-4">
             {/* Top metrics row */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -574,7 +612,7 @@ export default function Dashboard() {
             )}
           </div>
         ) : (
-          /* Empty state — always visible */
+          /* Empty / error state */
           <div className="flex flex-col items-center justify-center py-10 gap-3">
             <div
               className="flex items-center justify-center w-12 h-12 rounded-2xl"
@@ -592,6 +630,15 @@ export default function Dashboard() {
                   : "Waiting for Wazuh to forward events"}
               </p>
             </div>
+            {alertError && (
+              <button
+                onClick={fetchData}
+                className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                style={{ backgroundColor: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }}
+              >
+                Retry
+              </button>
+            )}
             {!wazuhConfigured && (
               <Link
                 to="/settings"
@@ -612,25 +659,48 @@ export default function Dashboard() {
         <SectionLabel label="Pentest Engine" accent="#F59E0B" icon={Crosshair} />
       </motion.div>
 
-      {/* Pentest stat cards — BentoGrid layout */}
-      <BentoGrid columns={4} gap="0.75rem">
-        <BentoGridItem colSpan={1}>
-          <StatCard label="Active Scans"   value={activeScans.length}   icon={Radio}         color={activeScans.length > 0 ? "var(--sev-info-text)" : "var(--text-muted)"}     iconBg={activeScans.length > 0 ? "rgba(59,130,246,0.15)" : "var(--bg-muted)"}    accent={activeScans.length > 0 ? "#3B82F6" : "var(--border-muted)"} pulse={activeScans.length > 0} i={0} />
-        </BentoGridItem>
-        <BentoGridItem colSpan={1}>
-          <StatCard label="Completed"      value={completedScans.length} icon={CheckCircle2}  color="var(--sev-low-text)"       iconBg="var(--color-success-dim)"   accent="#22C55E" i={1} />
-        </BentoGridItem>
-        <BentoGridItem colSpan={1}>
-          <StatCard label="Total Findings" value={totalFindings}          icon={Activity}      color="var(--color-purple-text)"  iconBg="var(--color-purple-dim)"    accent="#A855F7" i={2} />
-        </BentoGridItem>
-        <BentoGridItem colSpan={1}>
-          <StatCard label="High Risk"      value={highRiskCount}          icon={AlertTriangle} color={highRiskCount > 0 ? "var(--sev-critical-text)" : "var(--text-muted)"} iconBg={highRiskCount > 0 ? "rgba(239,68,68,0.12)" : "var(--bg-muted)"} accent={highRiskCount > 0 ? "#EF4444" : "var(--border-muted)"} i={3} />
-        </BentoGridItem>
-      </BentoGrid>
+      {/* Pentest stat cards — skeleton on initial load, error state on failure */}
+      {loading ? (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <StatCardSkeleton key={i} i={i} />)}
+        </div>
+      ) : scanError ? (
+        <div className="flex flex-col items-center gap-3 py-8 rounded-xl" style={{ border: "1px solid rgba(239,68,68,0.2)", backgroundColor: "rgba(239,68,68,0.04)" }}>
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl" style={{ backgroundColor: "rgba(239,68,68,0.1)" }}>
+            <AlertTriangle size={18} style={{ color: "rgba(239,68,68,0.6)" }} />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>Unable to load scan data</p>
+            <p className="text-xs mt-1" style={{ color: "var(--text-subtle)" }}>Backend may be unavailable — check that the API server is running</p>
+          </div>
+          <button
+            onClick={fetchData}
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+            style={{ backgroundColor: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }}
+          >
+            Retry
+          </button>
+        </div>
+      ) : (
+        <BentoGrid columns={4} gap="0.75rem">
+          <BentoGridItem colSpan={1}>
+            <StatCard label="Active Scans"   value={activeScans.length}   icon={Radio}         color={activeScans.length > 0 ? "var(--sev-info-text)" : "var(--text-muted)"}     iconBg={activeScans.length > 0 ? "rgba(59,130,246,0.15)" : "var(--bg-muted)"}    accent={activeScans.length > 0 ? "#3B82F6" : "var(--border-muted)"} pulse={activeScans.length > 0} i={0} />
+          </BentoGridItem>
+          <BentoGridItem colSpan={1}>
+            <StatCard label="Completed"      value={completedScans.length} icon={CheckCircle2}  color="var(--sev-low-text)"       iconBg="var(--color-success-dim)"   accent="#22C55E" i={1} />
+          </BentoGridItem>
+          <BentoGridItem colSpan={1}>
+            <StatCard label="Total Findings" value={totalFindings}          icon={Activity}      color="var(--color-purple-text)"  iconBg="var(--color-purple-dim)"    accent="#A855F7" i={2} />
+          </BentoGridItem>
+          <BentoGridItem colSpan={1}>
+            <StatCard label="High Risk"      value={highRiskCount}          icon={AlertTriangle} color={highRiskCount > 0 ? "var(--sev-critical-text)" : "var(--text-muted)"} iconBg={highRiskCount > 0 ? "rgba(239,68,68,0.12)" : "var(--bg-muted)"} accent={highRiskCount > 0 ? "#EF4444" : "var(--border-muted)"} i={3} />
+          </BentoGridItem>
+        </BentoGrid>
+      )}
 
       {/* Active scans live feed */}
       <AnimatePresence>
-        {activeScans.length > 0 && (
+        {!loading && activeScans.length > 0 && (
           <motion.div
             key="live-scans"
             initial={{ opacity: 0, y: 12 }}
@@ -645,7 +715,6 @@ export default function Dashboard() {
           >
             <div className="flex items-center gap-3 mb-4">
               <div className="relative flex items-center justify-center w-8 h-8 rounded-lg" style={{ backgroundColor: "var(--accent-dim)" }}>
-                <span className="absolute inset-0 rounded-lg animate-ping opacity-20" style={{ backgroundColor: "var(--accent)" }} />
                 <Crosshair size={15} style={{ color: "var(--accent)" }} />
               </div>
               <div>
@@ -698,7 +767,7 @@ export default function Dashboard() {
       </AnimatePresence>
 
       {/* Severity distribution */}
-      {totalFindings > 0 && (
+      {!loading && totalFindings > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -779,7 +848,20 @@ export default function Dashboard() {
             </Link>
           </div>
 
-          {scans.length === 0 ? (
+          {loading ? (
+            <motion.div
+              className="grid grid-cols-2 gap-2.5 sm:grid-cols-3"
+              initial="hidden"
+              animate="show"
+              variants={{ hidden: {}, show: { transition: { staggerChildren: 0.07 } } }}
+            >
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <motion.div key={i} custom={i} variants={cardVariants}>
+                  <ScanGridCardSkeleton />
+                </motion.div>
+              ))}
+            </motion.div>
+          ) : scans.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 gap-3">
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ backgroundColor: "var(--bg-muted)" }}>
                 <Crosshair size={22} style={{ color: "var(--text-subtle)" }} />
@@ -829,13 +911,13 @@ export default function Dashboard() {
             Quick Actions
           </h2>
           <div className="grid grid-cols-2 gap-1">
-            {quickActions.map(({ to, icon: Icon, label, accent, ringGradient }) => (
+            {quickActions.map(({ to, icon: Icon, label, accent }) => (
               <Link key={to} to={to} className="action-highlight">
                 <div
                   className="action-highlight-ring"
-                  style={{ background: ringGradient, boxShadow: `0 4px 16px ${accent}30` }}
+                  style={{ backgroundColor: `${accent}22`, border: `1px solid ${accent}44` }}
                 >
-                  <Icon size={20} style={{ color: "#fff" }} />
+                  <Icon size={20} style={{ color: accent }} />
                 </div>
                 <span className="text-[11px] font-semibold text-center" style={{ color: "var(--text-muted)" }}>
                   {label}

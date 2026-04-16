@@ -10,7 +10,6 @@ import { ShieldAlert, RefreshCw, ChevronRight } from "lucide-react";
 import { getAlerts } from "@/services/alertService";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { timeAgo } from "@/lib/utils";
-import LoadingSpinner from "@/components/common/LoadingSpinner";
 import type { AlertSummary } from "@/types";
 
 // ── Severity helpers ───────────────────────────────────────────────────────
@@ -56,12 +55,27 @@ const LEVEL_FILTERS = [
   { value: 5,  label: "Medium 5+"      },
 ];
 
-// ── Animations — per-row entrance now handled by AnimatedList ─────────────
+// ── Skeleton row ──────────────────────────────────────────────────────────
+function AlertSkeletonRow() {
+  return (
+    <div
+      className="animate-pulse flex gap-4 items-center p-4 rounded-xl"
+      style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)", borderLeft: "3px solid var(--border)" }}
+    >
+      <div style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: "var(--bg-muted)", flexShrink: 0 }} />
+      <div className="flex-1 space-y-2">
+        <div style={{ height: 13, width: "65%", backgroundColor: "var(--bg-muted)", borderRadius: 4 }} />
+        <div style={{ height: 10, width: "40%", backgroundColor: "var(--bg-muted)", borderRadius: 4 }} />
+      </div>
+      <div style={{ width: 60, height: 20, borderRadius: 99, backgroundColor: "var(--bg-muted)" }} />
+    </div>
+  );
+}
 
 // ── Component ──────────────────────────────────────────────────────────────
 export default function AlertFeed() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [alerts, setAlerts]             = useState<AlertSummary[]>([]);
   const [loading, setLoading]           = useState(true);
   const [isFetching, setIsFetching]     = useState(false);
@@ -97,6 +111,19 @@ export default function AlertFeed() {
 
   useEffect(() => { fetchAlerts(); }, [fetchAlerts]);
 
+  // Sync agent filter to URL query param so AgentsMonitor can link here
+  useEffect(() => {
+    const current = searchParams.get("agent_name") ?? "";
+    if (filterAgent === current) return;
+    const next = new URLSearchParams(searchParams);
+    if (filterAgent) {
+      next.set("agent_name", filterAgent);
+    } else {
+      next.delete("agent_name");
+    }
+    setSearchParams(next, { replace: true });
+  }, [filterAgent, searchParams, setSearchParams]);
+
   // Merge real-time WebSocket alerts
   useEffect(() => {
     if (messages.length > 0 && page === 1) {
@@ -113,15 +140,6 @@ export default function AlertFeed() {
   // Split real alerts from false positives
   const realAlerts = alerts.filter((a) => a.ai_verdict !== "FALSE_POSITIVE");
   const fpAlerts   = alerts.filter((a) => a.ai_verdict === "FALSE_POSITIVE");
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 gap-3">
-        <LoadingSpinner size="lg" />
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading alerts...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-5">
@@ -245,7 +263,11 @@ export default function AlertFeed() {
       </motion.div>
 
       {/* ── Alert list ──────────────────────────────────────────── */}
-      {alerts.length === 0 ? (
+      {loading ? (
+        <div className="space-y-2">
+          {[1, 2, 3, 4, 5].map((i) => <AlertSkeletonRow key={i} />)}
+        </div>
+      ) : alerts.length === 0 && !fetchError ? (
         <div className="card flex flex-col items-center justify-center py-20 text-center">
           <ShieldAlert size={36} className="mb-3" style={{ color: "var(--text-subtle)" }} />
           <p
@@ -258,7 +280,7 @@ export default function AlertFeed() {
             SOC alerts will appear here when Wazuh detects events
           </p>
         </div>
-      ) : (
+      ) : alerts.length > 0 ? (
         <>
         <AnimatedList
           items={[...realAlerts, ...(showFP ? fpAlerts : [])]}
@@ -447,7 +469,7 @@ export default function AlertFeed() {
           </button>
         )}
         </>
-      )}
+      ) : null}
 
       {/* ── Pagination ──────────────────────────────────────────── */}
       {alerts.length >= 50 && (
