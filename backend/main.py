@@ -163,6 +163,7 @@ from domains.notifications.router import router as notifications_router
 from domains.analytics.router import router as analytics_router
 from domains.audit.router import router as audit_router
 from domains.soc.projects_router import router as soc_projects_router
+from domains.search.router import router as search_router
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 app.include_router(pentest_router, prefix="/api/scans", tags=["Pentesting"])
@@ -172,6 +173,7 @@ app.include_router(notifications_router, prefix="/api/notifications", tags=["Not
 app.include_router(analytics_router, tags=["Analytics"])
 app.include_router(audit_router, prefix="/api/audit", tags=["Audit"])
 app.include_router(soc_projects_router, prefix="/api/soc", tags=["SOC Projects"])
+app.include_router(search_router)
 
 # --------------- Health Check ---------------
 

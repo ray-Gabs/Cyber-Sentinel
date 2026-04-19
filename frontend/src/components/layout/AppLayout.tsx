@@ -11,6 +11,7 @@ import Sidebar from "./Sidebar";
 import Header from "./Header";
 import BottomNav from "./BottomNav";
 import { ScrollVelocity } from "@/components/ui/reactbits/ScrollVelocity";
+import CommandPalette from "@/components/common/CommandPalette";
 
 const SECURITY_TOOLS = [
   "Nmap", "Nuclei", "SSLyze", "WhatWeb", "OWASP ZAP",
@@ -93,6 +94,9 @@ export default function AppLayout() {
 
       {/* ── Bottom navigation — mobile only ───────────────────────── */}
       <BottomNav />
+
+      {/* ── Global Cmd+K command palette ──────────────────────────── */}
+      <CommandPalette />
     </div>
   );
 }
