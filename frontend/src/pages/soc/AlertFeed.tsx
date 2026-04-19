@@ -2,7 +2,7 @@
  * AlertFeed — live Wazuh alert list with AI triage verdicts.
  * Fully themed with CSS variables. GitHub issue-list meets SOC dashboard.
  */
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { AnimatedList } from "@/components/ui/reactbits/AnimatedList";
@@ -86,6 +86,9 @@ export default function AlertFeed() {
   const [filterAgent, setFilterAgent]   = useState(searchParams.get("agent_name") ?? "");
   const [liveCount, setLiveCount]       = useState(0);
   const [showFP, setShowFP]             = useState(false);
+  const [kbFocus, setKbFocus]           = useState(-1);
+  const kbFocusRef                      = useRef(-1);
+  const displayedAlertsRef              = useRef<AlertSummary[]>([]);
 
   const { messages } = useWebSocket<AlertSummary>({ channel: "alerts" });
 
@@ -135,11 +138,38 @@ export default function AlertFeed() {
     }
   }, [messages, alerts, page]);
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const len = displayedAlertsRef.current.length;
+      if (len === 0) return;
+      if (e.key === "j") {
+        e.preventDefault();
+        setKbFocus((p) => Math.min(len - 1, p < 0 ? 0 : p + 1));
+      } else if (e.key === "k") {
+        e.preventDefault();
+        setKbFocus((p) => (p <= 0 ? 0 : p - 1));
+      } else if (e.key === "Enter" && kbFocusRef.current >= 0) {
+        const a = displayedAlertsRef.current[kbFocusRef.current];
+        if (a) navigate(`/alerts/${a.id}`);
+      } else if (e.key === "Escape") {
+        setKbFocus(-1);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [navigate]);
+
   const uniqueAgents = [...new Set(alerts.map((a) => a.agent_name).filter(Boolean))];
 
   // Split real alerts from false positives
   const realAlerts = alerts.filter((a) => a.ai_verdict !== "FALSE_POSITIVE");
   const fpAlerts   = alerts.filter((a) => a.ai_verdict === "FALSE_POSITIVE");
+  const displayedAlerts = [...realAlerts, ...(showFP ? fpAlerts : [])];
+
+  kbFocusRef.current = kbFocus;
+  displayedAlertsRef.current = displayedAlerts;
 
   return (
     <div className="space-y-5">
@@ -283,11 +313,12 @@ export default function AlertFeed() {
       ) : alerts.length > 0 ? (
         <>
         <AnimatedList
-          items={[...realAlerts, ...(showFP ? fpAlerts : [])]}
+          items={displayedAlerts}
           keyExtractor={(alert) => alert.id}
           className="space-y-2"
           renderItem={(alert) => {
             const isFP       = alert.ai_verdict === "FALSE_POSITIVE";
+            const isFocused  = alert.id === displayedAlerts[kbFocus]?.id;
             const sevColor   = getSeverityColor(alert.rule_level);
             const sevLabel   = getSeverityLabel(alert.rule_level);
             const verdictSty = alert.ai_verdict ? VERDICT_STYLE[alert.ai_verdict] : null;
@@ -304,6 +335,8 @@ export default function AlertFeed() {
                   boxShadow: isCritical ? "0 0 20px rgba(239,68,68,0.12)" : undefined,
                   opacity: isFP ? 0.55 : 1,
                   position: "relative",
+                  outline: isFocused ? "2px solid var(--accent)" : "none",
+                  outlineOffset: "-2px",
                 }}
                 onMouseEnter={(e) => {
                   (e.currentTarget as HTMLElement).style.borderColor = sevColor;
@@ -470,6 +503,18 @@ export default function AlertFeed() {
         )}
         </>
       ) : null}
+
+      {/* ── Keyboard hint ───────────────────────────────────────── */}
+      {alerts.length > 0 && !loading && (
+        <p className="text-center text-[11px]" style={{ color: "var(--text-subtle)", letterSpacing: "0.02em" }}>
+          <kbd style={{ fontFamily: "JetBrains Mono, monospace" }}>j</kbd>
+          {" / "}
+          <kbd style={{ fontFamily: "JetBrains Mono, monospace" }}>k</kbd>
+          {" navigate · "}
+          <kbd style={{ fontFamily: "JetBrains Mono, monospace" }}>↵</kbd>
+          {" open"}
+        </p>
+      )}
 
       {/* ── Pagination ──────────────────────────────────────────── */}
       {alerts.length >= 50 && (
