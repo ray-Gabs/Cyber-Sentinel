@@ -2,9 +2,13 @@
  * Settings — Wazuh connection config (per-user) + SIEM rule management.
  * Responsive: single column on mobile/tablet, 2-col on lg+.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { getCustomRules } from "@/services/alertService";
+import {
+  getCustomRules,
+  listDetectionRules, createDetectionRule, updateDetectionRule, deleteDetectionRule,
+} from "@/services/alertService";
+import type { DetectionRule, DetectionRuleCreate } from "@/types";
 import { useWazuhConfig } from "@/hooks/useWazuhConfig";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import { Link } from "react-router-dom";
@@ -12,6 +16,7 @@ import {
   FileCode2, CheckCircle, AlertCircle, Terminal,
   RefreshCw, Server, Save, Eye, EyeOff, Trash2, Info,
   Lock, Globe, User, CheckCircle2, Circle, ArrowRight,
+  Plus, ShieldAlert, X,
 } from "lucide-react";
 
 function InfoTooltip({ text }: { text: string }) {
@@ -59,6 +64,86 @@ export default function Settings() {
     setWazuhSaveMsg("Connection cleared");
     setWazuhSaveError(false);
     setTimeout(() => setWazuhSaveMsg(""), 3000);
+  };
+
+  // ── Detection rules ───────────────────────────────────────────────────
+  const [rules, setRules]               = useState<DetectionRule[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(false);
+  const [rulesError, setRulesError]     = useState("");
+  const [ruleForm, setRuleForm]         = useState<DetectionRuleCreate>({
+    name: "", pattern: "", severity: "medium", enabled: true,
+  });
+  const [ruleFormVisible, setRuleFormVisible] = useState(false);
+  const [ruleFormError, setRuleFormError]     = useState("");
+  const [ruleSubmitting, setRuleSubmitting]   = useState(false);
+  const [regexTestInput, setRegexTestInput]   = useState("");
+  const [deletingRuleId, setDeletingRuleId]   = useState<string | null>(null);
+  const [togglingRuleId, setTogglingRuleId]   = useState<string | null>(null);
+
+  const fetchRules = async () => {
+    setRulesLoading(true);
+    setRulesError("");
+    try {
+      setRules(await listDetectionRules());
+    } catch {
+      setRulesError("Failed to load detection rules. Check your connection.");
+    } finally {
+      setRulesLoading(false);
+    }
+  };
+
+  useEffect(() => { void fetchRules(); }, []);
+
+  const handleCreateRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ruleForm.name.trim() || !ruleForm.pattern.trim()) {
+      setRuleFormError("Name and pattern are required");
+      return;
+    }
+    setRuleSubmitting(true);
+    setRuleFormError("");
+    try {
+      const created = await createDetectionRule(ruleForm);
+      setRules((prev) => [created, ...prev]);
+      setRuleForm({ name: "", pattern: "", severity: "medium", enabled: true });
+      setRuleFormVisible(false);
+    } catch {
+      setRuleFormError("Failed to create rule. Check the pattern syntax.");
+    } finally {
+      setRuleSubmitting(false);
+    }
+  };
+
+  const handleToggleRule = async (rule: DetectionRule) => {
+    if (togglingRuleId) return;
+    setTogglingRuleId(rule.id);
+    try {
+      const updated = await updateDetectionRule(rule.id, { enabled: !rule.enabled });
+      setRules((prev) => prev.map((r) => (r.id === rule.id ? updated : r)));
+    } catch {
+      // fail silently — state stays unchanged, user can retry
+    } finally {
+      setTogglingRuleId(null);
+    }
+  };
+
+  const handleDeleteRule = async (id: string) => {
+    setDeletingRuleId(id);
+    try {
+      await deleteDetectionRule(id);
+      setRules((prev) => prev.filter((r) => r.id !== id));
+    } catch {
+      // fail silently
+    } finally {
+      setDeletingRuleId(null);
+    }
+  };
+
+  const SEV_STYLE: Record<string, { bg: string; text: string }> = {
+    low:      { bg: "rgba(34,197,94,0.12)",  text: "#4ade80"  },
+    medium:   { bg: "rgba(245,158,11,0.12)", text: "#fbbf24"  },
+    high:     { bg: "rgba(249,115,22,0.12)", text: "#fb923c"  },
+    critical: { bg: "rgba(239,68,68,0.12)",  text: "#f87171"  },
   };
 
   // ── SIEM rules (read-only viewer — editing moved to SIEM Config page) ───
@@ -412,6 +497,308 @@ export default function Settings() {
           )}
         </motion.div>
       </div>
+
+      {/* ── Detection Rules Section ───────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2, duration: 0.25 }}
+        className="card space-y-4"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div
+              className="flex items-center justify-center w-8 h-8 rounded-lg shrink-0"
+              style={{ backgroundColor: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)" }}
+            >
+              <ShieldAlert size={14} style={{ color: "#f87171" }} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold" style={{ color: "var(--text-base)" }}>
+                  Detection Rules
+                </p>
+                {rules.length > 0 && (
+                  <span
+                    className="text-[11px] px-1.5 py-0.5 rounded font-mono"
+                    style={{ backgroundColor: "var(--bg-muted)", color: "var(--text-subtle)", border: "1px solid var(--border)" }}
+                  >
+                    {rules.length}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                Regex patterns that auto-classify incoming Wazuh alerts by severity
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void fetchRules()}
+              disabled={rulesLoading}
+              className="btn-secondary gap-1.5"
+              style={{ fontSize: "0.8125rem", padding: "0.4rem 0.875rem" }}
+            >
+              {rulesLoading ? <LoadingSpinner size="sm" /> : <RefreshCw size={13} />}
+              Refresh
+            </button>
+            <button
+              onClick={() => { setRuleFormVisible((v) => !v); setRuleFormError(""); }}
+              className="btn-primary gap-1.5"
+              style={{ fontSize: "0.8125rem", padding: "0.4rem 0.875rem" }}
+            >
+              <Plus size={13} /> Add Rule
+            </button>
+          </div>
+        </div>
+
+        {/* Collapsible create form */}
+        {ruleFormVisible && (
+          <motion.form
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            onSubmit={(e) => void handleCreateRule(e)}
+            className="rounded-xl p-4 space-y-3"
+            style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-subtle)" }}>
+              New Rule
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium mb-1.5 block" style={{ color: "var(--text-muted)" }}>
+                  Name <span style={{ color: "#f87171" }}>*</span>
+                </label>
+                <input
+                  className="input text-sm w-full"
+                  placeholder="e.g. SQL Injection Attempt"
+                  value={ruleForm.name}
+                  onChange={(e) => setRuleForm({ ...ruleForm, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium mb-1.5 block" style={{ color: "var(--text-muted)" }}>
+                  Severity
+                </label>
+                <select
+                  className="input text-sm w-full"
+                  value={ruleForm.severity}
+                  onChange={(e) => setRuleForm({ ...ruleForm, severity: e.target.value as DetectionRuleCreate["severity"] })}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1.5 block" style={{ color: "var(--text-muted)" }}>
+                Pattern (regex) <span style={{ color: "#f87171" }}>*</span>
+              </label>
+              <input
+                className="input text-sm font-mono w-full"
+                placeholder="e.g. (?i)(union|select|drop)\s+.*"
+                value={ruleForm.pattern}
+                onChange={(e) => setRuleForm({ ...ruleForm, pattern: e.target.value })}
+              />
+              {/* Live regex tester */}
+              {ruleForm.pattern.trim() && (() => {
+                let status: "match" | "no_match" | "invalid" | null = null;
+                if (regexTestInput.trim()) {
+                  try {
+                    status = new RegExp(ruleForm.pattern).test(regexTestInput) ? "match" : "no_match";
+                  } catch {
+                    status = "invalid";
+                  }
+                } else if (ruleForm.pattern.trim()) {
+                  try { new RegExp(ruleForm.pattern); } catch { status = "invalid"; }
+                }
+                const statusColor = status === "match" ? "var(--green)"
+                  : status === "no_match" ? "var(--yellow)"
+                  : status === "invalid" ? "var(--red)"
+                  : "var(--text-muted)";
+                const statusLabel = status === "match" ? "✓ Match"
+                  : status === "no_match" ? "✗ No match"
+                  : status === "invalid" ? "⚠ Invalid regex"
+                  : "";
+                return (
+                  <div className="mt-2 rounded-lg p-2.5" style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>Test input</span>
+                      {statusLabel && (
+                        <span className="text-[11px] font-semibold" style={{ color: statusColor }}>{statusLabel}</span>
+                      )}
+                    </div>
+                    <input
+                      className="input text-xs font-mono w-full"
+                      placeholder="Paste sample log text to test the pattern..."
+                      value={regexTestInput}
+                      onChange={(e) => setRegexTestInput(e.target.value)}
+                    />
+                  </div>
+                );
+              })()}
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1.5 block" style={{ color: "var(--text-muted)" }}>
+                Description (optional)
+              </label>
+              <input
+                className="input text-sm w-full"
+                placeholder="Brief explanation of what this rule detects"
+                value={ruleForm.description ?? ""}
+                onChange={(e) => setRuleForm({ ...ruleForm, description: e.target.value || undefined })}
+              />
+            </div>
+            {ruleFormError && (
+              <div
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+                style={{ backgroundColor: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171" }}
+              >
+                <AlertCircle size={12} /> {ruleFormError}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={ruleSubmitting}
+                className="btn-primary gap-1.5"
+                style={{ fontSize: "0.8125rem", padding: "0.4rem 0.875rem" }}
+              >
+                {ruleSubmitting ? <LoadingSpinner size="sm" /> : <Plus size={13} />}
+                Create Rule
+              </button>
+              <button
+                type="button"
+                onClick={() => { setRuleFormVisible(false); setRuleFormError(""); }}
+                className="btn-secondary gap-1.5"
+                style={{ fontSize: "0.8125rem", padding: "0.4rem 0.875rem" }}
+              >
+                <X size={13} /> Cancel
+              </button>
+            </div>
+          </motion.form>
+        )}
+
+        {/* Rules list — three states */}
+        {rulesLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-12 rounded-lg animate-pulse"
+                style={{ backgroundColor: "var(--bg-muted)" }}
+              />
+            ))}
+          </div>
+        ) : rulesError ? (
+          <div
+            className="flex flex-col items-center justify-center rounded-xl py-10 gap-3"
+            style={{ border: "1px dashed rgba(239,68,68,0.3)", backgroundColor: "rgba(239,68,68,0.04)" }}
+          >
+            <AlertCircle size={24} style={{ color: "#f87171" }} />
+            <p className="text-sm" style={{ color: "#f87171" }}>{rulesError}</p>
+            <button
+              onClick={() => void fetchRules()}
+              className="btn-secondary gap-1.5"
+              style={{ fontSize: "0.8125rem" }}
+            >
+              <RefreshCw size={13} /> Retry
+            </button>
+          </div>
+        ) : rules.length === 0 ? (
+          <div
+            className="flex flex-col items-center justify-center rounded-xl py-10 gap-3"
+            style={{ border: "1px dashed var(--border)", backgroundColor: "var(--bg-muted)" }}
+          >
+            <ShieldAlert size={28} style={{ color: "var(--text-subtle)" }} />
+            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>No detection rules yet</p>
+            <p className="text-xs text-center max-w-xs" style={{ color: "var(--text-subtle)" }}>
+              Add regex patterns to automatically classify incoming Wazuh alerts by severity.
+            </p>
+            <button
+              onClick={() => setRuleFormVisible(true)}
+              className="btn-primary gap-1.5"
+              style={{ fontSize: "0.8125rem" }}
+            >
+              <Plus size={13} /> Add First Rule
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {rules.map((rule) => {
+              const sev = SEV_STYLE[rule.severity] ?? SEV_STYLE.medium;
+              const isDeleting = deletingRuleId === rule.id;
+              const isToggling = togglingRuleId === rule.id;
+              return (
+                <div
+                  key={rule.id}
+                  className="flex items-center gap-3 rounded-lg px-3.5 py-2.5 group"
+                  style={{
+                    border: "1px solid var(--border)",
+                    backgroundColor: rule.enabled ? "var(--bg-surface)" : "var(--bg-muted)",
+                  }}
+                >
+                  {/* Enabled pill-toggle */}
+                  <button
+                    onClick={() => void handleToggleRule(rule)}
+                    disabled={isToggling}
+                    title={rule.enabled ? "Disable rule" : "Enable rule"}
+                    className="shrink-0 w-8 h-4 rounded-full relative transition-colors"
+                    style={{
+                      backgroundColor: rule.enabled ? "rgba(34,197,94,0.3)" : "var(--border)",
+                      border: `1px solid ${rule.enabled ? "rgba(34,197,94,0.5)" : "var(--border)"}`,
+                    }}
+                  >
+                    <span
+                      className="absolute top-0.5 w-3 h-3 rounded-full transition-all"
+                      style={{
+                        left: rule.enabled ? "calc(100% - 14px)" : "1px",
+                        backgroundColor: rule.enabled ? "#4ade80" : "var(--text-subtle)",
+                      }}
+                    />
+                  </button>
+
+                  {/* Name + pattern */}
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className="text-xs font-semibold truncate"
+                      style={{ color: rule.enabled ? "var(--text-base)" : "var(--text-muted)" }}
+                    >
+                      {rule.name}
+                    </p>
+                    <p className="text-[11px] font-mono truncate mt-0.5" style={{ color: "var(--text-subtle)" }}>
+                      {rule.pattern}
+                    </p>
+                  </div>
+
+                  {/* Severity badge */}
+                  <span
+                    className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide shrink-0"
+                    style={{ backgroundColor: sev.bg, color: sev.text }}
+                  >
+                    {rule.severity}
+                  </span>
+
+                  {/* Delete */}
+                  <button
+                    onClick={() => void handleDeleteRule(rule.id)}
+                    disabled={isDeleting}
+                    className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded"
+                    style={{ color: "var(--text-subtle)" }}
+                    title="Delete rule"
+                  >
+                    {isDeleting ? <LoadingSpinner size="sm" /> : <Trash2 size={13} />}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </motion.div>
     </div>
   );
 }
