@@ -114,6 +114,25 @@ async def get_me(user: User = Depends(get_current_user)):
     return _user_response(user)
 
 
+@router.get("/me/prefs")
+async def get_prefs(user: User = Depends(get_current_user)):
+    """Return the current user's notification preferences."""
+    return getattr(user, "notification_prefs", {})
+
+
+@router.patch("/me/prefs")
+async def update_prefs(
+    prefs: dict,
+    user: User = Depends(get_current_user),
+):
+    """Update the current user's notification preferences (partial update)."""
+    existing = dict(getattr(user, "notification_prefs", {}))
+    existing.update(prefs)
+    user.notification_prefs = existing
+    await user.save()
+    return user.notification_prefs
+
+
 def _require_admin(user: User) -> None:
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")

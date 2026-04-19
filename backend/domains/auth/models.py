@@ -46,6 +46,16 @@ class User(Document):
     # Admin role ignores this filter and always sees all alerts.
     wazuh_agent_name: Optional[str] = None
 
+    # Per-user notification preferences
+    notification_prefs: dict = Field(default_factory=lambda: {
+        "min_alert_level": 7,
+        "notify_scan_complete": True,
+        "notify_scan_failed": True,
+        "notify_critical_finding": True,
+        "notify_soc_critical": True,
+        "notify_new_registration": True,
+    })
+
     class Settings:
         name = "users"                     # MongoDB collection name
         use_state_management = True        # Track changes for .save()

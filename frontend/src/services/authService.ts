@@ -107,3 +107,35 @@ export async function getAuditLogs(page = 1, size = 50): Promise<AuditLogEntry[]
   const res = await api.get<AuditLogEntry[]>(`/audit/?page=${page}&size=${size}`);
   return res.data;
 }
+
+/* ── Notification Preferences ─────────────────────────────────────────────── */
+
+export interface NotificationPrefs {
+  min_alert_level: number;
+  notify_scan_complete: boolean;
+  notify_scan_failed: boolean;
+  notify_critical_finding: boolean;
+  notify_soc_critical: boolean;
+  notify_new_registration: boolean;
+}
+
+export const DEFAULT_NOTIF_PREFS: NotificationPrefs = {
+  min_alert_level: 7,
+  notify_scan_complete: true,
+  notify_scan_failed: true,
+  notify_critical_finding: true,
+  notify_soc_critical: true,
+  notify_new_registration: true,
+};
+
+/** GET /api/auth/me/prefs → get current user's notification preferences */
+export async function getNotificationPrefs(): Promise<NotificationPrefs> {
+  const res = await api.get<NotificationPrefs>("/auth/me/prefs");
+  return { ...DEFAULT_NOTIF_PREFS, ...res.data };
+}
+
+/** PATCH /api/auth/me/prefs → save notification preferences */
+export async function saveNotificationPrefs(prefs: Partial<NotificationPrefs>): Promise<NotificationPrefs> {
+  const res = await api.patch<NotificationPrefs>("/auth/me/prefs", prefs);
+  return res.data;
+}

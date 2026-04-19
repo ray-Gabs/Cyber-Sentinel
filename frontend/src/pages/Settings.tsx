@@ -8,6 +8,10 @@ import {
   getCustomRules,
   listDetectionRules, createDetectionRule, updateDetectionRule, deleteDetectionRule,
 } from "@/services/alertService";
+import {
+  getNotificationPrefs, saveNotificationPrefs, DEFAULT_NOTIF_PREFS,
+  type NotificationPrefs,
+} from "@/services/authService";
 import type { DetectionRule, DetectionRuleCreate } from "@/types";
 import { useWazuhConfig } from "@/hooks/useWazuhConfig";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
@@ -16,7 +20,7 @@ import {
   FileCode2, CheckCircle, AlertCircle, Terminal,
   RefreshCw, Server, Save, Eye, EyeOff, Trash2, Info,
   Lock, Globe, User, CheckCircle2, Circle, ArrowRight,
-  Plus, ShieldAlert, X,
+  Plus, ShieldAlert, X, Bell,
 } from "lucide-react";
 
 function InfoTooltip({ text }: { text: string }) {
@@ -77,6 +81,11 @@ export default function Settings() {
   const [ruleFormError, setRuleFormError]     = useState("");
   const [ruleSubmitting, setRuleSubmitting]   = useState(false);
   const [regexTestInput, setRegexTestInput]   = useState("");
+
+  // ── Notification preferences ──────────────────────────────────────────────
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPrefs>(DEFAULT_NOTIF_PREFS);
+  const [notifSaving, setNotifSaving] = useState(false);
+  const [notifSaved, setNotifSaved] = useState(false);
   const [deletingRuleId, setDeletingRuleId]   = useState<string | null>(null);
   const [togglingRuleId, setTogglingRuleId]   = useState<string | null>(null);
 
@@ -93,6 +102,24 @@ export default function Settings() {
   };
 
   useEffect(() => { void fetchRules(); }, []);
+
+  useEffect(() => {
+    getNotificationPrefs().then(setNotifPrefs).catch(() => {});
+  }, []);
+
+  const handleSaveNotifPrefs = async () => {
+    setNotifSaving(true);
+    try {
+      const saved = await saveNotificationPrefs(notifPrefs);
+      setNotifPrefs(saved);
+      setNotifSaved(true);
+      setTimeout(() => setNotifSaved(false), 2000);
+    } catch {
+      // ignore
+    } finally {
+      setNotifSaving(false);
+    }
+  };
 
   const handleCreateRule = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -798,6 +825,101 @@ export default function Settings() {
             })}
           </div>
         )}
+      </motion.div>
+
+      {/* Notification Preferences */}
+      <motion.div
+        className="card"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4, duration: 0.3 }}
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center justify-center w-8 h-8 rounded-xl" style={{ backgroundColor: "rgba(245,158,11,0.1)" }}>
+            <Bell size={15} style={{ color: "var(--yellow)" }} />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-base)" }}>Notification Preferences</h3>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+              Control which events trigger in-app notifications for you
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* Min alert level slider */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                Minimum Alert Level to Notify
+              </label>
+              <span className="text-xs font-mono font-semibold" style={{ color: "var(--accent)" }}>
+                Level {notifPrefs.min_alert_level}+
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={15}
+              step={1}
+              value={notifPrefs.min_alert_level}
+              onChange={(e) => setNotifPrefs({ ...notifPrefs, min_alert_level: Number(e.target.value) })}
+              className="w-full accent-yellow-500"
+            />
+            <div className="flex justify-between text-[10px] mt-0.5" style={{ color: "var(--text-subtle)" }}>
+              <span>0 (all)</span>
+              <span>7 (medium)</span>
+              <span>12 (critical)</span>
+              <span>15 (max)</span>
+            </div>
+          </div>
+
+          {/* Toggle preferences */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {([
+              ["notify_scan_complete", "Scan completed"],
+              ["notify_scan_failed", "Scan failed"],
+              ["notify_critical_finding", "Critical finding detected"],
+              ["notify_soc_critical", "SOC critical alert"],
+              ["notify_new_registration", "New user registration"],
+            ] as [keyof NotificationPrefs, string][]).map(([key, label]) => (
+              <label
+                key={key}
+                className="flex items-center justify-between rounded-lg px-3 py-2.5 cursor-pointer"
+                style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}
+              >
+                <span className="text-xs" style={{ color: "var(--text-base)" }}>{label}</span>
+                <button
+                  type="button"
+                  onClick={() => setNotifPrefs({ ...notifPrefs, [key]: !notifPrefs[key] })}
+                  className="shrink-0 w-8 h-4 rounded-full relative transition-colors"
+                  style={{
+                    backgroundColor: notifPrefs[key] ? "rgba(34,197,94,0.3)" : "var(--border)",
+                    border: `1px solid ${notifPrefs[key] ? "rgba(34,197,94,0.5)" : "var(--border)"}`,
+                  }}
+                >
+                  <span
+                    className="absolute top-0.5 w-3 h-3 rounded-full transition-all"
+                    style={{
+                      left: notifPrefs[key] ? "calc(100% - 14px)" : "1px",
+                      backgroundColor: notifPrefs[key] ? "#4ade80" : "var(--text-subtle)",
+                    }}
+                  />
+                </button>
+              </label>
+            ))}
+          </div>
+
+          <button
+            onClick={handleSaveNotifPrefs}
+            disabled={notifSaving}
+            className="btn-primary gap-1.5"
+            style={{ fontSize: "0.8125rem", padding: "0.4rem 0.875rem" }}
+          >
+            {notifSaving ? <LoadingSpinner size="sm" /> : notifSaved ? <CheckCircle size={13} /> : <Save size={13} />}
+            {notifSaved ? "Saved!" : "Save Preferences"}
+          </button>
+        </div>
       </motion.div>
     </div>
   );
