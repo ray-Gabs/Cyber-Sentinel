@@ -153,4 +153,6 @@ export interface ScanCreateRequest {
   scan_type: ScanType;
   tools_enabled?: string[];
   auth_config?: AuthConfig;
+  nuclei_templates?: string[];
+  rate_limit?: number;
 }
