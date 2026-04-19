@@ -85,6 +85,33 @@ export interface AlertFilterParams {
   rule_level_min?: number;
   ai_verdict?: string;
   agent_name?: string;
+  project_id?: string;
+}
+
+export interface DetectionRule {
+  id: string;
+  name: string;
+  description?: string;
+  pattern: string;
+  severity: "low" | "medium" | "high" | "critical";
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface DetectionRuleCreate {
+  name: string;
+  description?: string;
+  pattern: string;
+  severity: "low" | "medium" | "high" | "critical";
+  enabled?: boolean;
+}
+
+export interface DetectionRuleUpdate {
+  name?: string;
+  description?: string;
+  pattern?: string;
+  severity?: "low" | "medium" | "high" | "critical";
+  enabled?: boolean;
 }
 
 export interface AlertStats {

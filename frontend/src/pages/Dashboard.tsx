@@ -11,7 +11,6 @@ import { getAlertStats } from "@/services/alertService";
 import { useWazuhConfig } from "@/hooks/useWazuhConfig";
 import { TOOL_INFO, SCAN_TYPE_LABELS } from "@/lib/constants";
 import StatusBadge from "@/components/common/StatusBadge";
-import LoadingSpinner from "@/components/common/LoadingSpinner";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Rocket, ShieldCheck, BarChart3, Link2,

@@ -44,8 +44,9 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 480  # 8 hours
 
     # ---- AI Provider ----
-    # Set ai_provider to one of: groq | claude | openai | gemini
-    ai_provider: str = "groq"
+    # Set AI_PROVIDER to one of: claude | groq | openai | gemini
+    # claude (Anthropic) is the recommended provider.
+    ai_provider: str = "claude"
 
     # ---- Groq (Llama 3.3 70B — free tier) ----
     groq_api_key: str = ""
