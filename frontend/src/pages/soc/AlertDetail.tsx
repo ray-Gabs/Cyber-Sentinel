@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getAlert, overrideAlert, enrichAlert } from "@/services/alertService";
+import { getAlert, overrideAlert, enrichAlert, getAlertPlaybooks, triggerPlaybook, PlaybookExecution } from "@/services/alertService";
 import { formatDate, cn } from "@/lib/utils";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import {
@@ -17,6 +17,9 @@ import {
   AlertTriangle,
   Shield,
   Search,
+  Zap,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import type { Alert } from "@/types";
 
@@ -36,13 +39,18 @@ export default function AlertDetail() {
   const [overrideNotes, setOverrideNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [enriching, setEnriching] = useState(false);
+  const [playbooks, setPlaybooks] = useState<PlaybookExecution[]>([]);
+  const [triggering, setTriggering] = useState(false);
+  const [selectedPlaybook, setSelectedPlaybook] = useState("");
+  const [expandedExecution, setExpandedExecution] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
     (async () => {
       try {
-        const data = await getAlert(id);
+        const [data, pbs] = await Promise.all([getAlert(id), getAlertPlaybooks(id)]);
         setAlert(data);
+        setPlaybooks(pbs);
       } catch {
         setError("Alert not found");
       } finally {
@@ -50,6 +58,20 @@ export default function AlertDetail() {
       }
     })();
   }, [id]);
+
+  const handleTriggerPlaybook = async () => {
+    if (!id) return;
+    setTriggering(true);
+    try {
+      const execution = await triggerPlaybook(id, selectedPlaybook || undefined);
+      setPlaybooks((prev) => [execution, ...prev]);
+      setSelectedPlaybook("");
+    } catch {
+      // ignore — backend returns 404 if no match
+    } finally {
+      setTriggering(false);
+    }
+  };
 
   const handleOverride = async () => {
     if (!id || !overrideValue) return;
@@ -369,6 +391,111 @@ export default function AlertDetail() {
             {submitting ? "Submitting..." : "Submit Override"}
           </button>
         </div>
+      </div>
+
+      {/* Playbook Response Engine */}
+      <div className="card">
+        <div className="flex items-center gap-3 mb-4">
+          <Zap size={20} style={{ color: "var(--yellow)" }} />
+          <h2 className="text-lg font-semibold" style={{ color: "var(--text-base)" }}>Playbook Response</h2>
+        </div>
+
+        {/* Trigger controls */}
+        <div className="flex items-center gap-2 mb-4">
+          <select
+            className="input flex-1 max-w-xs text-sm"
+            value={selectedPlaybook}
+            onChange={(e) => setSelectedPlaybook(e.target.value)}
+          >
+            <option value="">Auto-select matching playbook</option>
+            <option value="brute_force_response">Brute Force Response</option>
+            <option value="web_attack_response">Web Attack Response</option>
+            <option value="malware_response">Malware Detection Response</option>
+            <option value="privilege_escalation_response">Privilege Escalation Response</option>
+          </select>
+          <button
+            className="btn-secondary text-sm flex items-center gap-1.5"
+            disabled={triggering}
+            onClick={handleTriggerPlaybook}
+          >
+            {triggering ? <LoadingSpinner size="sm" /> : <Zap size={14} />}
+            Trigger
+          </button>
+        </div>
+
+        {/* Execution history */}
+        {playbooks.length === 0 ? (
+          <p className="text-sm py-4 text-center" style={{ color: "var(--text-muted)" }}>
+            No playbooks triggered for this alert yet.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {playbooks.map((pb) => (
+              <div
+                key={pb.id}
+                className="rounded-lg border"
+                style={{ borderColor: "var(--border)", backgroundColor: "var(--bg-elevated)" }}
+              >
+                <button
+                  className="w-full flex items-center justify-between px-4 py-3 text-left"
+                  onClick={() => setExpandedExecution(expandedExecution === pb.id ? null : pb.id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="text-xs px-2 py-0.5 rounded font-medium"
+                      style={{
+                        backgroundColor: pb.status === "completed" ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.1)",
+                        color: pb.status === "completed" ? "var(--green)" : "var(--yellow)",
+                      }}
+                    >
+                      {pb.status}
+                    </span>
+                    <span className="text-sm font-medium" style={{ color: "var(--text-base)" }}>
+                      {pb.playbook_name}
+                    </span>
+                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                      {pb.trigger_rule}
+                    </span>
+                  </div>
+                  {expandedExecution === pb.id
+                    ? <ChevronUp size={14} style={{ color: "var(--text-muted)" }} />
+                    : <ChevronDown size={14} style={{ color: "var(--text-muted)" }} />
+                  }
+                </button>
+                {expandedExecution === pb.id && (
+                  <div className="px-4 pb-3 space-y-2 border-t" style={{ borderColor: "var(--border)" }}>
+                    {pb.actions.map((action) => (
+                      <div key={action.step} className="flex items-start gap-3 pt-2">
+                        <span
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 shrink-0"
+                          style={{
+                            backgroundColor: action.executed ? "rgba(34,197,94,0.15)" : "rgba(71,85,105,0.3)",
+                            color: action.executed ? "var(--green)" : "var(--text-muted)",
+                          }}
+                        >
+                          {action.step}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm" style={{ color: "var(--text-base)" }}>{action.description}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                              {action.automated ? "Automated" : "Manual recommendation"}
+                            </span>
+                            {action.result && (
+                              <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+                                — {action.result}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -315,3 +315,30 @@ async def enrich_alert(alert_id: str, user: User = Depends(get_current_user)):
     """Run threat intelligence enrichment (VT + AbuseIPDB) for an alert."""
     a = await service.enrich_alert_threat_intel(alert_id)
     return _to_detail(a)
+
+
+@router.get("/{alert_id}/playbooks")
+async def get_alert_playbooks(alert_id: str, user: User = Depends(get_current_user)):
+    """List all playbook executions for a specific alert."""
+    from domains.soc.playbook import PlaybookExecution
+    executions = await PlaybookExecution.find(
+        PlaybookExecution.alert_id == alert_id
+    ).sort("-created_at").to_list()
+    return [e.model_dump(mode="json") for e in executions]
+
+
+@router.post("/{alert_id}/playbooks/trigger")
+async def trigger_playbook(
+    alert_id: str,
+    playbook_id: Optional[str] = Query(None),
+    user: User = Depends(get_current_user),
+):
+    """Manually trigger a playbook for an alert. If playbook_id is omitted, auto-selects."""
+    from domains.soc.playbook import PlaybookEngine, PlaybookExecution, PLAYBOOKS
+    a = await service.get_alert(alert_id)
+    engine = PlaybookEngine()
+    pb_id = playbook_id or engine.find_matching_playbook(a)
+    if not pb_id or pb_id not in PLAYBOOKS:
+        raise HTTPException(status_code=404, detail="No matching playbook found for this alert")
+    execution = await engine.execute_playbook(a, pb_id)
+    return execution.model_dump(mode="json")
