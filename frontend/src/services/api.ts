@@ -17,11 +17,13 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// ── Response interceptor: handle 401 ──
+// ── Response interceptor: handle 401 and 429 ──
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+
+    if (status === 401) {
       const token = localStorage.getItem(TOKEN_KEY);
       // Only clear token and redirect when a stored token was rejected.
       // If there is no token (e.g. login page returning "bad credentials"),
@@ -31,6 +33,15 @@ api.interceptors.response.use(
         window.location.href = "/login";
       }
     }
+
+    if (status === 429) {
+      const retryAfter = error.response?.headers?.["retry-after"];
+      const msg = retryAfter
+        ? `Rate limit reached — retry in ${retryAfter}s`
+        : "Too many requests — please slow down";
+      window.dispatchEvent(new CustomEvent("cs:toast", { detail: { msg, type: "warning" } }));
+    }
+
     return Promise.reject(error);
   }
 );

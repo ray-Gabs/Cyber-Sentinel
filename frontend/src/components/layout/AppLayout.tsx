@@ -12,6 +12,7 @@ import Header from "./Header";
 import BottomNav from "./BottomNav";
 import { ScrollVelocity } from "@/components/ui/reactbits/ScrollVelocity";
 import CommandPalette from "@/components/common/CommandPalette";
+import GlobalToast from "@/components/common/GlobalToast";
 
 const SECURITY_TOOLS = [
   "Nmap", "Nuclei", "SSLyze", "WhatWeb", "OWASP ZAP",
@@ -97,6 +98,9 @@ export default function AppLayout() {
 
       {/* ── Global Cmd+K command palette ──────────────────────────── */}
       <CommandPalette />
+
+      {/* ── Global toast notifications ────────────────────────────── */}
+      <GlobalToast />
     </div>
   );
 }
