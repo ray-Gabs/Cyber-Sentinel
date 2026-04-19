@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Crosshair, ShieldAlert, BarChart3,
   Settings, ShieldCheck, Link2, X, Users, ClipboardList, Layers,
-  Activity, SlidersHorizontal,
+  Activity, SlidersHorizontal, Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
@@ -65,6 +65,10 @@ const navItems: NavItem[] = [
     section: "Intelligence",   color: "#22C55E", iconBg: "rgba(34,197,94,0.18)",
   },
   {
+    to: ROUTES.MITRE,         label: "MITRE ATT&CK",  icon: Target,
+    section: null,             color: "#EF4444", iconBg: "rgba(239,68,68,0.18)",
+  },
+  {
     to: ROUTES.SETTINGS,      label: "Settings",      icon: Settings,
     section: "System",         color: "#94A3B8", iconBg: "rgba(148,163,184,0.15)",
   },
@@ -95,6 +99,10 @@ const adminNavItems: NavItem[] = [
   {
     to: ROUTES.SIEM_CONFIG,        label: "SIEM Config",   icon: SlidersHorizontal,
     section: null,                  color: "#22C55E", iconBg: "rgba(34,197,94,0.15)",
+  },
+  {
+    to: ROUTES.MITRE,              label: "MITRE ATT&CK",  icon: Target,
+    section: null,                  color: "#EF4444", iconBg: "rgba(239,68,68,0.15)",
   },
   {
     to: ROUTES.PROJECTS,           label: "Projects",      icon: Layers,

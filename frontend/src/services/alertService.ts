@@ -126,6 +126,20 @@ export async function getAlertPlaybooks(alertId: string): Promise<PlaybookExecut
   return res.data;
 }
 
+/* ── MITRE ATT&CK ─────────────────────────────────── */
+
+export interface MitreSummary {
+  by_tactic: Record<string, Record<string, number>>;
+  total_technique_hits: number;
+  alerts_analyzed: number;
+}
+
+/** GET /api/alerts/mitre-summary → tactic/technique frequency from last 2000 alerts */
+export async function getMitreSummary(): Promise<MitreSummary> {
+  const res = await api.get<MitreSummary>("/alerts/mitre-summary");
+  return res.data;
+}
+
 /** POST /api/alerts/:id/playbooks/trigger → manually trigger a playbook */
 export async function triggerPlaybook(
   alertId: string,

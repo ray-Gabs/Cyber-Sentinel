@@ -97,4 +97,5 @@ export const ROUTES = {
   PROJECTS: "/projects",
   SOC_DASHBOARD: "/soc/dashboard",
   SIEM_CONFIG: "/soc/siem-config",
+  MITRE: "/mitre",
 } as const;
