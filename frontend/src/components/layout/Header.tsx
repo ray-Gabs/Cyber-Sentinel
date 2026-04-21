@@ -29,6 +29,8 @@ export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
   const { notifications, unreadCount, loading, markRead, markAllRead, deleteNotification, clearAll } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
 
   // Close panel on outside click
   useEffect(() => {
@@ -41,6 +43,34 @@ export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [notifOpen]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (e.key === "Escape" && document.activeElement === searchRef.current) {
+        setSearchQuery("");
+        searchRef.current?.blur();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  const handleSearchSubmit = () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    if (location.pathname.startsWith("/alerts")) {
+      navigate(`/alerts?q=${encodeURIComponent(q)}`);
+    } else {
+      navigate(`/scans?q=${encodeURIComponent(q)}`);
+    }
+    setSearchQuery("");
+    searchRef.current?.blur();
+  };
 
   // Derive page title for the search placeholder
   const pageMap: Record<string, string> = {
@@ -83,9 +113,13 @@ export default function Header({ onToggleSidebar, sidebarOpen }: HeaderProps) {
       <div className="search-bar flex-1 max-w-[10rem] sm:max-w-xs md:max-w-sm">
         <Search size={12} className="shrink-0" style={{ color: "var(--text-subtle)" }} />
         <input
+          ref={searchRef}
           type="text"
           placeholder={searchPlaceholder}
           aria-label="Search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleSearchSubmit(); }}
         />
         <kbd
           className="hidden sm:flex items-center shrink-0 text-[10px] px-1.5 py-0.5 rounded"
