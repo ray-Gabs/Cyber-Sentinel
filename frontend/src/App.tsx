@@ -48,6 +48,7 @@ import AdminNotifications from "@/pages/AdminNotifications";
 import SocDashboard from "@/pages/soc/SocDashboard";
 import SiemConfig from "@/pages/soc/SiemConfig";
 import MitreNavigator from "@/pages/soc/MitreNavigator";
+import DetectionRules from "@/pages/soc/DetectionRules";
 
 // React Query client — used for data fetching/caching (you'll use this later)
 const queryClient = new QueryClient();
@@ -142,6 +143,7 @@ function AppRoutes() {
         <Route path="/soc/dashboard" element={<SocDashboard />} />
         <Route path="/soc/siem-config" element={<SiemConfig />} />
         <Route path="/mitre" element={<MitreNavigator />} />
+        <Route path="/detection-rules" element={<DetectionRules />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/correlations" element={<Correlation />} />
         <Route path="/settings" element={<Settings />} />

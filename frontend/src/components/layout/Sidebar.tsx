@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Crosshair, ShieldAlert, BarChart3,
   Settings, ShieldCheck, Link2, X, Users, ClipboardList, Layers,
-  Activity, SlidersHorizontal, Target,
+  Activity, SlidersHorizontal, Target, Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
@@ -65,12 +65,16 @@ const navItems: NavItem[] = [
     section: "Intelligence",   color: "#22C55E", iconBg: "rgba(34,197,94,0.18)",
   },
   {
-    to: ROUTES.MITRE,         label: "MITRE ATT&CK",  icon: Target,
-    section: null,             color: "#EF4444", iconBg: "rgba(239,68,68,0.18)",
+    to: ROUTES.MITRE,           label: "MITRE ATT&CK",    icon: Target,
+    section: null,               color: "#EF4444", iconBg: "rgba(239,68,68,0.18)",
   },
   {
-    to: ROUTES.SETTINGS,      label: "Settings",      icon: Settings,
-    section: "System",         color: "#94A3B8", iconBg: "rgba(148,163,184,0.15)",
+    to: ROUTES.DETECTION_RULES, label: "Detection Rules",  icon: Filter,
+    section: null,               color: "#F59E0B", iconBg: "rgba(245,158,11,0.18)",
+  },
+  {
+    to: ROUTES.SETTINGS,        label: "Settings",         icon: Settings,
+    section: "System",           color: "#94A3B8", iconBg: "rgba(148,163,184,0.15)",
   },
 ];
 
@@ -101,11 +105,15 @@ const adminNavItems: NavItem[] = [
     section: null,                  color: "#22C55E", iconBg: "rgba(34,197,94,0.15)",
   },
   {
-    to: ROUTES.MITRE,              label: "MITRE ATT&CK",  icon: Target,
+    to: ROUTES.MITRE,              label: "MITRE ATT&CK",    icon: Target,
     section: null,                  color: "#EF4444", iconBg: "rgba(239,68,68,0.15)",
   },
   {
-    to: ROUTES.PROJECTS,           label: "Projects",      icon: Layers,
+    to: ROUTES.DETECTION_RULES,    label: "Detection Rules",  icon: Filter,
+    section: null,                  color: "#F59E0B", iconBg: "rgba(245,158,11,0.15)",
+  },
+  {
+    to: ROUTES.PROJECTS,           label: "Projects",         icon: Layers,
     section: null,                  color: "#A78BFA", iconBg: "rgba(167,139,250,0.15)",
   },
   {
