@@ -261,7 +261,7 @@ services:
       backend:
         condition: service_healthy
       frontend:
-        condition: service_healthy
+        condition: service_started   # started is enough — nginx retries upstreams naturally
     restart: unless-stopped
 
   # ── Wazuh All-in-One (optional — docker-compose --profile wazuh up -d) ───
