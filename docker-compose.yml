@@ -234,8 +234,8 @@ services:
       -config api.addrs.addr.name=.*
       -config api.addrs.addr.regex=true
       -config api.disablekey=true
-    ports:
-      - "8080:8080"
+    # ZAP is accessed internally by the backend via http://zap:8080
+    # No host port needed — backend reaches it over the Docker network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/JSON/core/view/version/"]
