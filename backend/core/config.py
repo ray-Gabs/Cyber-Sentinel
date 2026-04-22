@@ -5,6 +5,7 @@
 # Import anywhere:  from core.config import settings
 # ============================================================
 
+import os
 import secrets
 import warnings
 from pathlib import Path
@@ -152,11 +153,24 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _validate_secrets(self):
         if not self.jwt_secret or self.jwt_secret == "CHANGE_ME":
-            self.jwt_secret = secrets.token_urlsafe(64)
+            # Uvicorn spawns multiple worker processes — each re-imports this module
+            # and would generate a different random secret, making cross-worker token
+            # validation fail with 401. Use atomic file creation so all workers on the
+            # same container share a single runtime-generated secret.
+            _secret_file = Path("/tmp/.cs_jwt_secret")
+            try:
+                # O_CREAT | O_EXCL is atomic — raises FileExistsError if already present
+                fd = os.open(str(_secret_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                generated = secrets.token_urlsafe(64)
+                os.write(fd, generated.encode())
+                os.close(fd)
+                self.jwt_secret = generated
+            except FileExistsError:
+                self.jwt_secret = _secret_file.read_text().strip()
             warnings.warn(
-                "JWT_SECRET not set — generated random key. "
-                "Sessions will not persist across restarts. "
-                "Set JWT_SECRET in your .env file.",
+                "JWT_SECRET not set — using a runtime-generated key shared across workers. "
+                "Sessions will NOT persist across container restarts. "
+                "Set JWT_SECRET in your .env file for persistent sessions.",
                 stacklevel=2,
             )
         # Check that the configured provider has a key

@@ -5,14 +5,18 @@
 # ============================================================
 
 import ipaddress
+import logging
 import socket
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import uuid4
 
+log = logging.getLogger(__name__)
+
 import httpx
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -215,10 +219,14 @@ async def _get_global_health_issues(owner_id: str) -> list[dict]:
 async def list_projects(user: User = Depends(get_current_user)):
     """List SOC projects. Admin: all projects with owner info. Others: own projects only."""
     if user.role == "admin":
-        projects = await SocProject.find().sort("+created_at").to_list()
+        projects = await SocProject.find().sort("+created_at").limit(500).to_list()
         # Pre-fetch owners to avoid N+1
         owner_ids = list({p.owner_id for p in projects})
-        owners = await User.find({"_id": {"$in": [ObjectId(oid) for oid in owner_ids]}}).to_list()
+        try:
+            oid_list = [ObjectId(oid) for oid in owner_ids]
+        except (InvalidId, Exception) as exc:
+            raise HTTPException(status_code=422, detail=f"Invalid owner ID: {exc}") from exc
+        owners = await User.find({"_id": {"$in": oid_list}}).limit(500).to_list()
         owner_map = {str(o.id): o for o in owners}
         result = []
         for p in projects:
@@ -230,7 +238,7 @@ async def list_projects(user: User = Depends(get_current_user)):
         return result
     projects = await SocProject.find(
         SocProject.owner_id == str(user.id)
-    ).sort("+created_at").to_list()
+    ).sort("+created_at").limit(500).to_list()
     return [_project_to_response(p) for p in projects]
 
 
@@ -299,13 +307,17 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
     """Unified SOC overview: agent counts, alert totals, per-project cards, recent alerts.
     Admin: all users' projects with owner attribution. Others: own projects only."""
     if user.role == "admin":
-        projects = await SocProject.find().to_list()
+        projects = await SocProject.find().limit(500).to_list()
         # Pre-fetch owners for admin attribution
         owner_ids = list({p.owner_id for p in projects})
-        owners = await User.find({"_id": {"$in": [ObjectId(oid) for oid in owner_ids]}}).to_list()
+        try:
+            oid_list = [ObjectId(oid) for oid in owner_ids]
+        except (InvalidId, Exception) as exc:
+            raise HTTPException(status_code=422, detail=f"Invalid owner ID: {exc}") from exc
+        owners = await User.find({"_id": {"$in": oid_list}}).limit(500).to_list()
         owner_map: dict[str, str] = {str(o.id): o.username for o in owners}
     else:
-        projects = await SocProject.find(SocProject.owner_id == str(user.id)).to_list()
+        projects = await SocProject.find(SocProject.owner_id == str(user.id)).limit(500).to_list()
         owner_map = {}
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -327,7 +339,8 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
                 agent_status = "disconnected"
             else:
                 agent_status = "never_registered"
-        except Exception:
+        except Exception as exc:
+            log.debug("Wazuh agent lookup failed for project %s: %s", project.slug, exc)
             agent = None
             agent_status = "unknown"
 

@@ -8,6 +8,7 @@ import secrets
 from datetime import datetime, timezone, timedelta
 
 from fastapi import HTTPException, status
+from pymongo.errors import DuplicateKeyError
 
 from core.config import settings
 from core.email_service import send_email
@@ -43,12 +44,15 @@ async def seed_admin() -> None:
         hashed_password=hash_password(settings.first_admin_password),
         role="admin",
     )
-    await admin.insert()
-    log.info(
-        "First admin seeded — username: %s  email: %s  (change this password now!)",
-        admin.username,
-        admin.email,
-    )
+    try:
+        await admin.insert()
+        log.info(
+            "First admin seeded — username: %s  email: %s  (change this password now!)",
+            admin.username,
+            admin.email,
+        )
+    except DuplicateKeyError:
+        pass  # another worker beat us — admin already exists
 
 
 async def seed_demo_user() -> None:
@@ -74,8 +78,11 @@ async def seed_demo_user() -> None:
         is_active=True,
         is_demo=True,
     )
-    await demo.insert()
-    log.info("Demo user seeded: %s", email)
+    try:
+        await demo.insert()
+        log.info("Demo user seeded: %s", email)
+    except DuplicateKeyError:
+        pass  # another worker beat us — demo user already exists
 
 
 async def register_user(data: RegisterRequest) -> User:

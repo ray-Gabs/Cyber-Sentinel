@@ -52,26 +52,28 @@ export const OWASP_2025: Record<string, { name: string; color: string }> = {
 };
 
 /** Tool display names and OWASP Top 10:2025 mapping */
-export const TOOL_INFO: Record<string, { label: string; owasp: string; icon: string; owaspExtra?: string[] }> = {
-  crawler:          { label: "Web Crawler",        owasp: "Recon",     icon: "Bug" },
-  fingerprint:      { label: "Fingerprinter",      owasp: "Recon",     icon: "Search" },
-  nmap:             { label: "Nmap Port Scan",     owasp: "Recon",     icon: "Radar" },
-  nuclei:           { label: "Nuclei Scanner",     owasp: "A02:2025",  icon: "Atom", owaspExtra: ["A09:2025"] },
-  sslyze:           { label: "SSL/TLS Analyzer",   owasp: "A04:2025",  icon: "Lock" },
-  whatweb:          { label: "WhatWeb",            owasp: "Recon",     icon: "Globe" },
-  sqli:             { label: "SQL Injection",      owasp: "A05:2025",  icon: "Database" },
-  xss:              { label: "XSS Checker",        owasp: "A05:2025",  icon: "Zap" },
-  idor:             { label: "IDOR Checker",       owasp: "A01:2025",  icon: "Unlock" },
-  redirect:         { label: "Open Redirect",      owasp: "A01:2025",  icon: "ExternalLink" },
-  auth:             { label: "Auth Checker",       owasp: "A07:2025",  icon: "KeyRound" },
-  ssrf:             { label: "SSRF Checker",       owasp: "A05:2025",  icon: "Crosshair" },
-  misconfig:        { label: "Misconfig Checker",  owasp: "A02:2025",  icon: "Settings", owaspExtra: ["A09:2025"] },
-  supply_chain:     { label: "Supply Chain",       owasp: "A03:2025",  icon: "Package" },
-  insecure_design:  { label: "Design Checker",     owasp: "A06:2025",  icon: "Layout" },
-  integrity:        { label: "Integrity Checker",  owasp: "A08:2025",  icon: "ShieldCheck" },
-  error_handling:   { label: "Error Handling",     owasp: "A10:2025",  icon: "AlertOctagon" },
-  zap:              { label: "ZAP Active Scan",    owasp: "Full DAST", icon: "Swords" },
-  ai_analysis:      { label: "AI Analysis",        owasp: "Summary",   icon: "Sparkles" },
+export const TOOL_INFO: Record<string, { label: string; desc: string; owasp: string; icon: string; owaspExtra?: string[] }> = {
+  crawler:          { label: "Web Crawler",        desc: "Maps URLs, forms, and JS routes",         owasp: "Recon",     icon: "Bug" },
+  fingerprint:      { label: "Fingerprinter",      desc: "Detects CMS, frameworks, and server info", owasp: "Recon",     icon: "Search" },
+  nmap:             { label: "Nmap Port Scan",     desc: "Discovers open ports and services",        owasp: "Recon",     icon: "Radar" },
+  nuclei:           { label: "Nuclei Scanner",     desc: "Template-based CVE and vuln detection",    owasp: "A02:2025",  icon: "Atom", owaspExtra: ["A09:2025"] },
+  sslyze:           { label: "SSL/TLS Analyzer",   desc: "Checks certs, ciphers, and TLS config",    owasp: "A04:2025",  icon: "Lock" },
+  whatweb:          { label: "WhatWeb",            desc: "Identifies web tech stack versions",        owasp: "Recon",     icon: "Globe" },
+  sqli:             { label: "SQL Injection",      desc: "Tests input fields for SQL injection",      owasp: "A05:2025",  icon: "Database" },
+  xss:              { label: "XSS Checker",        desc: "Probes for cross-site scripting vectors",   owasp: "A05:2025",  icon: "Zap" },
+  idor:             { label: "IDOR Checker",       desc: "Tests object references for access bypass", owasp: "A01:2025",  icon: "Unlock" },
+  redirect:         { label: "Open Redirect",      desc: "Finds unvalidated URL redirect params",     owasp: "A01:2025",  icon: "ExternalLink" },
+  auth:             { label: "Auth Checker",       desc: "Tests login, session, and token security",  owasp: "A07:2025",  icon: "KeyRound" },
+  ssrf:             { label: "SSRF Checker",       desc: "Detects server-side request forgery",       owasp: "A05:2025",  icon: "Crosshair" },
+  misconfig:        { label: "Misconfig Checker",  desc: "Flags exposed headers and default configs", owasp: "A02:2025",  icon: "Settings", owaspExtra: ["A09:2025"] },
+  supply_chain:     { label: "Supply Chain",       desc: "Audits third-party scripts and CDN deps",   owasp: "A03:2025",  icon: "Package" },
+  insecure_design:  { label: "Design Checker",     desc: "Reviews for insecure architectural patterns", owasp: "A06:2025", icon: "Layout" },
+  integrity:        { label: "Integrity Checker",  desc: "Verifies resource hashes and CSP headers",  owasp: "A08:2025",  icon: "ShieldCheck" },
+  error_handling:   { label: "Error Handling",     desc: "Checks for verbose error and stack leaks",  owasp: "A10:2025",  icon: "AlertOctagon" },
+  subdomain_enum:   { label: "Subdomain Enum",     desc: "Enumerates subdomains via DNS brute-force", owasp: "Recon",     icon: "Network" },
+  dir_brute:        { label: "Dir Bruter",         desc: "Discovers hidden paths and endpoints",      owasp: "Recon",     icon: "FolderSearch" },
+  zap:              { label: "ZAP Active Scan",    desc: "Full DAST scan via OWASP ZAP daemon",       owasp: "Full DAST", icon: "Swords" },
+  ai_analysis:      { label: "AI Analysis",        desc: "Generates narrative report with Claude",    owasp: "Summary",   icon: "Sparkles" },
 };
 
 /** Navigation routes */

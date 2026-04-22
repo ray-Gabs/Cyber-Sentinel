@@ -67,7 +67,7 @@ async def get_admin_stats(
     scans_trend = round((scans_period - scans_prev) / max(scans_prev, 1) * 100, 1)
 
     # Scans by day + top users — one list fetch, two uses
-    period_scans = await Scan.find(Scan.created_at >= since).to_list()
+    period_scans = await Scan.find(Scan.created_at >= since).limit(1000).to_list()
     scans_day_map: dict[str, int] = defaultdict(int)
     user_scan_counts: dict[str, int] = defaultdict(int)
     for s in period_scans:
@@ -89,7 +89,8 @@ async def get_admin_stats(
         try:
             u = await UserModel.get(ObjectId(uid))
             top_scan_users.append({"email": u.username if u else uid, "scans": count})
-        except Exception:
+        except Exception as exc:
+            log.debug("user lookup failed for analytics uid %s: %s", uid, exc)
             top_scan_users.append({"email": uid, "scans": count})
 
     # ── Alerts ───────────────────────────────────────────────────────────────
@@ -127,15 +128,15 @@ async def get_admin_stats(
     alerts_trend = round((alerts_period - alerts_prev) / max(alerts_prev, 1) * 100, 1)
 
     # Alerts by day + top agents — one list fetch, two uses
-    period_alerts = await Alert.find(Alert.timestamp >= since).to_list()
+    period_alerts = await Alert.find(Alert.timestamp >= since).limit(1000).to_list()
     alerts_day_map: dict[str, int] = defaultdict(int)
     agent_counts: dict[str, int] = defaultdict(int)
     for a in period_alerts:
         try:
             ts = a.timestamp if a.timestamp.tzinfo else a.timestamp.replace(tzinfo=timezone.utc)
             alerts_day_map[ts.strftime("%m/%d")] += 1
-        except Exception:
-            pass
+        except Exception as exc:
+            log.debug("alert day grouping failed: %s", exc)
         if a.agent_name:
             agent_counts[a.agent_name] += 1
 
@@ -253,8 +254,8 @@ async def get_analytics(
                 # Target vulnerability counts
                 target = getattr(scan, "target", None) or "unknown"
                 target_counts[target] = target_counts.get(target, 0) + 1
-            except Exception:
-                pass
+            except Exception as exc:
+                log.debug("scan finding parse failed: %s", exc)
 
         # Scanner success / fail rates
         tool_results = getattr(scan, "tool_results", None) or {}
@@ -270,7 +271,8 @@ async def get_analytics(
                     )
                     key = "failed" if status == "failed" else "success"
                     scanner_stats[tool_name][key] += 1
-                except Exception:
+                except Exception as exc:
+                    log.debug("scanner stat parse failed for %s: %s", tool_name, exc)
                     scanner_stats[tool_name]["success"] += 1
 
         # Scan duration
@@ -285,8 +287,8 @@ async def get_analytics(
                 duration = (ca - cr).total_seconds()
                 if 0 < duration < 86400:
                     durations.append(duration)
-        except Exception:
-            pass
+        except Exception as exc:
+            log.debug("scan duration calculation failed: %s", exc)
 
     avg_duration = round(sum(durations) / len(durations), 1) if durations else 0.0
     top_targets = sorted(target_counts.items(), key=lambda x: x[1], reverse=True)[:10]
@@ -294,8 +296,9 @@ async def get_analytics(
 
     # ── SOC analytics ────────────────────────────────────────
     try:
-        alerts = await Alert.find(Alert.timestamp >= since).to_list()
-    except Exception:
+        alerts = await Alert.find(Alert.timestamp >= since).limit(1000).to_list()
+    except Exception as exc:
+        log.warning("alert fetch failed for analytics: %s", exc)
         alerts = []
 
     alerts_by_day: dict[str, int] = {}
@@ -306,8 +309,8 @@ async def get_analytics(
                 ts = ts.replace(tzinfo=timezone.utc)
             day = ts.strftime("%Y-%m-%d")
             alerts_by_day[day] = alerts_by_day.get(day, 0) + 1
-        except Exception:
-            pass
+        except Exception as exc:
+            log.debug("alert timestamp parse failed: %s", exc)
 
     alerts_over_time = [{"date": k, "count": v} for k, v in sorted(alerts_by_day.items())]
 

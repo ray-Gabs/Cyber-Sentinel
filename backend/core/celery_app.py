@@ -33,10 +33,16 @@ celery.conf.update(
     task_track_started=True,
     # Prevent Celery from prefetching many tasks at once
     worker_prefetch_multiplier=1,
-    # Each task gets a fresh connection (avoids stale Motor connections)
-    worker_max_tasks_per_child=50,
+    # Raise recycle limit — 50 caused frequent Motor client re-creation
+    worker_max_tasks_per_child=200,
     # Celery 6.0 compatibility — retry broker connections on startup
     broker_connection_retry_on_startup=True,
+    # Expire task results in Redis after 1 hour (prevents unbounded growth)
+    result_expires=3600,
+    # Ack tasks only after completion so they can be redelivered on worker crash
+    task_acks_late=True,
+    # Visibility timeout must exceed longest possible task (80 min)
+    broker_transport_options={"visibility_timeout": 4800},
 )
 
 # --------------- Beat Schedule (Periodic Tasks) ---------------

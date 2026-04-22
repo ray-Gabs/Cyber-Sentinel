@@ -2,7 +2,7 @@
  * Settings — Wazuh connection config (per-user) + SIEM rule management.
  * Responsive: single column on mobile/tablet, 2-col on lg+.
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   getCustomRules,
@@ -89,7 +89,7 @@ export default function Settings() {
   const [deletingRuleId, setDeletingRuleId]   = useState<string | null>(null);
   const [togglingRuleId, setTogglingRuleId]   = useState<string | null>(null);
 
-  const fetchRules = async () => {
+  const fetchRules = useCallback(async () => {
     setRulesLoading(true);
     setRulesError("");
     try {
@@ -99,9 +99,9 @@ export default function Settings() {
     } finally {
       setRulesLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { void fetchRules(); }, []);
+  useEffect(() => { void fetchRules(); }, [fetchRules]);
 
   useEffect(() => {
     getNotificationPrefs().then(setNotifPrefs).catch(() => {});
@@ -647,9 +647,9 @@ export default function Settings() {
                   : status === "no_match" ? "var(--yellow)"
                   : status === "invalid" ? "var(--red)"
                   : "var(--text-muted)";
-                const statusLabel = status === "match" ? "✓ Match"
-                  : status === "no_match" ? "✗ No match"
-                  : status === "invalid" ? "⚠ Invalid regex"
+                const statusLabel = status === "match" ? "Match"
+                  : status === "no_match" ? "No match"
+                  : status === "invalid" ? "Invalid regex"
                   : "";
                 return (
                   <div className="mt-2 rounded-lg p-2.5" style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}>

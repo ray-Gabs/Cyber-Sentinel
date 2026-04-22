@@ -5,10 +5,23 @@
 # ============================================================
 
 import asyncio
+import json
 import logging
 from core.celery_app import celery
+from core.config import settings
 
 log = logging.getLogger(__name__)
+
+
+async def _ws_publish(channel: str, payload: dict) -> None:
+    """Publish a WebSocket event to Redis so the FastAPI relay can broadcast it."""
+    import redis.asyncio as aioredis
+    try:
+        r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2)
+        await r.publish(f"ws:{channel}", json.dumps(payload))
+        await r.aclose()
+    except Exception as exc:
+        log.warning("WS publish to Redis failed: %s", exc)
 
 
 def _get_event_loop():
@@ -22,7 +35,14 @@ def _get_event_loop():
     return loop
 
 
-@celery.task(name="domains.soc.tasks.triage_single_alert")
+@celery.task(
+    name="domains.soc.tasks.triage_single_alert",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=3,
+    soft_time_limit=120,
+    time_limit=180,
+)
 def triage_single_alert(alert_id: str):
     """
     Triage a single alert: MITRE mapping → AI analysis → playbook → threat intel.
@@ -83,6 +103,17 @@ async def _triage_async(alert_id: str):
         except Exception as e:
             log.warning("[SOC Triage] AI analysis failed for alert %s: %s", alert.wazuh_id, e)
 
+    # Broadcast AI verdict to connected SOC dashboard clients
+    await _ws_publish("alerts", {
+        "type": "alert_triaged",
+        "alert_id": str(alert.id),
+        "wazuh_id": alert.wazuh_id,
+        "rule_level": alert.rule_level,
+        "ai_verdict": alert.ai_verdict,
+        "ai_action": alert.ai_action,
+        "ai_confidence": alert.ai_confidence,
+    })
+
     # 3. Automated playbook for escalated true positives
     if alert.ai_verdict == "TRUE_POSITIVE" and alert.ai_action == "ESCALATE":
         try:
@@ -105,7 +136,11 @@ async def _triage_async(alert_id: str):
             log.warning("[SOC Triage] Threat intel failed for alert %s: %s", alert.wazuh_id, e)
 
 
-@celery.task(name="domains.soc.tasks.poll_wazuh_alerts")
+@celery.task(
+    name="domains.soc.tasks.poll_wazuh_alerts",
+    soft_time_limit=60,
+    time_limit=90,
+)
 def poll_wazuh_alerts():
     """
     Periodic task (every 30 seconds via Celery Beat).
@@ -139,6 +174,17 @@ async def _poll_async():
             log.warning("[SOC Polling] Failed to ingest alert: %s", e)
             continue
 
+        # Notify connected clients of the new alert immediately
+        await _ws_publish("alerts", {
+            "type": "alert_new",
+            "alert_id": str(alert.id),
+            "wazuh_id": alert.wazuh_id,
+            "rule_level": alert.rule_level,
+            "rule_description": alert.rule_description,
+            "agent_name": alert.agent_name,
+            "timestamp": alert.timestamp.isoformat(),
+        })
+
         # 2. Apply MITRE ATT&CK mapping
         if not alert.mitre_techniques:
             try:
@@ -156,8 +202,8 @@ async def _poll_async():
                 if alert.agent_id:
                     try:
                         agent_info = await wazuh_client.get_agent(alert.agent_id)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        log.debug("agent lookup failed for %s: %s", alert.agent_id, exc)
                 context = {
                     "agent_name": alert.agent_name,
                     "agent_os": agent_info.get("os", {}).get("name", "unknown") if agent_info else "unknown",
@@ -178,6 +224,16 @@ async def _poll_async():
                 )
                 # Capture return value so the updated ai_verdict is visible below
                 alert = await apply_ai_verdict(str(alert.id), verdict)
+
+                await _ws_publish("alerts", {
+                    "type": "alert_triaged",
+                    "alert_id": str(alert.id),
+                    "wazuh_id": alert.wazuh_id,
+                    "rule_level": alert.rule_level,
+                    "ai_verdict": alert.ai_verdict,
+                    "ai_action": alert.ai_action,
+                    "ai_confidence": alert.ai_confidence,
+                })
 
             except Exception as e:
                 log.warning("[SOC Polling] AI analysis failed for alert %s: %s", alert.wazuh_id, e)

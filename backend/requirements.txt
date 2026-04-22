@@ -14,9 +14,9 @@ motor==3.6.*               # Async MongoDB driver
 beanie==1.27.*             # MongoDB ODM (built on Motor + Pydantic)
 
 # --- Auth ---
-python-jose[cryptography]==3.3.*   # JWT encoding/decoding
-passlib[bcrypt]==1.7.*             # Password hashing
-bcrypt<5.0.0                       # Pin bcrypt 4.x (passlib compat)
+PyJWT[crypto]>=2.8.0,<3.0.0        # JWT encoding/decoding (replaces python-jose — CVE-2024-33664)
+passlib[bcrypt]>=1.7.4,<2.0.0     # Password hashing
+bcrypt==4.0.1                      # passlib 1.7.x needs __about__; removed in bcrypt 4.1+
 pydantic[email]==2.10.*            # Includes EmailStr
 pydantic-settings==2.7.*          # Settings from .env
 
@@ -26,7 +26,7 @@ redis==5.2.*
 
 # --- AI (install the one matching your AI_PROVIDER in .env) ---
 groq==0.25.*                      # Groq API SDK (Llama 3.3 70B)    — AI_PROVIDER=groq
-anthropic>=0.40.0                 # Claude API SDK (Anthropic)       — AI_PROVIDER=claude
+anthropic>=0.40.0,<1.0.0          # Claude API SDK (Anthropic)       — AI_PROVIDER=claude
 # openai>=1.0.*                   # OpenAI SDK                       — AI_PROVIDER=openai  (uncomment if needed)
 # google-generativeai>=0.8.*      # Gemini SDK                       — AI_PROVIDER=gemini  (uncomment if needed)
 

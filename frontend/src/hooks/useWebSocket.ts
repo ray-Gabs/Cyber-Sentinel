@@ -5,7 +5,7 @@
  * message shapes. useWebSocket<Alert>("/ws/alerts") means "messages are Alert objects."
  */
 import { useEffect, useRef, useState, useCallback } from "react";
-import { WS_BASE } from "@/lib/constants";
+import { WS_BASE, TOKEN_KEY } from "@/lib/constants";
 
 interface UseWebSocketOptions {
   /** Which channel to subscribe to (e.g., "scans", "alerts") */
@@ -39,6 +39,7 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
   const retryCount = useRef(0);
+  const parseFailCount = useRef(0);
   // Guards against React StrictMode double-invocation: when the effect cleanup
   // runs, this flag prevents the onclose handler from scheduling a reconnect.
   const isUnmounted = useRef(false);
@@ -46,7 +47,10 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions) {
   const connect = useCallback(() => {
     if (isUnmounted.current) return;
 
-    const url = `${WS_BASE}/${channel}`;
+    const token = localStorage.getItem(TOKEN_KEY);
+    const url = token
+      ? `${WS_BASE}/${channel}?token=${encodeURIComponent(token)}`
+      : `${WS_BASE}/${channel}`;
     const ws = new WebSocket(url);
 
     ws.onopen = () => {
@@ -58,12 +62,24 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions) {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data) as WebSocketMessage<T>;
+        parseFailCount.current = 0;
         setMessages((prev) => {
           const updated = [msg, ...prev];
           return updated.length > maxMessages ? updated.slice(0, maxMessages) : updated;
         });
       } catch {
         console.warn("[WS] Failed to parse message:", event.data);
+        parseFailCount.current += 1;
+        if (parseFailCount.current === 3) {
+          window.dispatchEvent(
+            new CustomEvent("cs:toast", {
+              detail: {
+                type: "warning",
+                message: "WebSocket: repeated message parse failures — real-time updates may be degraded.",
+              },
+            })
+          );
+        }
       }
     };
 

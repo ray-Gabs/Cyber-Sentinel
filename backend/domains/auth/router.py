@@ -2,9 +2,12 @@
 # backend/domains/auth/router.py — Auth REST Endpoints
 # ============================================================
 
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+log = logging.getLogger(__name__)
 
 from core.dependencies import get_current_user
 from core.rate_limit import limiter
@@ -43,7 +46,7 @@ async def register(request: Request, data: RegisterRequest):
     )
     # Notify all admin users of the new registration
     try:
-        admins = await User.find(User.role == "admin").to_list()
+        admins = await User.find(User.role == "admin").limit(500).to_list()
         for admin in admins:
             await notif_service.create_notification(
                 user_id=str(admin.id),
@@ -51,8 +54,8 @@ async def register(request: Request, data: RegisterRequest):
                 title=f"New registration: {user.username}",
                 body=f"{user.email} is awaiting admin approval",
             )
-    except Exception:
-        pass  # Notifications are non-critical; don't fail the registration
+    except Exception as exc:
+        log.debug("admin notification failed on registration: %s", exc)
     return {"message": "Registration received — awaiting admin approval", "status": "pending"}
 
 
@@ -72,8 +75,8 @@ async def login(request: Request, data: LoginRequest):
                 action="user.login",
                 ip_address=ip,
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        log.debug("audit log failed on login: %s", exc)
     return result
 
 
@@ -144,7 +147,7 @@ def _require_admin(user: User) -> None:
 async def list_users(user: User = Depends(get_current_user)):
     """[Admin] List all registered users."""
     _require_admin(user)
-    users = await User.find().sort("+created_at").to_list()
+    users = await User.find().sort("+created_at").limit(500).to_list()
     return [_user_response(u) for u in users]
 
 
@@ -236,8 +239,8 @@ async def approve_user(user_id: str, user: User = Depends(get_current_user)):
             title="Account approved",
             body="Your account has been approved. You can now log in.",
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        log.debug("approval notification failed for user %s: %s", user_id, exc)
     return _user_response(target)
 
 

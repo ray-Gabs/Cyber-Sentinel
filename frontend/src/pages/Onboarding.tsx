@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { Check } from "lucide-react";
 
 const STORAGE_KEY = "onboarding_complete";
 
@@ -86,7 +87,7 @@ export default function Onboarding() {
               marginBottom: "16px",
             }}
           >
-            <span style={{ color: "var(--accent)", fontSize: "18px", fontWeight: 700 }}>✓</span>
+            <Check size={20} color="var(--accent)" strokeWidth={2.5} />
           </div>
 
           <h1

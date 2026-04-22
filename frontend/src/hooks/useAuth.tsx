@@ -37,8 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .getMe()
         .then(setUser)
         .catch(() => {
-          // Token is invalid/expired — clear it
-          authService.logout();
+          // Token is invalid/expired — clear it but do NOT redirect.
+          // ProtectedRoute handles redirects for auth-gated pages.
+          // Public routes like "/" must never be hijacked to "/login".
+          authService.clearToken();
         })
         .finally(() => setLoading(false));
     } else {
@@ -54,8 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(async (data: RegisterRequest) => {
     await authService.register(data);
-    const me = await authService.getMe();
-    setUser(me);
+    // Registration creates a pending account — no token is issued.
+    // The caller (Register page) handles navigation to success/login.
   }, []);
 
   const logout = useCallback(() => {

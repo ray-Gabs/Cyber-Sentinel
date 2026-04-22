@@ -9,6 +9,7 @@ from typing import Optional
 
 from beanie import Document
 from pydantic import BaseModel, Field
+from pymongo import ASCENDING, DESCENDING, IndexModel
 
 
 class CorrelationLink(BaseModel):
@@ -41,3 +42,8 @@ class Correlation(Document):
     class Settings:
         name = "correlations"
         use_state_management = True
+        indexes = [
+            IndexModel([("scan_id", ASCENDING)]),
+            IndexModel([("scan_target", ASCENDING)]),
+            IndexModel([("created_at", DESCENDING)]),
+        ]

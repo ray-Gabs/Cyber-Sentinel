@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { Check } from "lucide-react";
 
 // Standalone color constants — no CSS vars dependency (Landing is outside AppLayout)
 const C = {
@@ -240,12 +241,12 @@ export default function Landing() {
               { label: "Directory listing exposed",    sev: "INFO",     color: C.muted },
             ].map(({ label, sev, color }) => (
               <div key={sev} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: `1px solid ${C.border}` }}>
-                <span style={{ color: C.text }}>✓ {label}</span>
+                <span style={{ color: C.text, display: "flex", alignItems: "center", gap: "6px" }}><Check size={12} color={C.green} />{label}</span>
                 <span style={{ color }}>{sev}</span>
               </div>
             ))}
             <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: `1px solid ${C.border}`, color: C.accent }}>
-              ✓ Scan complete — 5 findings (1 critical) · CVE map + EPSS done
+              <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Check size={12} />Scan complete — 5 findings (1 critical) · CVE map + EPSS done</span>
             </div>
           </div>
         </div>
@@ -306,7 +307,7 @@ export default function Landing() {
                 "Real-time progress via WebSocket",
               ].map((f) => (
                 <div key={f} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ color: C.green, fontSize: "13px", fontWeight: 700, flexShrink: 0 }}>✓</span>
+                  <Check size={13} color={C.green} style={{ flexShrink: 0 }} />
                   <span style={{ fontSize: "13px", color: C.muted }}>{f}</span>
                 </div>
               ))}
@@ -414,7 +415,7 @@ export default function Landing() {
                   "Correlation with pentest findings from the same target",
                 ].map((f) => (
                   <div key={f} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <span style={{ color: C.green, fontSize: "13px", fontWeight: 700, flexShrink: 0 }}>✓</span>
+                    <Check size={13} color={C.green} style={{ flexShrink: 0 }} />
                     <span style={{ fontSize: "13px", color: C.muted }}>{f}</span>
                   </div>
                 ))}

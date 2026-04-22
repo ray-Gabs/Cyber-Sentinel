@@ -90,10 +90,10 @@ services:
       # Override .env localhost defaults with Docker service hostnames
       - MONGODB_URI=mongodb://mongo:27017
       - REDIS_URL=redis://redis:6379/0
-      - FRONTEND_URL=https://localhost
+      - FRONTEND_URL=http://localhost:8080
       # Add the VM's LAN IP so students' browsers are not CORS-blocked.
       # Replace 10.4.89.178 with this VM's actual IP if it changes.
-      - CORS_EXTRA_ORIGINS=http://localhost:5173,http://localhost:3000,https://localhost,http://10.4.89.178,http://10.4.89.178:8000
+      - CORS_EXTRA_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost:8080,https://localhost,http://10.4.89.178,http://10.4.89.178:8000,http://10.4.89.178:8080
       - ZAP_API_URL=http://zap:8080
       # Python container settings
       - PYTHONPATH=/app
@@ -123,6 +123,12 @@ services:
       # Volume mount: host source → /app so --reload picks up changes without rebuilding
       - ./backend:/app
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # ── Celery Worker ─────────────────────────────────────────────────────────
   # Pool notes:
@@ -240,7 +246,7 @@ services:
 
   # ── nginx Reverse Proxy + Load Balancer ──────────────────────────────────
   # Single entry point for the whole app (HTTP only):
-  #   http://localhost    → routes / to frontend, /api + /ws to backend
+  #   http://localhost:8080  → routes / to frontend, /api + /ws to backend
   # To scale: add more backend/frontend instances under upstream blocks in nginx.conf
   nginx:
     build:
@@ -250,10 +256,12 @@ services:
     networks:
       - sentinel-net
     ports:
-      - "80:80"             # http://localhost  ← open this in your browser
+      - "8080:80"           # http://localhost:8080  ← open this in your browser
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
     restart: unless-stopped
 
   # ── Wazuh All-in-One (optional — docker-compose --profile wazuh up -d) ───

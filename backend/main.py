@@ -6,12 +6,13 @@
 # ============================================================
 
 import asyncio
+import json
 import logging
 import re
 import time as _time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
@@ -19,12 +20,69 @@ from slowapi.errors import RateLimitExceeded
 from core.config import settings
 from core.database import init_db, close_db
 from core.rate_limit import limiter
+from core.security import decode_access_token
 from core.websocket import ws_manager
 
 log = logging.getLogger(__name__)
 
 # Record process start time for uptime reporting
 _start_time = _time.time()
+
+# Cache git SHA and VERSION at import time — avoids blocking I/O on every request
+import subprocess as _subprocess
+import pathlib as _pathlib
+
+try:
+    _GIT_SHA: str = _subprocess.check_output(
+        ["git", "rev-parse", "--short", "HEAD"],
+        stderr=_subprocess.DEVNULL,
+        text=True,
+    ).strip()
+except Exception:
+    _GIT_SHA = "unknown"
+
+try:
+    _VERSION: str = (_pathlib.Path(__file__).parent.parent / "VERSION").read_text().strip()
+except FileNotFoundError:
+    _VERSION = "1.0.1"
+
+
+# --------------- WebSocket Redis Relay ---------------
+
+async def _redis_ws_relay() -> None:
+    """Subscribe to ws:* Redis pub/sub and forward messages to connected WebSocket clients.
+
+    Celery workers can't call ws_manager directly (different process), so they
+    publish to Redis channels (ws:scans, ws:alerts, …) and this relay bridges
+    the gap by broadcasting into the in-process ConnectionManager.
+    """
+    import redis.asyncio as aioredis
+    r = aioredis.from_url(settings.redis_url)
+    pubsub = r.pubsub()
+    await pubsub.psubscribe("ws:*")
+    log.info("WS relay started — subscribed to ws:* channels")
+    try:
+        async for message in pubsub.listen():
+            if message["type"] != "pmessage":
+                continue
+            try:
+                raw_channel = message["channel"]
+                channel = (
+                    raw_channel.decode() if isinstance(raw_channel, bytes) else raw_channel
+                ).removeprefix("ws:")
+                raw_data = message["data"]
+                data = json.loads(
+                    raw_data.decode() if isinstance(raw_data, bytes) else raw_data
+                )
+                await ws_manager.broadcast(channel, data)
+            except Exception as exc:
+                log.warning("WS relay message error: %s", exc)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await pubsub.punsubscribe("ws:*")
+        await r.aclose()
+        log.info("WS relay stopped")
 
 
 # --------------- Lifespan ---------------
@@ -81,9 +139,16 @@ async def lifespan(app: FastAPI):
                 ).insert()
                 log.info("Seeded 2 demo projects for %s", _demo_email)
 
+    _relay_task = asyncio.create_task(_redis_ws_relay())
+
     yield
 
     # Shutdown
+    _relay_task.cancel()
+    try:
+        await _relay_task
+    except asyncio.CancelledError:
+        pass
     await close_db()
     log.info("Disconnected from MongoDB")
 
@@ -226,26 +291,7 @@ async def health():
 @app.get("/api/version", tags=["System"])
 async def version():
     """Return current app version and git commit hash."""
-    import subprocess
-    try:
-        commit = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            stderr=subprocess.DEVNULL,
-            text=True,
-        ).strip()
-    except Exception:
-        commit = "unknown"
-
-    version_str = "1.0.1"
-    try:
-        import pathlib
-        version_file = pathlib.Path(__file__).parent.parent / "VERSION"
-        if version_file.exists():
-            version_str = version_file.read_text().strip()
-    except Exception:
-        pass
-
-    return {"version": version_str, "commit": commit}
+    return {"version": _VERSION, "commit": _GIT_SHA}
 
 
 # --------------- Global Error Handler ---------------
@@ -269,17 +315,31 @@ async def global_exception_handler(request: Request, exc: Exception):
 # --------------- WebSocket Endpoint ---------------
 
 @app.websocket("/ws/{channel}")
-async def websocket_endpoint(websocket: WebSocket, channel: str):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    channel: str,
+    token: str = Query(None),
+):
     """
-    Generic WebSocket endpoint.
+    Generic WebSocket endpoint. Requires a valid JWT via ?token= query param.
     Channels:
         - "scans"  → real-time scan progress updates
         - "alerts" → live Wazuh alert feed
     """
+    if not token:
+        await websocket.close(code=1008)
+        return
+    try:
+        decode_access_token(token)
+    except Exception:
+        await websocket.close(code=1008)
+        return
+
     await ws_manager.connect(websocket, channel)
     try:
         while True:
-            # Keep connection alive — client can send pings
             await websocket.receive_text()
     except WebSocketDisconnect:
+        pass
+    finally:
         ws_manager.disconnect(websocket, channel)

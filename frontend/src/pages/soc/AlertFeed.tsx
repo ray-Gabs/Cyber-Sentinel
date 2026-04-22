@@ -90,7 +90,7 @@ export default function AlertFeed() {
   const kbFocusRef                      = useRef(-1);
   const displayedAlertsRef              = useRef<AlertSummary[]>([]);
 
-  const { messages } = useWebSocket<AlertSummary>({ channel: "alerts" });
+  const { messages } = useWebSocket<{ type: string; alert_id?: string }>({ channel: "alerts" });
 
   const fetchAlerts = useCallback(async () => {
     setFetchError("");
@@ -127,16 +127,16 @@ export default function AlertFeed() {
     setSearchParams(next, { replace: true });
   }, [filterAgent, searchParams, setSearchParams]);
 
-  // Merge real-time WebSocket alerts
+  // Re-fetch on new or triaged alert events so the list stays current
   useEffect(() => {
-    if (messages.length > 0 && page === 1) {
-      const newest = messages[0]?.data;
-      if (newest?.id && !alerts.some((a) => a.id === newest.id)) {
-        setAlerts((prev) => [newest, ...prev].slice(0, 50));
-        setLiveCount((n) => n + 1);
-      }
+    if (!messages.length) return;
+    const latest = messages[0];
+    const t = latest.data?.type;
+    if (t === "alert_new" || t === "alert_triaged") {
+      if (t === "alert_new") setLiveCount((n) => n + 1);
+      if (page === 1) fetchAlerts();
     }
-  }, [messages, alerts, page]);
+  }, [messages, page, fetchAlerts]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

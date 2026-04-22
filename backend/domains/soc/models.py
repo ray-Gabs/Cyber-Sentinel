@@ -7,6 +7,7 @@ from typing import Optional
 
 from beanie import Document
 from pydantic import BaseModel, Field
+from pymongo import ASCENDING, DESCENDING, IndexModel
 
 
 class Alert(Document):
@@ -58,6 +59,20 @@ class Alert(Document):
     class Settings:
         name = "alerts"
         use_state_management = True
+        indexes = [
+            IndexModel([("wazuh_id", ASCENDING)]),               # fast dedup lookup on ingest
+            IndexModel([("timestamp", DESCENDING)]),
+            IndexModel([("agent_id", ASCENDING)]),
+            IndexModel([("agent_name", ASCENDING)]),             # agent_name filter in list_alerts
+            IndexModel([("rule_level", DESCENDING)]),
+            IndexModel([("ai_verdict", ASCENDING)]),
+            # Compound for the most common list query: by agent + recency
+            IndexModel([("agent_id", ASCENDING), ("timestamp", DESCENDING)]),
+            # Compound for severity dashboard queries (rule_level >= X ORDER BY timestamp)
+            IndexModel([("rule_level", DESCENDING), ("timestamp", DESCENDING)]),
+            # TTL — auto-expire alerts after 90 days
+            IndexModel([("timestamp", ASCENDING)], expireAfterSeconds=7_776_000),
+        ]
 
 
 class CustomDetectionRule(Document):
@@ -75,6 +90,10 @@ class CustomDetectionRule(Document):
 
     class Settings:
         name = "custom_detection_rules"
+        indexes = [
+            IndexModel([("user_id", ASCENDING)]),
+            IndexModel([("user_id", ASCENDING), ("enabled", ASCENDING)]),
+        ]
 
 
 class AiVerdict(Document):
@@ -95,3 +114,9 @@ class AiVerdict(Document):
 
     class Settings:
         name = "ai_verdicts"
+        indexes = [
+            IndexModel([("alert_id", ASCENDING)]),
+            IndexModel([("created_at", DESCENDING)]),
+            # TTL — expire AI verdict records after 90 days
+            IndexModel([("created_at", ASCENDING)], expireAfterSeconds=7_776_000),
+        ]

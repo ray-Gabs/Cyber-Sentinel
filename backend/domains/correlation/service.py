@@ -11,7 +11,7 @@
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -32,6 +32,11 @@ ATTACK_PATTERN_MAP = {
 }
 
 CVE_PATTERN = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
+_PORT_RE = re.compile(r":(\d+)")
+_WORD_RE = re.compile(r"\b[a-z]{5,}\b")
+_STOPWORDS = frozenset({
+    "the", "and", "for", "this", "that", "with", "from", "have", "been", "found", "detected"
+})
 
 
 async def run_correlation(scan_id: str) -> Correlation:
@@ -47,14 +52,16 @@ async def run_correlation(scan_id: str) -> Correlation:
     target_host = _extract_host(scan.target)
 
     # Fetch relevant alerts (last 30 days, up to 1000)
-    alerts = await Alert.find().sort("-timestamp").limit(1000).to_list()
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    alerts = await Alert.find({"timestamp": {"$gte": cutoff}}).sort("-timestamp").limit(1000).to_list()
 
     links: list[CorrelationLink] = []
 
     for finding in scan.findings:
         f_dict = finding.model_dump() if hasattr(finding, "model_dump") else finding
+        f_keywords = _finding_keywords(f_dict)
         for alert in alerts:
-            matched = _check_correlation(f_dict, alert, target_host)
+            matched = _check_correlation(f_dict, alert, target_host, f_keywords)
             if matched:
                 links.append(matched)
 
@@ -107,7 +114,9 @@ async def list_correlations(
 ) -> list[Correlation]:
     """List correlations newest first. If user_id given, scope to that user's scans."""
     if user_id is not None:
-        user_scans = await Scan.find({"user_id": user_id}).to_list()
+        # Limit scan ID fetch to recent 30 days to prevent O(N) memory load
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        user_scans = await Scan.find({"user_id": user_id, "created_at": {"$gte": cutoff}}).limit(200).to_list()
         scan_ids = [str(s.id) for s in user_scans]
         return (
             await Correlation.find({"scan_id": {"$in": scan_ids}})
@@ -128,7 +137,8 @@ async def list_correlations(
 async def count_correlations(user_id: Optional[str] = None) -> int:
     """Count correlations scoped to a user's scans."""
     if user_id is not None:
-        user_scans = await Scan.find({"user_id": user_id}).to_list()
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        user_scans = await Scan.find({"user_id": user_id, "created_at": {"$gte": cutoff}}).limit(200).to_list()
         scan_ids = [str(s.id) for s in user_scans]
         return await Correlation.find({"scan_id": {"$in": scan_ids}}).count()
     return await Correlation.find().count()
@@ -152,9 +162,9 @@ async def delete_correlation(correlation_id: str, user_id: str) -> None:
 
 async def delete_all_correlations(user_id: str) -> int:
     """Delete all correlations for a user's scans. Returns count deleted."""
-    user_scans = await Scan.find({"user_id": user_id}).to_list()
+    user_scans = await Scan.find({"user_id": user_id}).limit(1000).to_list()
     scan_ids = [str(s.id) for s in user_scans]
-    correlations = await Correlation.find({"scan_id": {"$in": scan_ids}}).to_list()
+    correlations = await Correlation.find({"scan_id": {"$in": scan_ids}}).limit(1000).to_list()
     count = len(correlations)
     for c in correlations:
         await c.delete()
@@ -170,7 +180,14 @@ def _extract_host(target: str) -> str:
         return target
 
 
-def _check_correlation(finding: dict, alert: Alert, target_host: str) -> Optional[CorrelationLink]:
+def _finding_keywords(finding: dict) -> frozenset[str]:
+    """Extract significant keywords from a finding, computed once per finding."""
+    name = finding.get("name", "").lower()
+    desc = finding.get("description", "").lower()
+    return frozenset(w for w in _WORD_RE.findall(f"{name} {desc}") if w not in _STOPWORDS)
+
+
+def _check_correlation(finding: dict, alert: Alert, target_host: str, f_keywords: frozenset[str]) -> Optional[CorrelationLink]:
     """Check if a finding correlates with an alert. Returns a link or None."""
     # 1. IP/host match — alert from same host as scan target
     if _ip_match(alert, target_host):
@@ -221,7 +238,7 @@ def _check_correlation(finding: dict, alert: Alert, target_host: str) -> Optiona
             )
 
     # 5. Keyword/description match (across all alerts)
-    if _keyword_match(finding, alert):
+    if _keyword_match(alert, f_keywords):
         return CorrelationLink(
             finding_tool=finding.get("tool", ""),
             finding_name=finding.get("name", ""),
@@ -289,32 +306,20 @@ def _port_match(finding: dict, alert: Alert) -> bool:
     if finding.get("tool") != "nmap":
         return False
     matched_at = finding.get("matched_at", "")
-    # Extract port from "host:port" format
-    port_match = re.search(r":(\d+)", matched_at)
-    if not port_match:
+    m = _PORT_RE.search(matched_at)
+    if not m:
         return False
-    port = port_match.group(1)
+    port = m.group(1)
     alert_text = f"{alert.full_log} {alert.data or ''}"
     return port in alert_text
 
 
-def _keyword_match(finding: dict, alert: Alert) -> bool:
-    """Check for significant keyword overlap between finding and alert."""
-    finding_keywords = set()
-    name = finding.get("name", "").lower()
-    desc = finding.get("description", "").lower()
-
-    # Extract significant words (>4 chars, not common)
-    stopwords = {"the", "and", "for", "this", "that", "with", "from", "have", "been", "found", "detected"}
-    for word in re.findall(r"\b[a-z]{5,}\b", f"{name} {desc}"):
-        if word not in stopwords:
-            finding_keywords.add(word)
-
-    if len(finding_keywords) < 2:
+def _keyword_match(alert: Alert, f_keywords: frozenset[str]) -> bool:
+    """Check for significant keyword overlap between pre-extracted finding keywords and alert."""
+    if len(f_keywords) < 2:
         return False
-
     alert_text = f"{alert.rule_description} {alert.full_log}".lower()
-    matches = sum(1 for kw in finding_keywords if kw in alert_text)
+    matches = sum(1 for kw in f_keywords if kw in alert_text)
     return matches >= 2
 
 

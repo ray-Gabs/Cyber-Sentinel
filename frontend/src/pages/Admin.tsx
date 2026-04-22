@@ -23,7 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { listUsers, updateUserRole, toggleUserStatus, approveUser, suspendUser, getUserAgentConfigs } from "@/services/authService";
 import { downloadAgentCompose } from "@/services/socService";
 import type { UserResponse, UserRole } from "@/types";
-import { ROUTES, TOKEN_KEY } from "@/lib/constants";
+import { ROUTES, TOKEN_KEY, API_BASE } from "@/lib/constants";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -97,7 +97,7 @@ export default function Admin() {
     if (me && me.role !== "admin") navigate(ROUTES.DASHBOARD, { replace: true });
   }, [me, navigate]);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -107,14 +107,13 @@ export default function Admin() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   const loadStats = useCallback(async (range: "7d"|"30d"|"90d" = "7d") => {
     setStatsLoading(true);
     try {
-      const API   = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
       const token = localStorage.getItem(TOKEN_KEY);
-      const res   = await fetch(`${API}/api/analytics/admin-stats?range=${range}`, {
+      const res   = await fetch(`${API_BASE}/api/analytics/admin-stats?range=${range}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) setAdminStats(await res.json());
@@ -125,9 +124,8 @@ export default function Admin() {
   async function exportCSV() {
     setExporting(true);
     try {
-      const API   = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
       const token = localStorage.getItem(TOKEN_KEY);
-      const res   = await fetch(`${API}/api/analytics/admin-stats/export?range=${statsRange}`, {
+      const res   = await fetch(`${API_BASE}/api/analytics/admin-stats/export?range=${statsRange}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -148,7 +146,7 @@ export default function Admin() {
     loadStats(r);
   }
 
-  useEffect(() => { load(); loadStats("7d"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); loadStats("7d"); }, [load, loadStats]);
 
   function showToast(msg: string, ok: boolean) {
     setToast({ msg, ok });

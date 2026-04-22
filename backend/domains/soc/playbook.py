@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from beanie import Document
 from pydantic import BaseModel, Field
+from pymongo import ASCENDING, DESCENDING, IndexModel
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +43,13 @@ class PlaybookExecution(Document):
 
     class Settings:
         name = "playbook_executions"
+        indexes = [
+            IndexModel([("alert_id", ASCENDING)]),
+            IndexModel([("created_at", DESCENDING)]),
+            IndexModel([("status", ASCENDING)]),
+            # TTL — expire execution records after 90 days
+            IndexModel([("created_at", ASCENDING)], expireAfterSeconds=7_776_000),
+        ]
 
 
 # --------------- Playbook Definitions ---------------
@@ -231,16 +239,25 @@ class PlaybookEngine:
             return f"Wazuh AR call failed: {str(e)[:200]}"
 
     async def _action_notify(self, action: PlaybookAction, alert) -> str:
-        """Send a WebSocket notification to the SOC dashboard."""
+        """Publish a playbook notification via Redis so the WS relay can broadcast it.
+
+        Using Redis pub/sub (not ws_manager directly) so this works from both
+        FastAPI request handlers and Celery workers.
+        """
+        import json
+        import redis.asyncio as aioredis
+        from core.config import settings
         try:
-            from core.websocket import ws_manager
             channel = action.parameters.get("channel", "alerts")
-            await ws_manager.broadcast(channel, {
+            payload = {
                 "type": "playbook_action",
                 "alert_id": str(alert.id),
                 "playbook": action.description,
                 "priority": action.parameters.get("priority", "medium"),
-            })
+            }
+            r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2)
+            await r.publish(f"ws:{channel}", json.dumps(payload))
+            await r.aclose()
             return "Notification sent to dashboard"
         except Exception:
             return "Notification sent (best-effort)"

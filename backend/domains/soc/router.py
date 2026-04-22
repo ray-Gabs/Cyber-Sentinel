@@ -347,7 +347,7 @@ async def trigger_playbook(
 @router.get("/mitre-summary", tags=["SOC"])
 async def get_mitre_summary(current_user: User = Depends(get_current_user)) -> dict:
     """Aggregate MITRE ATT&CK technique frequency from the most recent 2000 alerts."""
-    alerts = await Alert.find().sort("-timestamp").limit(2000).to_list()
+    alerts = await Alert.find().sort("-timestamp").limit(500).to_list()
 
     by_tactic: dict[str, dict[str, int]] = {}
     total_hits = 0

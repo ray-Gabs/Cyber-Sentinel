@@ -29,7 +29,12 @@ export async function getMe(): Promise<UserResponse> {
   return res.data;
 }
 
-/** Remove token and log out */
+/** Remove token without redirecting (stale/invalid token cleanup) */
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+/** Remove token and redirect to login */
 export function logout(): void {
   localStorage.removeItem(TOKEN_KEY);
   window.location.href = "/login";
