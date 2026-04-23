@@ -24,6 +24,7 @@ from domains.soc.schemas import (
     CustomRuleResponse,
 )
 from domains.soc import service
+from domains.audit import service as audit_service
 
 router = APIRouter()
 
@@ -167,6 +168,14 @@ async def create_detection_rule(data: CustomRuleCreate, user: User = Depends(get
         rule = await service.create_rule(str(user.id), data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="detection_rule.created",
+        resource_type="detection_rule",
+        resource_id=str(rule.id),
+        details=f"name={rule.name} severity={rule.severity} pattern={rule.pattern[:60]}",
+    )
     return CustomRuleResponse(
         id=str(rule.id), user_id=rule.user_id, name=rule.name,
         description=rule.description, pattern=rule.pattern,
@@ -181,6 +190,15 @@ async def update_detection_rule(rule_id: str, data: CustomRuleUpdate, user: User
         rule = await service.update_rule(rule_id, str(user.id), data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    changed = ", ".join(k for k, v in data.model_dump(exclude_none=True).items())
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="detection_rule.updated",
+        resource_type="detection_rule",
+        resource_id=rule_id,
+        details=f"name={rule.name} changed_fields={changed}",
+    )
     return CustomRuleResponse(
         id=str(rule.id), user_id=rule.user_id, name=rule.name,
         description=rule.description, pattern=rule.pattern,
@@ -199,6 +217,13 @@ async def delete_all_detection_rules(user: User = Depends(get_current_user)):
 async def delete_detection_rule(rule_id: str, user: User = Depends(get_current_user)):
     """Delete a single detection rule by ID."""
     await service.delete_rule(rule_id, str(user.id))
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="detection_rule.deleted",
+        resource_type="detection_rule",
+        resource_id=rule_id,
+    )
     return {"deleted": rule_id}
 
 
@@ -307,6 +332,14 @@ async def override_verdict(
 ):
     """Human analyst overrides the AI classification for an alert."""
     a = await service.override_verdict(alert_id, data)
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="alert.triaged",
+        resource_type="alert",
+        resource_id=alert_id,
+        details=f"override={data.override} notes={str(data.notes or '')[:80]}",
+    )
     return _to_detail(a)
 
 

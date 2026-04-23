@@ -143,11 +143,17 @@ export default function MitreNavigator() {
 
       {/* Empty */}
       {!loading && data && tactics.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-24 gap-3">
+        <div className="flex flex-col items-center justify-center py-16 gap-4">
           <Target size={40} style={{ color: "var(--text-subtle)" }} />
-          <p className="text-sm" style={{ color: "var(--text-subtle)" }}>
-            No MITRE techniques detected yet
-          </p>
+          <div className="text-center">
+            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>
+              No MITRE techniques detected yet
+            </p>
+            <p className="text-xs mt-1 max-w-sm" style={{ color: "var(--text-subtle)" }}>
+              This heatmap populates automatically as Wazuh alerts with MITRE tags are ingested.
+              Make sure your Wazuh agent is active and generating events.
+            </p>
+          </div>
         </div>
       )}
 

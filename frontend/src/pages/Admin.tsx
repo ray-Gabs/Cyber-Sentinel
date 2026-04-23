@@ -264,7 +264,7 @@ export default function Admin() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col gap-6 p-4 sm:p-6 md:p-8 max-w-5xl mx-auto w-full">
+    <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto w-full">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

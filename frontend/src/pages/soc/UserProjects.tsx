@@ -3,9 +3,11 @@
  * Each project maps to a monitored target + Wazuh agent deployment.
  */
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Trash2, Download, ExternalLink, Server, RefreshCw, X,
+  ShieldAlert, Calendar, ChevronRight,
 } from "lucide-react";
 import api from "@/services/api";
 
@@ -103,19 +105,26 @@ export default function UserProjects() {
     URL.revokeObjectURL(url);
   }
 
+  const connected = projects.filter(p => p.wazuh_agent_registered).length;
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1
-            className="text-xl font-semibold"
-            style={{ color: "var(--text-base)", fontFamily: "Syne, sans-serif" }}
+            className="text-xl font-bold"
+            style={{ color: "var(--text-base)", fontFamily: "Syne, sans-serif", letterSpacing: "-0.02em" }}
           >
-            Projects
+            My Projects
           </h1>
           <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
             Monitored targets and Wazuh agent deployments
+            {projects.length > 0 && (
+              <span className="ml-2" style={{ color: "var(--text-subtle)" }}>
+                · {connected}/{projects.length} agent{projects.length !== 1 ? "s" : ""} connected
+              </span>
+            )}
           </p>
         </div>
         <button
@@ -157,28 +166,58 @@ export default function UserProjects() {
 
       {/* ── Empty state ────────────────────────────────────────────────────── */}
       {!loading && !error && projects.length === 0 && (
-        <div className="py-20 text-center">
-          <Server
-            size={32}
-            className="mx-auto mb-3 opacity-25"
-            style={{ color: "var(--text-muted)" }}
-          />
-          <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>
-            No projects yet
-          </p>
-          <p
-            className="text-xs mt-1 mb-5"
-            style={{ color: "var(--text-subtle)" }}
+        <div className="space-y-5">
+          <div className="py-12 text-center">
+            <Server
+              size={32}
+              className="mx-auto mb-3 opacity-25"
+              style={{ color: "var(--text-muted)" }}
+            />
+            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>
+              No projects yet
+            </p>
+            <p className="text-xs mt-1 mb-5" style={{ color: "var(--text-subtle)" }}>
+              A project links a monitored target to a Wazuh agent deployment.
+            </p>
+            <button
+              onClick={openModal}
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-90"
+              style={{ backgroundColor: "var(--accent)", color: "#000" }}
+            >
+              Create your first project
+            </button>
+          </div>
+
+          {/* Quick-start guide */}
+          <div
+            className="rounded-xl p-5"
+            style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}
           >
-            Create a project, deploy a Wazuh agent, and start monitoring.
-          </p>
-          <button
-            onClick={openModal}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-90"
-            style={{ backgroundColor: "var(--accent)", color: "#000" }}
-          >
-            Create your first project
-          </button>
+            <p className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: "var(--text-subtle)" }}>
+              How it works
+            </p>
+            <ol className="space-y-3">
+              {[
+                ["1", "Create a project", "Give it a name and the target URL (e.g. http://192.168.1.x:3000)"],
+                ["2", "Download the agent compose", "Click \"Deploy Agent\" to get a pre-configured docker-compose.yml for that project"],
+                ["3", "Run it on the target host", "docker compose up -d on the machine running Juice Shop / DVWA"],
+                ["4", "Alerts flow in automatically", "The Wazuh agent monitors the host and pushes events to Cyber Sentinel via webhook"],
+              ].map(([num, title, desc]) => (
+                <li key={num} className="flex items-start gap-3">
+                  <span
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5"
+                    style={{ backgroundColor: "rgba(59,130,246,0.15)", color: "#60a5fa" }}
+                  >
+                    {num}
+                  </span>
+                  <div>
+                    <p className="text-xs font-medium" style={{ color: "var(--text-base)" }}>{title}</p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--text-subtle)" }}>{desc}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
       )}
 
@@ -245,19 +284,55 @@ export default function UserProjects() {
                   </div>
                 )}
 
+                {/* Created date */}
+                <div
+                  className="flex items-center gap-1.5 text-[11px]"
+                  style={{ color: "var(--text-subtle)" }}
+                >
+                  <Calendar size={10} />
+                  <span>Added {formatRelative(project.created_at)}</span>
+                </div>
+
                 {/* Actions */}
-                <div className="flex items-center gap-2 mt-auto pt-1">
+                <div
+                  className="flex items-center gap-2 mt-auto pt-2"
+                  style={{ borderTop: "1px solid var(--border)" }}
+                >
+                  {project.wazuh_agent_name ? (
+                    <Link
+                      to={`/soc/alerts?agent=${encodeURIComponent(project.wazuh_agent_name)}`}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-1 justify-center transition-colors"
+                      style={{
+                        backgroundColor: "rgba(245,158,11,0.08)",
+                        color: "#fbbf24",
+                        border: "1px solid rgba(245,158,11,0.2)",
+                      }}
+                    >
+                      <ShieldAlert size={11} />
+                      View Alerts
+                      <ChevronRight size={10} />
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => handleDownloadCompose(project.id, project.slug)}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-1 justify-center transition-colors"
+                      style={{
+                        backgroundColor: "rgba(59,130,246,0.08)",
+                        color: "#60a5fa",
+                        border: "1px solid rgba(59,130,246,0.2)",
+                      }}
+                    >
+                      <Download size={11} />
+                      Deploy Agent
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDownloadCompose(project.id, project.slug)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-1 justify-center transition-colors"
-                    style={{
-                      backgroundColor: "rgba(59,130,246,0.08)",
-                      color: "#60a5fa",
-                      border: "1px solid rgba(59,130,246,0.2)",
-                    }}
+                    className="p-1.5 rounded-lg transition-colors hover:bg-[var(--bg-muted)]"
+                    style={{ color: "var(--text-subtle)" }}
+                    title="Download agent compose"
                   >
-                    <Download size={11} />
-                    Deploy Agent
+                    <Download size={13} />
                   </button>
                   <button
                     onClick={() => handleDelete(project.id)}
@@ -395,6 +470,16 @@ export default function UserProjects() {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatRelative(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const days = Math.floor(diff / 86_400_000);
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return months === 1 ? "1 month ago" : `${months} months ago`;
+}
 
 function AgentBadge({ registered }: { registered: boolean }) {
   return registered ? (

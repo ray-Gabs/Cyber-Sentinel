@@ -90,6 +90,7 @@ export interface AlertFilterParams {
 
 export interface DetectionRule {
   id: string;
+  user_id: string;
   name: string;
   description?: string;
   pattern: string;
