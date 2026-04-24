@@ -21,7 +21,12 @@ Optional env vars:
     STATE_FILE              Tracks last-read byte offset across restarts
                             (default: /var/ossec/wazuh_forwarder.state)
     MIN_LEVEL               Only forward alerts at or above this Wazuh level
-                            (default: 3 — filters noise below level 3)
+                            (default: 3). The backend also applies per-tenant
+                            min_level — set this low (e.g. 1) and let the
+                            dashboard control the threshold per user.
+    TENANT_GROUP            Wazuh agent group name for this tenant, e.g.
+                            "tenant_juiceshop". Injected as _cs_group so the
+                            backend can tag and filter alerts by group.
     LOG_LEVEL               DEBUG / INFO / WARNING (default: INFO)
     MAX_RETRIES             Retry attempts per batch before dropping (default: 5)
     RETRY_BACKOFF           Base seconds for exponential backoff (default: 2)
@@ -46,6 +51,7 @@ BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "20"))
 POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL", "5"))
 STATE_FILE = Path(os.environ.get("STATE_FILE", "/var/ossec/wazuh_forwarder.state"))
 MIN_LEVEL = int(os.environ.get("MIN_LEVEL", "3"))
+TENANT_GROUP = os.environ.get("TENANT_GROUP", "")   # e.g. "tenant_juiceshop"
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "5"))
 RETRY_BACKOFF = float(os.environ.get("RETRY_BACKOFF", "2"))
@@ -80,6 +86,9 @@ def _save_offset(offset: int) -> None:
 
 def _post_batch(alerts: list[dict]) -> bool:
     """POST a list of alert dicts to Cyber Sentinel. Returns True on success."""
+    # Inject agent group so the backend can tag alerts by tenant group
+    if TENANT_GROUP:
+        alerts = [{**a, "_cs_group": TENANT_GROUP} for a in alerts]
     payload = json.dumps({"alerts": alerts}).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
@@ -168,6 +177,7 @@ def main() -> None:
     log.info("  Target : %s", WEBHOOK_URL)
     log.info("  Token  : %s", "set" if WEBHOOK_TOKEN else "NOT SET (insecure!)")
     log.info("  MinLvl : %d", MIN_LEVEL)
+    log.info("  Group  : %s", TENANT_GROUP or "(none — set TENANT_GROUP)")
     log.info("  Batch  : %d alerts per request", BATCH_SIZE)
 
     offset = _load_offset()

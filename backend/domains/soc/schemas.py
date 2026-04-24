@@ -14,6 +14,7 @@ class AlertSummaryResponse(BaseModel):
     wazuh_id: str
     timestamp: datetime
     agent_name: str
+    agent_group: str = ""
     rule_id: str
     rule_description: str
     rule_level: int
@@ -82,7 +83,25 @@ class AlertFilterParams(BaseModel):
     rule_level_min: Optional[int] = None
     rule_level_max: Optional[int] = None
     agent_name: Optional[str] = None
+    agent_group: Optional[str] = None
     ai_verdict: Optional[str] = None       # TRUE_POSITIVE | FALSE_POSITIVE | UNKNOWN
     analyst_override: Optional[str] = None
     page: int = 1
     size: int = 50
+
+
+# --------------- Multi-tenant / Wazuh settings ---------------
+
+class TenantSettingsUpdate(BaseModel):
+    """Update per-user Wazuh integration settings."""
+    wazuh_min_level: Optional[int] = Field(None, ge=0, le=15,
+                                           description="Minimum Wazuh alert level to ingest (0–15)")
+    wazuh_agent_group: Optional[str] = Field(None, description="Agent group name, e.g. tenant_juiceshop")
+
+
+class WazuhTokenResponse(BaseModel):
+    token: str
+    webhook_url: str
+    min_level: int
+    agent_group: Optional[str]
+    instructions: str

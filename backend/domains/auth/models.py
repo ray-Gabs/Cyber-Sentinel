@@ -46,6 +46,11 @@ class User(Document):
     # Admin role ignores this filter and always sees all alerts.
     wazuh_agent_name: Optional[str] = None
 
+    # Multi-tenant Wazuh integration (professor's recommendation)
+    wazuh_token: Optional[str] = None          # Per-user forwarder token (secrets.token_urlsafe)
+    wazuh_min_level: int = 3                   # Per-user minimum alert level (0–15)
+    wazuh_agent_group: Optional[str] = None    # Wazuh agent group, e.g. "tenant_juiceshop"
+
     # Per-user notification preferences
     notification_prefs: dict = Field(default_factory=lambda: {
         "min_alert_level": 7,
@@ -64,6 +69,7 @@ class User(Document):
             IndexModel([("username", ASCENDING)], unique=True),
             IndexModel([("password_reset_token_hash", ASCENDING)], sparse=True),
             IndexModel([("wazuh_agent_name", ASCENDING)], sparse=True),
+            IndexModel([("wazuh_token", ASCENDING)], unique=True, sparse=True),
             IndexModel([("status", ASCENDING)]),
         ]
 

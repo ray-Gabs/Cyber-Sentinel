@@ -22,6 +22,8 @@ from domains.soc.schemas import (
     CustomRuleCreate,
     CustomRuleUpdate,
     CustomRuleResponse,
+    TenantSettingsUpdate,
+    WazuhTokenResponse,
 )
 from domains.soc import service
 from domains.audit import service as audit_service
@@ -35,6 +37,7 @@ def _to_summary(a: Alert) -> AlertSummaryResponse:
         wazuh_id=a.wazuh_id,
         timestamp=a.timestamp,
         agent_name=a.agent_name,
+        agent_group=a.agent_group,
         rule_id=a.rule_id,
         rule_description=a.rule_description,
         rule_level=a.rule_level,
@@ -43,6 +46,7 @@ def _to_summary(a: Alert) -> AlertSummaryResponse:
         ai_action=a.ai_action,
         analyst_override=a.analyst_override,
         mitre_techniques=a.mitre_techniques,
+        matched_rules=a.matched_rules,
         ingested_at=a.ingested_at,
     )
 
@@ -82,13 +86,14 @@ async def list_alerts(
     rule_level_min: Optional[int] = Query(None, ge=0, le=15),
     ai_verdict: Optional[str] = Query(None),
     agent_name: Optional[str] = Query(None),
+    agent_group: Optional[str] = Query(None, description="Filter by Wazuh agent group (admin only)"),
     project_id: Optional[str] = Query(None, description="Filter alerts by project ID"),
     user: User = Depends(get_current_user),
 ):
     """List ingested Wazuh alerts (newest first) with optional filters."""
     alerts = await service.list_alerts(
         page, size, rule_level_min, ai_verdict, agent_name,
-        project_id=project_id, current_user=user,
+        agent_group=agent_group, project_id=project_id, current_user=user,
     )
     return [_to_summary(a) for a in alerts]
 
@@ -285,15 +290,34 @@ async def wazuh_webhook(
             detail="Payload exceeds 10 MB limit",
         )
 
-    # ── Shared-secret verification (timing-safe) ────────────────────────────
-    if settings.wazuh_webhook_token:
-        token = x_wazuh_token or ""
-        # hmac.compare_digest prevents timing-oracle attacks on string comparison
-        if not hmac.compare_digest(token, settings.wazuh_webhook_token):
+    # ── Token resolution: per-user token takes priority over global token ──────
+    # Professor's recommendation: each user has their own token so alerts are
+    # automatically routed to the correct tenant without sharing a secret.
+    tenant_id: Optional[str] = None
+    tenant_min_level: int = 0
+
+    provided_token = x_wazuh_token or ""
+    if provided_token:
+        # Try per-user token first (DB lookup is not timing-sensitive here)
+        owner = await User.find_one({"wazuh_token": provided_token})
+        if owner:
+            tenant_id = str(owner.id)
+            tenant_min_level = owner.wazuh_min_level
+        elif settings.wazuh_webhook_token and hmac.compare_digest(
+            provided_token, settings.wazuh_webhook_token
+        ):
+            pass  # global shared token — no tenant assignment (admin ingest)
+        else:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid webhook token",
             )
+    elif settings.wazuh_webhook_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing X-Wazuh-Token header",
+        )
+    # else: no auth configured — allow through (dev/lab mode)
 
     # ── Parse body ──────────────────────────────────────────────────────────
     try:
@@ -321,17 +345,126 @@ async def wazuh_webhook(
     from domains.soc.tasks import triage_single_alert
 
     ingested = []
+    skipped = 0
     for raw in raw_alerts:
         if not isinstance(raw, dict):
             continue  # skip malformed entries in a batch
+        # Per-tenant MIN_LEVEL filter (professor's recommendation: not hardcoded in .env)
+        level = raw.get("rule", {}).get("level", 0)
+        if level < tenant_min_level:
+            skipped += 1
+            continue
         try:
-            alert = await service.ingest_wazuh_alert(raw)
+            alert = await service.ingest_wazuh_alert(raw, tenant_id=tenant_id)
             await asyncio.to_thread(triage_single_alert.delay, str(alert.id))
             ingested.append({"alert_id": str(alert.id), "wazuh_id": alert.wazuh_id})
         except Exception as exc:
             log.warning("[webhook] Failed to ingest alert: %s", exc)
 
-    return {"status": "ok", "ingested": len(ingested), "alerts": ingested}
+    return {"status": "ok", "ingested": len(ingested), "skipped": skipped, "alerts": ingested}
+
+
+# ── Per-user Wazuh tenant management ──────────────────────────────────────────
+# Per professor's recommendation: each user has their own token + min_level + group.
+
+@router.get("/tenant/token", response_model=WazuhTokenResponse)
+async def get_my_wazuh_token(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    """
+    Get the current user's per-user Wazuh webhook token and setup instructions.
+    Use POST /tenant/token to generate a new token if one hasn't been created yet.
+    """
+    if not user.wazuh_token:
+        raise HTTPException(
+            status_code=404,
+            detail="No token generated yet. POST to /api/soc/tenant/token to create one.",
+        )
+    base_url = str(request.base_url).rstrip("/")
+    return WazuhTokenResponse(
+        token=user.wazuh_token,
+        webhook_url=f"{base_url}/api/soc/webhook",
+        min_level=user.wazuh_min_level,
+        agent_group=user.wazuh_agent_group,
+        instructions=(
+            f"Set these env vars on the Wazuh Manager before running wazuh_forwarder.py:\n"
+            f"  export CYBER_SENTINEL_URL={base_url}\n"
+            f"  export WAZUH_WEBHOOK_TOKEN={user.wazuh_token}\n"
+            f"  export TENANT_GROUP={user.wazuh_agent_group or 'tenant_<yourproject>'}\n"
+            f"  export MIN_LEVEL={user.wazuh_min_level}  # optional override (backend filters too)"
+        ),
+    )
+
+
+@router.post("/tenant/token", response_model=WazuhTokenResponse, status_code=201)
+async def generate_my_wazuh_token(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    """
+    Generate (or regenerate) a per-user Wazuh webhook token.
+    The token is stored on the user record and must be sent as X-Wazuh-Token
+    in the forwarder's requests so alerts are tagged to this tenant.
+    """
+    import secrets
+    user.wazuh_token = secrets.token_urlsafe(32)
+    await user.save()
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="wazuh_token.regenerated",
+        resource_type="user",
+        resource_id=str(user.id),
+    )
+    base_url = str(request.base_url).rstrip("/")
+    return WazuhTokenResponse(
+        token=user.wazuh_token,
+        webhook_url=f"{base_url}/api/soc/webhook",
+        min_level=user.wazuh_min_level,
+        agent_group=user.wazuh_agent_group,
+        instructions=(
+            f"Set these env vars on the Wazuh Manager before running wazuh_forwarder.py:\n"
+            f"  export CYBER_SENTINEL_URL={base_url}\n"
+            f"  export WAZUH_WEBHOOK_TOKEN={user.wazuh_token}\n"
+            f"  export TENANT_GROUP={user.wazuh_agent_group or 'tenant_<yourproject>'}\n"
+            f"  export MIN_LEVEL={user.wazuh_min_level}  # optional override (backend filters too)"
+        ),
+    )
+
+
+@router.patch("/tenant/settings")
+async def update_tenant_settings(
+    data: TenantSettingsUpdate,
+    user: User = Depends(get_current_user),
+):
+    """
+    Update per-user Wazuh settings: minimum alert level and agent group.
+    min_level controls which alerts are stored for this tenant (backend-enforced).
+    agent_group is the Wazuh group name to assign to your agents (e.g. tenant_juiceshop).
+    """
+    changed: list[str] = []
+    if data.wazuh_min_level is not None:
+        user.wazuh_min_level = data.wazuh_min_level
+        changed.append(f"min_level={data.wazuh_min_level}")
+    if data.wazuh_agent_group is not None:
+        user.wazuh_agent_group = data.wazuh_agent_group
+        changed.append(f"agent_group={data.wazuh_agent_group}")
+    if changed:
+        await user.save()
+        await audit_service.log_event(
+            user_id=str(user.id),
+            username=user.username,
+            action="tenant_settings.updated",
+            resource_type="user",
+            resource_id=str(user.id),
+            details=", ".join(changed),
+        )
+    return {
+        "wazuh_min_level": user.wazuh_min_level,
+        "wazuh_agent_group": user.wazuh_agent_group,
+        "message": f"Updated: {', '.join(changed)}" if changed else "No changes",
+    }
 
 
 @router.get("/{alert_id}", response_model=AlertDetailResponse)

@@ -52,6 +52,10 @@ class Alert(Document):
     # Custom rule matches (populated at ingestion time)
     matched_rules: list[str] = []
 
+    # Multi-tenant isolation
+    tenant_id: Optional[str] = None        # str(User.id) resolved from per-user wazuh_token
+    agent_group: str = ""                  # Wazuh agent group, e.g. "tenant_juiceshop"
+
     # Meta
     ingested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     analysed_at: Optional[datetime] = None
@@ -70,6 +74,8 @@ class Alert(Document):
             IndexModel([("agent_id", ASCENDING), ("timestamp", DESCENDING)]),
             # Compound for severity dashboard queries (rule_level >= X ORDER BY timestamp)
             IndexModel([("rule_level", DESCENDING), ("timestamp", DESCENDING)]),
+            IndexModel([("tenant_id", ASCENDING)]),
+            IndexModel([("tenant_id", ASCENDING), ("timestamp", DESCENDING)]),
             # TTL — auto-expire alerts after 90 days
             IndexModel([("timestamp", ASCENDING)], expireAfterSeconds=7_776_000),
         ]

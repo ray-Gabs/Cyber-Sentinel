@@ -16,10 +16,15 @@ from domains.soc.schemas import AnalystOverrideRequest, CustomRuleCreate, Custom
 log = logging.getLogger(__name__)
 
 
-async def ingest_wazuh_alert(raw: dict) -> Alert:
+async def ingest_wazuh_alert(
+    raw: dict,
+    tenant_id: Optional[str] = None,
+) -> Alert:
     """
     Convert a raw Wazuh alert dict → our Alert document and save it.
     Called by the polling task or webhook handler.
+
+    tenant_id is resolved from the per-user wazuh_token by the webhook endpoint.
     """
     # Check if we already ingested this alert
     wazuh_id = raw.get("id", raw.get("_id", ""))
@@ -50,6 +55,8 @@ async def ingest_wazuh_alert(raw: dict) -> Alert:
         full_log=raw.get("full_log", ""),
         data=raw.get("data"),
         matched_rules=matched_rules,
+        tenant_id=tenant_id,
+        agent_group=raw.get("_cs_group", ""),
     )
     await alert.insert()
 
@@ -183,6 +190,7 @@ async def list_alerts(
     rule_level_min: Optional[int] = None,
     ai_verdict: Optional[str] = None,
     agent_name: Optional[str] = None,
+    agent_group: Optional[str] = None,
     project_id: Optional[str] = None,
     current_user: Optional[User] = None,
 ) -> list[Alert]:
@@ -191,24 +199,29 @@ async def list_alerts(
 
     Scoping rules:
     - Admin role: sees ALL alerts (instructor / SOC analyst view).
-    - Non-admin with a linked wazuh_agent_name: sees ONLY their agent's alerts.
-    - Non-admin without a linked agent: sees all alerts (fallback — student hasn't linked yet).
-    - The explicit agent_name filter param (from the request) always narrows further.
-    - project_id (optional): further restrict results to alerts tagged with that project.
+    - Non-admin with a wazuh_token: sees ONLY their tenant_id alerts (primary isolation).
+    - Non-admin with only wazuh_agent_name: sees that agent's alerts (legacy binding).
+    - Non-admin with neither: sees all alerts (student hasn't linked yet).
+    - Explicit filter params always narrow further on top of tenant scope.
     """
     query: dict = {}
 
-    # Agent-owner scoping for non-admin users
-    if current_user and current_user.role != "admin" and current_user.wazuh_agent_name:
-        query["agent_name"] = current_user.wazuh_agent_name
+    if current_user and current_user.role != "admin":
+        if current_user.wazuh_token:
+            # Per-user token: scope by tenant_id (professor's recommendation)
+            query["tenant_id"] = str(current_user.id)
+        elif current_user.wazuh_agent_name:
+            # Legacy: agent name binding (no token configured yet)
+            query["agent_name"] = current_user.wazuh_agent_name
 
     if rule_level_min is not None:
         query["rule_level"] = {"$gte": rule_level_min}
     if ai_verdict:
         query["ai_verdict"] = ai_verdict
-    # Explicit agent_name filter narrows on top of any scope already set
     if agent_name and "agent_name" not in query:
         query["agent_name"] = {"$regex": re.escape(agent_name), "$options": "i"}
+    if agent_group:
+        query["agent_group"] = {"$regex": re.escape(agent_group), "$options": "i"}
     if project_id:
         query["project_id"] = project_id
 
