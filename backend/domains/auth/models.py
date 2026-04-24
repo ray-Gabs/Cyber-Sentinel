@@ -69,7 +69,11 @@ class User(Document):
             IndexModel([("username", ASCENDING)], unique=True),
             IndexModel([("password_reset_token_hash", ASCENDING)], sparse=True),
             IndexModel([("wazuh_agent_name", ASCENDING)], sparse=True),
-            IndexModel([("wazuh_token", ASCENDING)], unique=True, sparse=True),
+            IndexModel(
+                [("wazuh_token", ASCENDING)],
+                unique=True,
+                partialFilterExpression={"wazuh_token": {"$type": "string"}},
+            ),
             IndexModel([("status", ASCENDING)]),
         ]
 
