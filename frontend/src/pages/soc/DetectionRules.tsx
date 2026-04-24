@@ -338,9 +338,12 @@ export default function DetectionRules() {
 
   useEffect(() => { fetchRules(); }, [fetchRules]);
 
-  // Split: platform rules (read-only) vs user-owned
-  const platformRules = rules.filter((r) => r.user_id === "system");
-  const myRules       = rules.filter((r) => r.user_id !== "system");
+  // Global platform rules: seeded by system with no project scope
+  const platformRules  = rules.filter((r) => r.user_id === "system" && !r.project_id);
+  // Project-preset rules: system-seeded but scoped to a project the user owns (read-only)
+  const presetRules    = rules.filter((r) => r.user_id === "system" && !!r.project_id);
+  // Personal rules: created by this user
+  const myRules        = rules.filter((r) => r.user_id !== "system");
 
   const handleSave = async (form: DetectionRuleCreate) => {
     setSaving(true);
@@ -543,6 +546,36 @@ export default function DetectionRules() {
                 </motion.div>
               )}
             </motion.section>
+
+            {/* ── Project Preset Rules (system-seeded, owner-only, read-only) ── */}
+            {presetRules.length > 0 && (
+              <motion.section
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15, duration: 0.25 }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Globe size={13} style={{ color: "var(--accent)" }} />
+                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-muted)" }}>
+                    Project Presets
+                  </h2>
+                  <span
+                    className="text-[11px] px-1.5 py-0.5 rounded font-mono"
+                    style={{ backgroundColor: "var(--bg-muted)", color: "var(--text-subtle)", border: "1px solid var(--border)" }}
+                  >
+                    {presetRules.length}
+                  </span>
+                  <span className="text-xs ml-1" style={{ color: "var(--text-subtle)" }}>
+                    · scoped to your projects · read-only
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {presetRules.map((rule) => (
+                    <PlatformRuleRow key={rule.id} rule={rule} />
+                  ))}
+                </div>
+              </motion.section>
+            )}
 
             {/* ── Platform Rules ─────────────────────────────────── */}
             {platformRules.length > 0 && (

@@ -91,6 +91,7 @@ export interface AlertFilterParams {
 export interface DetectionRule {
   id: string;
   user_id: string;
+  project_id?: string | null;
   name: string;
   description?: string;
   pattern: string;
@@ -105,6 +106,7 @@ export interface DetectionRuleCreate {
   pattern: string;
   severity: "low" | "medium" | "high" | "critical";
   enabled?: boolean;
+  project_id?: string | null;
 }
 
 export interface DetectionRuleUpdate {

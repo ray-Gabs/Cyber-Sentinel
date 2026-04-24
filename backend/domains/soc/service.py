@@ -84,10 +84,35 @@ def _validate_regex(pattern: str) -> None:
         raise ValueError(f"Invalid regex pattern: {exc}") from exc
 
 
-async def get_rules(user_id: str) -> list[CustomDetectionRule]:
-    """Return all custom rules for a user (includes system defaults)."""
+async def get_rules(
+    user_id: str,
+    owned_project_ids: list[str] | None = None,
+    is_admin: bool = False,
+) -> list[CustomDetectionRule]:
+    """
+    Return detection rules visible to this user.
+
+    Admin → all rules.
+    Everyone else:
+      - Global platform rules (user_id="system", project_id=None)
+      - Their own personal rules (user_id=<uid>, project_id=None)
+      - Rules tied to projects they own (project_id in owned_project_ids)
+    """
+    if is_admin:
+        return await CustomDetectionRule.find().sort(-CustomDetectionRule.created_at).to_list()
+
+    project_ids = owned_project_ids or []
+    conditions: list[dict] = [
+        {"user_id": "system", "project_id": None},
+        {"user_id": user_id, "project_id": None},
+    ]
+    if project_ids:
+        conditions.append(
+            {"user_id": {"$in": ["system", user_id]}, "project_id": {"$in": project_ids}}
+        )
+
     return await CustomDetectionRule.find(
-        {"user_id": {"$in": [user_id, "system"]}}
+        {"$or": conditions}
     ).sort(-CustomDetectionRule.created_at).to_list()
 
 
@@ -95,8 +120,9 @@ async def create_rule(user_id: str, data: CustomRuleCreate) -> CustomDetectionRu
     _validate_regex(data.pattern)
     rule = CustomDetectionRule(
         user_id=user_id,
+        project_id=data.project_id,
         name=data.name,
-        description=data.description,
+        description=data.description or "",
         pattern=data.pattern,
         severity=data.severity,
         enabled=data.enabled,
@@ -110,8 +136,10 @@ async def update_rule(rule_id: str, user_id: str, data: CustomRuleUpdate) -> Cus
     rule = await CustomDetectionRule.get(ObjectId(rule_id))
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
-    if rule.user_id not in (user_id, "system"):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    if rule.user_id == "system":
+        raise HTTPException(status_code=403, detail="Platform rules cannot be modified")
+    if rule.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to edit this rule")
     if data.pattern is not None:
         _validate_regex(data.pattern)
     update_data = data.model_dump(exclude_none=True)

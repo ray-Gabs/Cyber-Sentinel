@@ -149,12 +149,29 @@ async def get_custom_rules(user: User = Depends(get_current_user)):
 
 @router.get("/detection-rules", response_model=list[CustomRuleResponse])
 async def list_detection_rules(user: User = Depends(get_current_user)):
-    """List all custom detection rules for the current user (including system defaults)."""
-    rules = await service.get_rules(str(user.id))
+    """
+    List detection rules visible to the current user.
+
+    Admins see all rules. Analysts see only:
+      - Global platform rules (user_id="system", no project)
+      - Their own personal rules
+      - Rules tied to projects they own
+    """
+    from domains.soc.project_models import SocProject
+
+    is_admin = getattr(user, "role", None) == "admin"
+    owned_project_ids: list[str] = []
+    if not is_admin:
+        projects = await SocProject.find(SocProject.owner_id == str(user.id)).to_list()
+        owned_project_ids = [str(p.id) for p in projects]
+
+    rules = await service.get_rules(
+        str(user.id), owned_project_ids=owned_project_ids, is_admin=is_admin
+    )
     return [
         CustomRuleResponse(
-            id=str(r.id), user_id=r.user_id, name=r.name,
-            description=r.description, pattern=r.pattern,
+            id=str(r.id), user_id=r.user_id, project_id=r.project_id,
+            name=r.name, description=r.description, pattern=r.pattern,
             severity=r.severity, enabled=r.enabled, created_at=r.created_at,
         )
         for r in rules
@@ -163,7 +180,7 @@ async def list_detection_rules(user: User = Depends(get_current_user)):
 
 @router.post("/detection-rules", response_model=CustomRuleResponse, status_code=201)
 async def create_detection_rule(data: CustomRuleCreate, user: User = Depends(get_current_user)):
-    """Create a new custom detection rule."""
+    """Create a new custom detection rule (optionally scoped to a project the user owns)."""
     try:
         rule = await service.create_rule(str(user.id), data)
     except ValueError as exc:
@@ -177,8 +194,8 @@ async def create_detection_rule(data: CustomRuleCreate, user: User = Depends(get
         details=f"name={rule.name} severity={rule.severity} pattern={rule.pattern[:60]}",
     )
     return CustomRuleResponse(
-        id=str(rule.id), user_id=rule.user_id, name=rule.name,
-        description=rule.description, pattern=rule.pattern,
+        id=str(rule.id), user_id=rule.user_id, project_id=rule.project_id,
+        name=rule.name, description=rule.description, pattern=rule.pattern,
         severity=rule.severity, enabled=rule.enabled, created_at=rule.created_at,
     )
 

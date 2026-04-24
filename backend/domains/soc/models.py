@@ -79,12 +79,19 @@ class CustomDetectionRule(Document):
     """
     User-defined detection rules that are matched against incoming Wazuh alerts.
     Stored in the 'custom_detection_rules' collection.
+
+    Scoping:
+      user_id="system" + project_id=None   → global platform rule (all users, read-only)
+      user_id="system" + project_id=<id>   → preset seeded for a specific project (owner-only)
+      user_id=<uid>    + project_id=None   → personal rule (that user only)
+      user_id=<uid>    + project_id=<id>   → rule scoped to that user's project
     """
     user_id: str
+    project_id: Optional[str] = None
     name: str
-    description: str
+    description: str = ""
     pattern: str                               # Regex pattern
-    severity: str                              # Low | Medium | High | Critical
+    severity: str                              # low | medium | high | critical
     enabled: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -93,6 +100,7 @@ class CustomDetectionRule(Document):
         indexes = [
             IndexModel([("user_id", ASCENDING)]),
             IndexModel([("user_id", ASCENDING), ("enabled", ASCENDING)]),
+            IndexModel([("project_id", ASCENDING)]),
         ]
 
 

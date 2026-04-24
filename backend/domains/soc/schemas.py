@@ -50,10 +50,11 @@ class AnalystOverrideRequest(BaseModel):
 
 class CustomRuleCreate(BaseModel):
     name: str
-    description: str
+    description: Optional[str] = None
     pattern: str
-    severity: str = Field(..., pattern="^(Low|Medium|High|Critical)$")
+    severity: str = Field(..., pattern="^(low|medium|high|critical|info)$")
     enabled: bool = True
+    project_id: Optional[str] = None
 
 
 class CustomRuleUpdate(BaseModel):
@@ -67,8 +68,9 @@ class CustomRuleUpdate(BaseModel):
 class CustomRuleResponse(BaseModel):
     id: str
     user_id: str
+    project_id: Optional[str] = None
     name: str
-    description: str
+    description: str = ""
     pattern: str
     severity: str
     enabled: bool
