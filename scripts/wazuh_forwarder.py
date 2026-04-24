@@ -57,7 +57,7 @@ MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "5"))
 RETRY_BACKOFF = float(os.environ.get("RETRY_BACKOFF", "2"))
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "10"))
 
-WEBHOOK_URL = f"{CYBER_SENTINEL_URL}/api/soc/webhook"
+WEBHOOK_URL = f"{CYBER_SENTINEL_URL}/api/alerts/webhook"
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 

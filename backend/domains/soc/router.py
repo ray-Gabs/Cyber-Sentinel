@@ -384,7 +384,7 @@ async def get_my_wazuh_token(
     base_url = str(request.base_url).rstrip("/")
     return WazuhTokenResponse(
         token=user.wazuh_token,
-        webhook_url=f"{base_url}/api/soc/webhook",
+        webhook_url=f"{base_url}/api/alerts/webhook",
         min_level=user.wazuh_min_level,
         agent_group=user.wazuh_agent_group,
         instructions=(
@@ -420,7 +420,7 @@ async def generate_my_wazuh_token(
     base_url = str(request.base_url).rstrip("/")
     return WazuhTokenResponse(
         token=user.wazuh_token,
-        webhook_url=f"{base_url}/api/soc/webhook",
+        webhook_url=f"{base_url}/api/alerts/webhook",
         min_level=user.wazuh_min_level,
         agent_group=user.wazuh_agent_group,
         instructions=(
