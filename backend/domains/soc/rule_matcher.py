@@ -7,9 +7,20 @@
 
 import logging
 import re
+from functools import lru_cache
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=256)
+def _compile(pattern: str) -> re.Pattern | None:
+    """Cache compiled regex patterns — same pattern is reused across all alerts in a batch."""
+    try:
+        return re.compile(pattern, re.IGNORECASE)
+    except re.error:
+        return None
+
 
 # Global platform rules — visible to ALL users, read-only, no project scope.
 # Keep these generic — they apply to any web app / Wazuh deployment.
@@ -100,14 +111,14 @@ def match_alert(alert_data: dict[str, Any], rules: list) -> list[str]:
     for rule in rules:
         if not getattr(rule, "enabled", True):
             continue
-        try:
-            compiled = re.compile(rule.pattern, re.IGNORECASE)
-            for field_val in check_fields:
-                if field_val and compiled.search(field_val):
-                    matched.append(rule.name)
-                    break
-        except re.error:
+        compiled = _compile(rule.pattern)
+        if compiled is None:
             log.warning("[RuleMatcher] Invalid regex in rule '%s': %s", rule.name, rule.pattern)
+            continue
+        for field_val in check_fields:
+            if field_val and compiled.search(field_val):
+                matched.append(rule.name)
+                break
 
     return matched
 

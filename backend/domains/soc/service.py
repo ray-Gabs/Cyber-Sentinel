@@ -35,11 +35,13 @@ async def ingest_wazuh_alert(
     rule = raw.get("rule", {})
     agent = raw.get("agent", {})
 
-    # Run custom rule matching
+    # Run custom rule matching — scope to global platform rules + this tenant's personal rules.
+    # Loading ALL rules would fire User B's personal patterns against User A's alerts.
     from domains.soc.rule_matcher import match_alert
-    all_rules = await CustomDetectionRule.find(
-        CustomDetectionRule.enabled == True  # noqa: E712
-    ).to_list()
+    rule_conditions: list[dict] = [{"user_id": "system", "enabled": True}]
+    if tenant_id:
+        rule_conditions.append({"user_id": tenant_id, "project_id": None, "enabled": True})
+    all_rules = await CustomDetectionRule.find({"$or": rule_conditions}).to_list()
     matched_rules = match_alert(raw, all_rules)
 
     alert = Alert(
