@@ -107,6 +107,8 @@ class CustomDetectionRule(Document):
             IndexModel([("user_id", ASCENDING)]),
             IndexModel([("user_id", ASCENDING), ("enabled", ASCENDING)]),
             IndexModel([("project_id", ASCENDING)]),
+            # Compound for tenant-scoped rule queries (avoids full collection scan at ingest)
+            IndexModel([("user_id", ASCENDING), ("project_id", ASCENDING), ("enabled", ASCENDING)]),
         ]
 
 
