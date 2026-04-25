@@ -143,13 +143,6 @@ async def list_agents(user: User = Depends(get_current_user)):
         )
 
 
-@router.get("/rules/custom")
-async def get_custom_rules(user: User = Depends(get_current_user)):
-    """Get custom SIEM rule definitions (Wazuh XML)."""
-    from domains.soc.wazuh_rules import get_custom_rules
-    return get_custom_rules()
-
-
 # ── Custom Detection Rules CRUD ──────────────────────────────────────────────
 
 @router.get("/detection-rules", response_model=list[CustomRuleResponse])
@@ -208,8 +201,9 @@ async def create_detection_rule(data: CustomRuleCreate, user: User = Depends(get
 @router.put("/detection-rules/{rule_id}", response_model=CustomRuleResponse)
 async def update_detection_rule(rule_id: str, data: CustomRuleUpdate, user: User = Depends(get_current_user)):
     """Update an existing detection rule."""
+    is_admin = getattr(user, "role", "") == "admin"
     try:
-        rule = await service.update_rule(rule_id, str(user.id), data)
+        rule = await service.update_rule(rule_id, str(user.id), data, is_admin=is_admin)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     changed = ", ".join(k for k, v in data.model_dump(exclude_none=True).items())
@@ -238,7 +232,8 @@ async def delete_all_detection_rules(user: User = Depends(get_current_user)):
 @router.delete("/detection-rules/{rule_id}", status_code=200)
 async def delete_detection_rule(rule_id: str, user: User = Depends(get_current_user)):
     """Delete a single detection rule by ID."""
-    await service.delete_rule(rule_id, str(user.id))
+    is_admin = getattr(user, "role", "") == "admin"
+    await service.delete_rule(rule_id, str(user.id), is_admin=is_admin)
     await audit_service.log_event(
         user_id=str(user.id),
         username=user.username,
