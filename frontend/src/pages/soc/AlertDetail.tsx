@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getAlert, overrideAlert, enrichAlert, getAlertPlaybooks, triggerPlaybook, PlaybookExecution } from "@/services/alertService";
+import { getAlert, overrideAlert, enrichAlert, getAlertPlaybooks, triggerPlaybook, createDetectionRule, PlaybookExecution } from "@/services/alertService";
 import { formatDate, cn } from "@/lib/utils";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import {
@@ -20,8 +20,229 @@ import {
   Zap,
   ChevronDown,
   ChevronUp,
+  Plus,
+  X,
+  CheckCheck,
 } from "lucide-react";
-import type { Alert } from "@/types";
+import type { Alert, DetectionRuleCreate } from "@/types";
+
+/* ── Helpers ─────────────────────────────────────────── */
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function severityFromLevel(level: number): DetectionRuleCreate["severity"] {
+  if (level >= 13) return "critical";
+  if (level >= 10) return "high";
+  if (level >= 7) return "medium";
+  return "low";
+}
+
+function buildInitialForm(alert: Alert): DetectionRuleCreate {
+  return {
+    name: `From alert: ${alert.rule_description.slice(0, 50)}`,
+    pattern: escapeRegex(alert.rule_description),
+    severity: severityFromLevel(alert.rule_level),
+    enabled: true,
+    project_id: null,
+  };
+}
+
+/* ── CreateRuleFromAlertModal ────────────────────────── */
+
+interface CreateRuleFromAlertModalProps {
+  alert: Alert;
+  onClose: () => void;
+}
+
+function CreateRuleFromAlertModal({ alert, onClose }: CreateRuleFromAlertModalProps) {
+  const [form, setForm] = useState<DetectionRuleCreate>(() => buildInitialForm(alert));
+  const [testInput, setTestInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  const testMatch = (() => {
+    if (!testInput || !form.pattern) return null;
+    try {
+      return new RegExp(form.pattern).test(testInput);
+    } catch {
+      return null;
+    }
+  })();
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      await createDetectionRule(form);
+      setSaved(true);
+      setTimeout(onClose, 1200);
+    } catch {
+      setSaveError("Failed to create rule. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const field = (
+    label: string,
+    value: string,
+    onChange: (v: string) => void,
+    extra?: React.InputHTMLAttributes<HTMLInputElement>
+  ) => (
+    <div className="space-y-1">
+      <label className="text-xs font-medium uppercase" style={{ color: "var(--text-muted)" }}>
+        {label}
+      </label>
+      <input
+        className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1"
+        style={{
+          backgroundColor: "var(--surface)",
+          borderColor: "var(--border)",
+          color: "var(--text-base)",
+        }}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        {...extra}
+      />
+    </div>
+  );
+
+  return (
+    /* Backdrop */
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.65)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      {/* Panel */}
+      <div
+        className="w-full max-w-lg rounded-xl border shadow-2xl"
+        style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-5 py-4 border-b"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <div className="flex items-center gap-2">
+            <Plus size={16} style={{ color: "var(--accent)" }} />
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text-base)" }}>
+              Create Detection Rule
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded p-1 transition-opacity opacity-60 hover:opacity-100"
+          >
+            <X size={14} style={{ color: "var(--text-muted)" }} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-4">
+          {field("Rule Name", form.name, (v) => setForm((f) => ({ ...f, name: v })))}
+
+          {/* Pattern with live regex tester */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium uppercase" style={{ color: "var(--text-muted)" }}>
+              Pattern (regex)
+            </label>
+            <textarea
+              rows={3}
+              className="w-full rounded-lg border px-3 py-2 text-sm font-mono outline-none focus:ring-1 resize-none"
+              style={{
+                backgroundColor: "var(--surface)",
+                borderColor: "var(--border)",
+                color: "var(--text-base)",
+              }}
+              value={form.pattern}
+              onChange={(e) => setForm((f) => ({ ...f, pattern: e.target.value }))}
+            />
+            {/* Live regex tester */}
+            <div
+              className="rounded-lg border px-3 py-2 space-y-1"
+              style={{ borderColor: "var(--border)", backgroundColor: "var(--bg-elevated, #0A0A0F)" }}
+            >
+              <p className="text-[10px] uppercase font-medium" style={{ color: "var(--text-muted)" }}>
+                Live tester — paste a log line
+              </p>
+              <input
+                className="w-full bg-transparent text-xs font-mono outline-none"
+                style={{ color: "var(--text-base)" }}
+                placeholder="e.g. sshd[1234]: Failed password for root..."
+                value={testInput}
+                onChange={(e) => setTestInput(e.target.value)}
+              />
+              {testInput && (
+                <p
+                  className="text-[10px] font-medium"
+                  style={{ color: testMatch === true ? "var(--green, #22C55E)" : testMatch === false ? "var(--red, #EF4444)" : "var(--text-muted)" }}
+                >
+                  {testMatch === true ? "Match" : testMatch === false ? "No match" : "Invalid regex"}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Severity */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium uppercase" style={{ color: "var(--text-muted)" }}>
+              Severity
+            </label>
+            <select
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1"
+              style={{
+                backgroundColor: "var(--surface)",
+                borderColor: "var(--border)",
+                color: "var(--text-base)",
+              }}
+              value={form.severity}
+              onChange={(e) => setForm((f) => ({ ...f, severity: e.target.value as DetectionRuleCreate["severity"] }))}
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+
+          {saveError && (
+            <p className="text-xs" style={{ color: "var(--red, #EF4444)" }}>{saveError}</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div
+          className="flex items-center justify-end gap-2 px-5 py-3 border-t"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <button
+            onClick={onClose}
+            className="btn-secondary text-sm"
+            disabled={saving}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || saved || !form.name || !form.pattern}
+            className="btn-primary text-sm flex items-center gap-1.5"
+          >
+            {saved
+              ? <><CheckCheck size={14} /> Saved</>
+              : saving
+              ? <><LoadingSpinner size="sm" /> Saving…</>
+              : <><Plus size={14} /> Create Rule</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const VERDICT_STYLES: Record<string, { icon: typeof CheckCircle; color: string; bg: string }> = {
   TRUE_POSITIVE: { icon: XCircle, color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
@@ -43,6 +264,7 @@ export default function AlertDetail() {
   const [triggering, setTriggering] = useState(false);
   const [selectedPlaybook, setSelectedPlaybook] = useState("");
   const [expandedExecution, setExpandedExecution] = useState<string | null>(null);
+  const [showCreateRule, setShowCreateRule] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -128,6 +350,9 @@ export default function AlertDetail() {
 
   return (
     <div className="space-y-6">
+      {showCreateRule && (
+        <CreateRuleFromAlertModal alert={alert} onClose={() => setShowCreateRule(false)} />
+      )}
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -145,14 +370,22 @@ export default function AlertDetail() {
             <span>{formatDate(alert.timestamp)}</span>
           </div>
         </div>
-        <button
-          onClick={handleEnrich}
-          disabled={enriching}
-          className="btn-secondary text-sm flex items-center gap-1.5"
-        >
-          {enriching ? <LoadingSpinner size="sm" /> : <Search size={14} />}
-          Enrich
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowCreateRule(true)}
+            className="btn-secondary text-sm flex items-center gap-1.5"
+          >
+            <Plus size={14} /> Create Rule
+          </button>
+          <button
+            onClick={handleEnrich}
+            disabled={enriching}
+            className="btn-secondary text-sm flex items-center gap-1.5"
+          >
+            {enriching ? <LoadingSpinner size="sm" /> : <Search size={14} />}
+            Enrich
+          </button>
+        </div>
       </div>
 
       {/* AI Verdict Card */}
