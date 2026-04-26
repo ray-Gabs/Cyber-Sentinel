@@ -1,20 +1,17 @@
 # ============================================================
-# backend/domains/soc/projects_router.py — SOC Projects + SIEM Config API
+# backend/domains/soc/projects_router.py — SOC Projects API
 # ============================================================
 # Mounted at prefix /api/soc in main.py
 # ============================================================
 
-import ipaddress
 import logging
 import socket
-import xml.etree.ElementTree as ET
+import ipaddress
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from uuid import uuid4
 
 log = logging.getLogger(__name__)
 
-import httpx
 from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -25,7 +22,7 @@ from core.config import settings
 from core.dependencies import get_current_user
 from domains.auth.models import User
 from domains.soc.models import Alert
-from domains.soc.project_models import CustomRule, ProjectSIEMConfig, SocProject, _slugify
+from domains.soc.project_models import SocProject, _slugify
 from domains.soc.wazuh_client import wazuh_client
 
 router = APIRouter()
@@ -38,20 +35,6 @@ class ProjectCreate(BaseModel):
     target_url: str
     description: Optional[str] = None
 
-
-class CustomRuleBody(BaseModel):
-    name: str
-    description: str
-    xml_content: str
-    enabled: bool = True
-
-
-class RulesReplaceBody(BaseModel):
-    rules: list[CustomRuleBody]
-
-
-class FetchXmlBody(BaseModel):
-    url: str
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -94,17 +77,6 @@ async def _get_accessible(project_id: str, user: User) -> SocProject:
     return project
 
 
-def _validate_xml(xml_content: str, rule_name: str) -> None:
-    """Raises 422 if xml_content cannot be parsed."""
-    try:
-        ET.fromstring(xml_content)
-    except ET.ParseError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Rule '{rule_name}': invalid XML — {exc}",
-        )
-
-
 def _is_private_ip(hostname: str) -> bool:
     """Return True if hostname resolves to a private/loopback IP (SSRF guard)."""
     try:
@@ -113,14 +85,6 @@ def _is_private_ip(hostname: str) -> bool:
         return ip.is_private or ip.is_loopback or ip.is_link_local
     except Exception:
         return False
-
-
-async def _get_or_create_siem_config(project_id: str, owner_id: str) -> ProjectSIEMConfig:
-    config = await ProjectSIEMConfig.find_one({"project_id": project_id})
-    if not config:
-        config = ProjectSIEMConfig(owner_id=owner_id, project_id=project_id)
-        await config.insert()
-    return config
 
 
 def _severity_from_level(level: int) -> str:
@@ -165,10 +129,6 @@ async def _get_project_health_issues(project: SocProject) -> list[str]:
         issues.append(
             "No alerts received in 24h — verify detection rules are active and target is generating traffic"
         )
-
-    config = await ProjectSIEMConfig.find_one({"project_id": str(project.id)})
-    if config and config.rules_push_status == "failed":
-        issues.append("Last custom rule push failed — check rule XML syntax in SIEM Configuration")
 
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     critical_today = await Alert.find(
@@ -482,7 +442,6 @@ async def agent_status(project_id: str, user: User = Depends(get_current_user)):
         Alert.agent_name == project.slug
     ).sort(-Alert.timestamp).limit(1).first_or_none()
 
-    config = await ProjectSIEMConfig.find_one({"project_id": str(project.id)})
     health_issues = await _get_project_health_issues(project)
 
     return {
@@ -498,7 +457,6 @@ async def agent_status(project_id: str, user: User = Depends(get_current_user)):
         "alerts_today": alerts_today,
         "alerts_last_24h": alerts_24h,
         "last_alert_at": last_alert.timestamp.isoformat() if last_alert else None,
-        "rule_push_status": config.rules_push_status if config else None,
         "health_issues": health_issues,
     }
 
@@ -554,181 +512,3 @@ async def agent_compose(project_id: str, user: User = Depends(get_current_user))
         headers={"Content-Disposition": f"attachment; filename=wazuh-agent-{agent_name}.yml"},
     )
 
-
-# ── SIEM Config — Get / Create ────────────────────────────────────────────────
-
-@router.get("/{project_id}/siem-config")
-async def get_siem_config(project_id: str, user: User = Depends(get_current_user)):
-    """Get or create SIEM config for a project. Never returns 404."""
-    project = await _get_accessible(project_id, user)
-    # Use the project's actual owner_id so auto-created configs belong to the owner, not admin
-    config = await _get_or_create_siem_config(str(project.id), project.owner_id)
-    return {
-        "project_id": str(project.id),
-        "custom_rules": [r.model_dump() for r in config.custom_rules],
-        "rules_last_pushed": config.rules_last_pushed.isoformat() if config.rules_last_pushed else None,
-        "rules_push_status": config.rules_push_status,
-    }
-
-
-# ── SIEM Config — Replace All Rules ──────────────────────────────────────────
-
-@router.put("/{project_id}/siem-config/rules")
-async def replace_rules(
-    project_id: str,
-    body: RulesReplaceBody,
-    user: User = Depends(get_current_user),
-):
-    """Replace all custom rules for a project. Validates XML for every rule first."""
-    project = await _get_owned(project_id, user)
-    for rule_body in body.rules:
-        if not rule_body.name.strip():
-            raise HTTPException(status_code=422, detail="Rule name must not be empty")
-        if not rule_body.description.strip():
-            raise HTTPException(status_code=422, detail="Rule description must not be empty")
-        _validate_xml(rule_body.xml_content, rule_body.name)
-
-    config = await _get_or_create_siem_config(str(project.id), str(user.id))
-    now = datetime.now(timezone.utc)
-    config.custom_rules = [
-        CustomRule(
-            id=str(uuid4()),
-            name=r.name.strip(),
-            description=r.description.strip(),
-            xml_content=r.xml_content,
-            enabled=r.enabled,
-            created_at=now,
-            updated_at=now,
-        )
-        for r in body.rules
-    ]
-    await config.save()
-    return {
-        "project_id": str(project.id),
-        "custom_rules": [r.model_dump() for r in config.custom_rules],
-    }
-
-
-# ── SIEM Config — Add Single Rule ────────────────────────────────────────────
-
-@router.post("/{project_id}/siem-config/rules", status_code=201)
-async def add_rule(
-    project_id: str,
-    body: CustomRuleBody,
-    user: User = Depends(get_current_user),
-):
-    """Add a single custom rule. Validates XML before saving."""
-    if not body.name.strip():
-        raise HTTPException(status_code=422, detail="Rule name is required")
-    if not body.description.strip():
-        raise HTTPException(status_code=422, detail="Rule description is required")
-    _validate_xml(body.xml_content, body.name)
-
-    project = await _get_owned(project_id, user)
-    config = await _get_or_create_siem_config(str(project.id), str(user.id))
-    now = datetime.now(timezone.utc)
-    new_rule = CustomRule(
-        id=str(uuid4()),
-        name=body.name.strip(),
-        description=body.description.strip(),
-        xml_content=body.xml_content,
-        enabled=body.enabled,
-        created_at=now,
-        updated_at=now,
-    )
-    config.custom_rules.append(new_rule)
-    await config.save()
-    return {
-        "project_id": str(project.id),
-        "custom_rules": [r.model_dump() for r in config.custom_rules],
-    }
-
-
-# ── SIEM Config — Delete Single Rule ─────────────────────────────────────────
-
-@router.delete("/{project_id}/siem-config/rules/{rule_id}")
-async def delete_rule(
-    project_id: str,
-    rule_id: str,
-    user: User = Depends(get_current_user),
-):
-    """Delete a custom rule by ID from a project's config."""
-    project = await _get_owned(project_id, user)
-    config = await _get_or_create_siem_config(str(project.id), str(user.id))
-    before = len(config.custom_rules)
-    config.custom_rules = [r for r in config.custom_rules if r.id != rule_id]
-    if len(config.custom_rules) == before:
-        raise HTTPException(status_code=404, detail="Rule not found")
-    await config.save()
-    return {
-        "project_id": str(project.id),
-        "custom_rules": [r.model_dump() for r in config.custom_rules],
-    }
-
-
-# ── SIEM Config — Fetch XML from URL ─────────────────────────────────────────
-
-@router.post("/{project_id}/siem-config/fetch-xml")
-async def fetch_xml_rules(
-    project_id: str,
-    body: FetchXmlBody,
-    user: User = Depends(get_current_user),
-):
-    """
-    Fetch a Wazuh rules XML file from a URL and return parsed rule candidates.
-    Does NOT auto-save — the user selects rules and calls PUT /rules to save.
-
-    Security:
-    - Only http/https URLs accepted
-    - Private IPs blocked (SSRF guard), except the lab Wazuh manager 10.4.89.178
-    """
-    await _get_owned(project_id, user)
-
-    url = body.url.strip()
-    if not url.startswith(("http://", "https://")):
-        raise HTTPException(status_code=422, detail="URL must use http:// or https://")
-
-    from urllib.parse import urlparse as _urlparse
-    parsed_url = _urlparse(url)
-    hostname = parsed_url.hostname or ""
-    # Allow the lab Wazuh manager IP; block all other private IPs
-    if hostname != "10.4.89.178" and _is_private_ip(hostname):
-        raise HTTPException(
-            status_code=422,
-            detail="Fetching from private/internal IP addresses is not allowed",
-        )
-
-    try:
-        async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            xml_text = resp.text
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=422, detail="Request timed out after 10 seconds")
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=422, detail=f"HTTP {exc.response.status_code} from URL")
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Failed to fetch URL: {exc!s}")
-
-    try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid XML: {exc}")
-
-    candidates: list[dict] = []
-    for rule_el in root.iter("rule"):
-        desc_el = rule_el.find("description")
-        rule_id = rule_el.get("id", "")
-        description = (
-            desc_el.text.strip()
-            if desc_el is not None and desc_el.text
-            else f"Rule {rule_id}"
-        )
-        candidates.append({
-            "name": description,
-            "description": description,
-            "xml_content": ET.tostring(rule_el, encoding="unicode"),
-            "enabled": True,
-        })
-
-    return {"candidates": candidates, "total": len(candidates)}
