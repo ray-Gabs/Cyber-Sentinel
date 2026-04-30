@@ -210,44 +210,57 @@ _PROVIDER_REGISTRY: dict[str, type[BaseLLMProvider]] = {
     "gemini": GeminiProvider,
 }
 
+# Fallback order when the configured provider has no API key
+_FALLBACK_ORDER = ["claude", "groq", "gemini", "openai"]
+
 _provider_instance: Optional[BaseLLMProvider] = None
 
 
 def get_provider() -> Optional[BaseLLMProvider]:
     """
-    Return a singleton provider instance based on settings.ai_provider.
-    Returns None if the provider is not configured (missing API key).
+    Return a singleton provider instance.
+
+    Tries AI_PROVIDER first. If that key is missing, auto-falls back to the
+    first provider in _FALLBACK_ORDER that has an API key set in the environment.
+    Returns None only when no provider has a key configured.
     """
     global _provider_instance
     if _provider_instance is not None:
         return _provider_instance
 
-    provider_name = settings.ai_provider.lower()
-    provider_cls = _PROVIDER_REGISTRY.get(provider_name)
-
-    if provider_cls is None:
-        log.error(
-            "Unknown AI provider '%s'. Valid options: %s",
-            provider_name,
-            ", ".join(_PROVIDER_REGISTRY.keys()),
-        )
-        return None
-
-    # Check that the API key exists for this provider
     key_map = {
         "groq": settings.groq_api_key,
         "claude": settings.claude_api_key,
         "openai": settings.openai_api_key,
         "gemini": settings.gemini_api_key,
     }
-    if not key_map.get(provider_name, ""):
-        log.warning("AI provider '%s' has no API key — AI features disabled.", provider_name)
-        return None
 
-    try:
-        _provider_instance = provider_cls()
-        log.info("AI provider initialised: %s", _provider_instance.name)
-        return _provider_instance
-    except Exception as e:
-        log.error("Failed to initialise AI provider '%s': %s", provider_name, e)
-        return None
+    configured = settings.ai_provider.lower()
+    # Configured provider first, then remaining fallbacks in priority order
+    candidates = [configured] + [p for p in _FALLBACK_ORDER if p != configured]
+
+    for provider_name in candidates:
+        if not key_map.get(provider_name, ""):
+            continue
+        provider_cls = _PROVIDER_REGISTRY.get(provider_name)
+        if provider_cls is None:
+            continue
+        if provider_name != configured:
+            log.warning(
+                "AI_PROVIDER='%s' has no API key — auto-falling back to '%s'.",
+                configured,
+                provider_name,
+            )
+        try:
+            _provider_instance = provider_cls()
+            log.info("AI provider initialised: %s", _provider_instance.name)
+            return _provider_instance
+        except Exception as e:
+            log.error("Failed to initialise provider '%s': %s — trying next.", provider_name, e)
+            continue
+
+    log.warning(
+        "No AI provider has an API key configured — AI features disabled. "
+        "Set CLAUDE_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY in .env."
+    )
+    return None
