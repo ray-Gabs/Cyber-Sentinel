@@ -16,6 +16,8 @@ export interface User {
   created_at: string;
   last_login?: string;
   wazuh_agent_name?: string | null;
+  wazuh_min_level?: number | null;
+  wazuh_agent_group?: string | null;
 }
 
 export interface LoginRequest {
@@ -45,6 +47,8 @@ export interface UserResponse {
   created_at: string;
   last_login?: string;
   wazuh_agent_name?: string | null;
+  wazuh_min_level?: number | null;
+  wazuh_agent_group?: string | null;
 }
 
 export interface UpdateProfileRequest {

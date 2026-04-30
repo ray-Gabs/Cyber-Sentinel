@@ -4,7 +4,8 @@
  */
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { getCustomRules } from "@/services/alertService";
+import { getCustomRules, getWazuhToken, generateWazuhToken, updateTenantSettings, type WazuhTokenInfo } from "@/services/alertService";
+import { useAuth } from "@/hooks/useAuth";
 import {
   getNotificationPrefs, saveNotificationPrefs, DEFAULT_NOTIF_PREFS,
   type NotificationPrefs,
@@ -16,7 +17,7 @@ import {
   FileCode2, CheckCircle, AlertCircle, Terminal,
   RefreshCw, Server, Save, Eye, EyeOff, Trash2, Info,
   Lock, Globe, User, CheckCircle2, Circle, ArrowRight,
-  ShieldAlert, Bell,
+  ShieldAlert, Bell, Key, Copy,
 } from "lucide-react";
 
 function InfoTooltip({ text }: { text: string }) {
@@ -86,6 +87,50 @@ export default function Settings() {
       // ignore
     } finally {
       setNotifSaving(false);
+    }
+  };
+
+  // ── Wazuh forwarder token ─────────────────────────────────────────────
+  const { user } = useAuth();
+  const [tokenInfo, setTokenInfo]           = useState<WazuhTokenInfo | null>(null);
+  const [tokenLoading, setTokenLoading]     = useState(false);
+  const [tokenCopied, setTokenCopied]       = useState(false);
+  const [showToken, setShowToken]           = useState(false);
+  const [minLevel, setMinLevel]             = useState(user?.wazuh_min_level ?? 3);
+  const [minLevelSaving, setMinLevelSaving] = useState(false);
+  const [minLevelSaved, setMinLevelSaved]   = useState(false);
+
+  useEffect(() => {
+    getWazuhToken().then(setTokenInfo).catch(() => {});
+  }, []);
+
+  const handleGenerateToken = async () => {
+    setTokenLoading(true);
+    try {
+      const info = await generateWazuhToken();
+      setTokenInfo(info);
+    } finally {
+      setTokenLoading(false);
+    }
+  };
+
+  const handleCopyToken = () => {
+    if (!tokenInfo?.token) return;
+    navigator.clipboard.writeText(tokenInfo.token);
+    setTokenCopied(true);
+    setTimeout(() => setTokenCopied(false), 2000);
+  };
+
+  const handleSaveMinLevel = async () => {
+    setMinLevelSaving(true);
+    try {
+      await updateTenantSettings({ wazuh_min_level: minLevel });
+      setMinLevelSaved(true);
+      setTimeout(() => setMinLevelSaved(false), 2500);
+    } catch {
+      // ignore — backend logs it
+    } finally {
+      setMinLevelSaving(false);
     }
   };
 
@@ -300,6 +345,121 @@ export default function Settings() {
             </div>
           </div>
 
+          {/* Forwarder token */}
+          <div className="card space-y-4">
+            <div className="flex items-center gap-3">
+              <div
+                className="flex items-center justify-center w-8 h-8 rounded-lg shrink-0"
+                style={{ backgroundColor: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.18)" }}
+              >
+                <Key size={14} style={{ color: "#a855f7" }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: "var(--text-base)" }}>Forwarder Token</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Per-user · sent by wazuh_forwarder.py as X-Wazuh-Token</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-medium mb-1.5" style={{ color: "var(--text-muted)" }}>
+                <Key size={11} /> Your Webhook Token
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    readOnly
+                    className="input text-sm font-mono w-full pr-9"
+                    type={showToken ? "text" : "password"}
+                    value={tokenInfo?.token ?? "Generate a token to get started"}
+                    style={{ color: tokenInfo ? "var(--text-base)" : "var(--text-subtle)" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowToken((v) => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2"
+                    style={{ color: "var(--text-subtle)" }}
+                  >
+                    {showToken ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
+                </div>
+                <button
+                  onClick={handleCopyToken}
+                  disabled={!tokenInfo?.token}
+                  className="btn-secondary gap-1.5 shrink-0"
+                  style={{ fontSize: "0.8125rem", padding: "0.4rem 0.75rem" }}
+                >
+                  <Copy size={13} />
+                  {tokenCopied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+
+            {tokenInfo?.webhook_url && (
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-medium mb-1.5" style={{ color: "var(--text-muted)" }}>
+                  <Globe size={11} /> Webhook URL
+                </label>
+                <input
+                  readOnly
+                  className="input text-sm font-mono w-full"
+                  value={tokenInfo.webhook_url}
+                  style={{ color: "var(--text-subtle)" }}
+                />
+              </div>
+            )}
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  Min Alert Level
+                  <InfoTooltip text="Alerts below this Wazuh rule level are silently dropped during ingestion. Set per project as different projects have different needs." />
+                </label>
+                <span className="text-xs font-mono font-semibold" style={{ color: "var(--accent)" }}>
+                  Level {minLevel}+
+                </span>
+              </div>
+              <input
+                type="range" min={0} max={15} step={1}
+                value={minLevel}
+                onChange={(e) => setMinLevel(Number(e.target.value))}
+                className="w-full accent-blue-500"
+              />
+              <div className="flex justify-between text-[10px] mt-0.5" style={{ color: "var(--text-subtle)" }}>
+                <span>0 (all)</span><span>7 (medium)</span><span>12 (critical)</span><span>15 (max)</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleGenerateToken}
+                disabled={tokenLoading}
+                className="btn-secondary gap-1.5"
+                style={{ fontSize: "0.8125rem", padding: "0.4rem 0.875rem" }}
+              >
+                {tokenLoading ? <LoadingSpinner size="sm" /> : <RefreshCw size={13} />}
+                {tokenInfo ? "Rotate Token" : "Generate Token"}
+              </button>
+              <button
+                onClick={handleSaveMinLevel}
+                disabled={minLevelSaving}
+                className="btn-primary gap-1.5"
+                style={{ fontSize: "0.8125rem", padding: "0.4rem 0.875rem" }}
+              >
+                {minLevelSaving ? <LoadingSpinner size="sm" /> : minLevelSaved ? <CheckCircle size={13} /> : <Save size={13} />}
+                {minLevelSaved ? "Saved!" : "Save Level"}
+              </button>
+            </div>
+
+            {tokenInfo?.instructions && (
+              <div
+                className="rounded-lg px-3 py-2.5 text-[11px] leading-relaxed font-mono whitespace-pre-wrap"
+                style={{ backgroundColor: "var(--bg-muted)", color: "var(--text-subtle)", border: "1px solid var(--border)" }}
+              >
+                {tokenInfo.instructions}
+              </div>
+            )}
+          </div>
+
           {/* Privacy note */}
           <div
             className="flex items-start gap-2.5 rounded-xl px-3.5 py-3"
@@ -351,11 +511,11 @@ export default function Settings() {
                 {rulesXml ? "Refresh" : "Load"}
               </button>
               <Link
-                to="/soc/siem-config"
+                to="/detection-rules"
                 className="btn-primary gap-1.5 flex items-center"
                 style={{ fontSize: "0.8125rem", padding: "0.4rem 0.875rem" }}
               >
-                <ArrowRight size={13} /> SIEM Config
+                <ArrowRight size={13} /> Detection Rules
               </Link>
             </div>
           </div>
@@ -363,7 +523,7 @@ export default function Settings() {
           <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>
             Read-only view of the Wazuh XML ruleset. To create regex detection rules for
             alert classification, use{" "}
-            <Link to="/soc/detection-rules" className="underline" style={{ color: "var(--accent)" }}>
+            <Link to="/detection-rules" className="underline" style={{ color: "var(--accent)" }}>
               Detection Rules
             </Link>.
           </p>
@@ -433,7 +593,7 @@ export default function Settings() {
           </div>
         </div>
         <Link
-          to="/soc/detection-rules"
+          to="/detection-rules"
           className="btn-primary gap-1.5 flex items-center shrink-0"
           style={{ fontSize: "0.8125rem", padding: "0.4rem 0.875rem" }}
         >

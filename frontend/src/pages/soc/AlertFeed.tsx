@@ -9,6 +9,7 @@ import { AnimatedList } from "@/components/ui/reactbits/AnimatedList";
 import { ShieldAlert, RefreshCw, ChevronRight } from "lucide-react";
 import { getAlerts } from "@/services/alertService";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useAuth } from "@/hooks/useAuth";
 import { timeAgo } from "@/lib/utils";
 import type { AlertSummary } from "@/types";
 
@@ -75,6 +76,7 @@ function AlertSkeletonRow() {
 // ── Component ──────────────────────────────────────────────────────────────
 export default function AlertFeed() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [alerts, setAlerts]             = useState<AlertSummary[]>([]);
   const [loading, setLoading]           = useState(true);
@@ -84,6 +86,7 @@ export default function AlertFeed() {
   const [filterVerdict, setFilterVerdict] = useState("");
   const [filterLevel, setFilterLevel]   = useState(0);
   const [filterAgent, setFilterAgent]   = useState(searchParams.get("agent_name") ?? "");
+  const [filterGroup, setFilterGroup]   = useState(searchParams.get("agent_group") ?? "");
   const [liveCount, setLiveCount]       = useState(0);
   const [showFP, setShowFP]             = useState(false);
   const [kbFocus, setKbFocus]           = useState(-1);
@@ -102,6 +105,7 @@ export default function AlertFeed() {
         ai_verdict: filterVerdict || undefined,
         rule_level_min: filterLevel || undefined,
         agent_name: filterAgent || undefined,
+        agent_group: filterGroup || undefined,
       });
       setAlerts(data);
     } catch {
@@ -110,7 +114,7 @@ export default function AlertFeed() {
       setLoading(false);
       setIsFetching(false);
     }
-  }, [page, filterVerdict, filterLevel, filterAgent]);
+  }, [page, filterVerdict, filterLevel, filterAgent, filterGroup]);
 
   useEffect(() => { fetchAlerts(); }, [fetchAlerts]);
 
@@ -280,7 +284,6 @@ export default function AlertFeed() {
               onChange={(e) => { setFilterAgent(e.target.value); setPage(1); }}
             >
               <option value="">All Agents</option>
-              {/* Ensure URL-preselected agent appears even before results load */}
               {filterAgent && !uniqueAgents.includes(filterAgent) && (
                 <option value={filterAgent}>{filterAgent}</option>
               )}
@@ -288,6 +291,24 @@ export default function AlertFeed() {
                 <option key={a} value={a}>{a}</option>
               ))}
             </select>
+          )}
+
+          {/* Tenant filter — shows only if user has a group assigned */}
+          {user?.wazuh_agent_group && (
+            <button
+              onClick={() => {
+                setFilterGroup(filterGroup ? "" : (user.wazuh_agent_group ?? ""));
+                setPage(1);
+              }}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
+              style={{
+                backgroundColor: filterGroup ? "rgba(168,85,247,0.12)" : "transparent",
+                color:           filterGroup ? "#a855f7"               : "var(--text-muted)",
+                border:          filterGroup ? "1px solid rgba(168,85,247,0.3)" : "1px solid transparent",
+              }}
+            >
+              {filterGroup ? `Tenant: ${user.wazuh_agent_group}` : "My Tenant"}
+            </button>
           )}
         </div>
       </motion.div>

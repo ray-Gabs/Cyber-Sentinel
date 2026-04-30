@@ -145,6 +145,8 @@ function AppRoutes() {
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/correlations" element={<Correlation />} />
         <Route path="/settings" element={<Settings />} />
+        {/* Redirect old SIEM Config URL — page was removed, config lives in Settings */}
+        <Route path="/soc/siem-config" element={<Navigate to="/settings" replace />} />
         <Route path="/admin" element={<RoleRoute requiredRole="admin"><Admin /></RoleRoute>} />
         <Route path="/audit" element={<RoleRoute requiredRole="admin"><AuditLog /></RoleRoute>} />
         <Route path="/admin/notifications" element={<RoleRoute requiredRole="admin"><AdminNotifications /></RoleRoute>} />

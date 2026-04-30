@@ -7,7 +7,7 @@
  *   - Alerts-by-severity breakdown
  *   - Recent alerts table
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Activity, AlertTriangle, CheckCircle2, XCircle, AlertCircle,
   RefreshCw, Monitor, ShieldAlert, Clock,
@@ -19,6 +19,7 @@ import {
   type PerProjectEntry,
   type RecentAlert,
 } from "@/services/socService";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 // ── Small sub-components ──────────────────────────────────────────────────────
 
@@ -355,6 +356,7 @@ export default function SocDashboard() {
   const [data, setData] = useState<SocDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [liveCount, setLiveCount] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -370,6 +372,19 @@ export default function SocDashboard() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Real-time: debounce refreshes so rapid alert bursts only trigger one reload
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { messages } = useWebSocket<{ type: string }>({ channel: "alerts" });
+  useEffect(() => {
+    if (!messages.length) return;
+    const t = messages[0].data?.type;
+    if (t === "alert_new" || t === "alert_triaged") {
+      if (t === "alert_new") setLiveCount((n) => n + 1);
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      refreshTimer.current = setTimeout(() => load(), 3000);
+    }
+  }, [messages, load]);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
@@ -399,6 +414,12 @@ export default function SocDashboard() {
             </h1>
             <p className="text-xs mt-0.5" style={{ color: "var(--text-subtle)" }}>
               Live security operations overview
+              {liveCount > 0 && (
+                <span className="ml-2 inline-flex items-center gap-1" style={{ color: "#22C55E" }}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
+                  +{liveCount} new
+                </span>
+              )}
             </p>
           </div>
         </div>

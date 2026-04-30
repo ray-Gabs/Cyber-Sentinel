@@ -85,6 +85,7 @@ export interface AlertFilterParams {
   rule_level_min?: number;
   ai_verdict?: string;
   agent_name?: string;
+  agent_group?: string;
   project_id?: string;
 }
 

@@ -14,6 +14,7 @@ export async function getAlerts(
   if (params.rule_level_min != null) query.rule_level_min = params.rule_level_min;
   if (params.ai_verdict) query.ai_verdict = params.ai_verdict;
   if (params.agent_name) query.agent_name = params.agent_name;
+  if (params.agent_group) query.agent_group = params.agent_group;
   if (params.project_id) query.project_id = params.project_id;
   const res = await api.get<AlertSummary[]>("/alerts/", { params: query });
   return res.data;
@@ -69,6 +70,33 @@ export interface WazuhAgent {
 export async function getWazuhAgents(): Promise<{ agents: WazuhAgent[]; total: number }> {
   const res = await api.get<{ agents: WazuhAgent[]; total: number }>("/alerts/agents");
   return res.data;
+}
+
+/* ── Per-user Wazuh Forwarder Token ───────────────── */
+
+export interface WazuhTokenInfo {
+  token: string;
+  webhook_url: string;
+  instructions: string;
+  min_level?: number | null;
+  agent_group?: string | null;
+}
+
+/** GET /api/alerts/tenant/token → get current user's forwarder token + setup info */
+export async function getWazuhToken(): Promise<WazuhTokenInfo> {
+  const res = await api.get<WazuhTokenInfo>("/alerts/tenant/token");
+  return res.data;
+}
+
+/** POST /api/alerts/tenant/token → create or rotate the forwarder token */
+export async function generateWazuhToken(): Promise<WazuhTokenInfo> {
+  const res = await api.post<WazuhTokenInfo>("/alerts/tenant/token");
+  return res.data;
+}
+
+/** PATCH /api/alerts/tenant/settings → update per-user min alert level and agent group */
+export async function updateTenantSettings(data: { wazuh_min_level?: number; wazuh_agent_group?: string }): Promise<void> {
+  await api.patch("/alerts/tenant/settings", data);
 }
 
 /* ── Detection Rules CRUD ──────────────────────────── */

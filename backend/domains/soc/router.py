@@ -460,6 +460,37 @@ async def update_tenant_settings(
     }
 
 
+@router.get("/mitre-summary", tags=["SOC"])
+async def get_mitre_summary(current_user: User = Depends(get_current_user)) -> dict:
+    """Aggregate MITRE ATT&CK technique frequency from the most recent 500 alerts."""
+    alerts = await Alert.find().sort("-timestamp").limit(500).to_list()
+
+    by_tactic: dict[str, dict[str, int]] = {}
+    total_hits = 0
+
+    for alert in alerts:
+        for mt in (alert.mitre_techniques or []):
+            if isinstance(mt, dict):
+                technique: str | None = mt.get("technique") or mt.get("id")
+                tactic: str = mt.get("tactic") or "Unknown"
+            else:
+                technique = getattr(mt, "technique", None) or getattr(mt, "id", None)
+                tactic = getattr(mt, "tactic", None) or "Unknown"
+
+            if not technique:
+                continue
+
+            bucket = by_tactic.setdefault(tactic, {})
+            bucket[technique] = bucket.get(technique, 0) + 1
+            total_hits += 1
+
+    return {
+        "by_tactic": by_tactic,
+        "total_technique_hits": total_hits,
+        "alerts_analyzed": len(alerts),
+    }
+
+
 @router.get("/{alert_id}", response_model=AlertDetailResponse)
 async def get_alert(alert_id: str, user: User = Depends(get_current_user)):
     """Get full details for a single alert including AI verdict."""
@@ -518,37 +549,6 @@ async def trigger_playbook(
         raise HTTPException(status_code=404, detail="No matching playbook found for this alert")
     execution = await engine.execute_playbook(a, pb_id)
     return execution.model_dump(mode="json")
-
-
-@router.get("/mitre-summary", tags=["SOC"])
-async def get_mitre_summary(current_user: User = Depends(get_current_user)) -> dict:
-    """Aggregate MITRE ATT&CK technique frequency from the most recent 500 alerts."""
-    alerts = await Alert.find().sort("-timestamp").limit(500).to_list()
-
-    by_tactic: dict[str, dict[str, int]] = {}
-    total_hits = 0
-
-    for alert in alerts:
-        for mt in (alert.mitre_techniques or []):
-            if isinstance(mt, dict):
-                technique: str | None = mt.get("technique") or mt.get("id")
-                tactic: str = mt.get("tactic") or "Unknown"
-            else:
-                technique = getattr(mt, "technique", None) or getattr(mt, "id", None)
-                tactic = getattr(mt, "tactic", None) or "Unknown"
-
-            if not technique:
-                continue
-
-            bucket = by_tactic.setdefault(tactic, {})
-            bucket[technique] = bucket.get(technique, 0) + 1
-            total_hits += 1
-
-    return {
-        "by_tactic": by_tactic,
-        "total_technique_hits": total_hits,
-        "alerts_analyzed": len(alerts),
-    }
 
 
 # ── v2 Triage pipeline endpoints ─────────────────────────────────────────────
