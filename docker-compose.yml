@@ -265,6 +265,32 @@ services:
         condition: service_started   # started is enough — nginx retries upstreams naturally
     restart: unless-stopped
 
+  # ── Wazuh Forwarder ──────────────────────────────────────────────────────
+  # Reads Wazuh alerts from the host log file and POSTs them to the backend.
+  # Runs inside Docker but accesses the host's /var/ossec/logs via bind mount.
+  # Token: generate in Settings → copy → paste into .env as WAZUH_WEBHOOK_TOKEN
+  forwarder:
+    image: python:3.11-alpine
+    container_name: cyber-sentinel-forwarder
+    networks:
+      - sentinel-net
+    command: python3 /app/scripts/wazuh_forwarder.py
+    environment:
+      - CYBER_SENTINEL_URL=http://backend:8000
+      - WAZUH_WEBHOOK_TOKEN=${WAZUH_WEBHOOK_TOKEN:-}
+      - TENANT_GROUP=${WAZUH_TENANT_GROUP:-tenant_lab}
+      - MIN_LEVEL=${WAZUH_MIN_LEVEL:-3}
+      - ALERTS_FILE=/var/ossec/logs/alerts/alerts.json
+      - STATE_FILE=/state/wazuh_forwarder.state
+    volumes:
+      - ./scripts:/app/scripts:ro          # forwarder script (read-only)
+      - /var/ossec/logs:/var/ossec/logs:ro # host Wazuh logs (read-only)
+      - forwarder_state:/state             # persists read offset across restarts
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
   # ── Wazuh All-in-One (optional — docker-compose --profile wazuh up -d) ───
   wazuh:
     image: wazuh/wazuh-manager:4.9.2
@@ -296,6 +322,7 @@ services:
 
 volumes:
   mongo_data:
+  forwarder_state:
   wazuh_api_config:
   wazuh_etc:
   wazuh_logs:
