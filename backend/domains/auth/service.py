@@ -105,6 +105,7 @@ async def register_user(data: RegisterRequest) -> User:
         hashed_password=hash_password(data.password),
         status="pending",
         is_active=False,
+        wazuh_token=secrets.token_urlsafe(32),
     )
     await user.insert()
     log.info("New registration (pending approval): %s <%s>", user.username, user.email)
