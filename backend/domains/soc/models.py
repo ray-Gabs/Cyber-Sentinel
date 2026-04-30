@@ -38,6 +38,14 @@ class Alert(Document):
     ai_reasoning: Optional[str] = None
     ai_action: Optional[str] = None            # ESCALATE | MONITOR | DISMISS
 
+    # Enhanced triage fields (v2 pipeline)
+    severity_label: Optional[str] = None       # CRITICAL | HIGH | MEDIUM | LOW | INFO
+    response_recommendations: list[str] = []   # Ordered list of executable response actions
+    false_positive_indicators: list[str] = []  # Evidence that the alert may be benign
+    iocs: Optional[dict] = None                # {ips, domains, hashes, users, processes, files}
+    triage_notes: Optional[str] = None         # Data quality caveats, truncated log warnings
+    triage_version: str = "v1"                 # Pipeline version that produced this analysis
+
     # MITRE ATT&CK mapping
     mitre_tactics: list[str] = []              # e.g. ["Credential Access", "Initial Access"]
     mitre_techniques: list[dict] = []          # e.g. [{"tactic": "...", "technique": "T1110", "name": "Brute Force"}]
@@ -52,13 +60,17 @@ class Alert(Document):
     # Custom rule matches (populated at ingestion time)
     matched_rules: list[str] = []
 
+    # Project tagging
+    project_id: Optional[str] = None
+
     # Multi-tenant isolation
-    tenant_id: Optional[str] = None        # str(User.id) resolved from per-user wazuh_token
-    agent_group: str = ""                  # Wazuh agent group, e.g. "tenant_juiceshop"
+    tenant_id: Optional[str] = None            # str(User.id) resolved from per-user wazuh_token
+    agent_group: str = ""                      # Wazuh agent group, e.g. "tenant_juiceshop"
 
     # Meta
     ingested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     analysed_at: Optional[datetime] = None
+    triage_duration_ms: Optional[int] = None   # How long the full triage pipeline took
 
     class Settings:
         name = "alerts"
@@ -70,6 +82,8 @@ class Alert(Document):
             IndexModel([("agent_name", ASCENDING)]),             # agent_name filter in list_alerts
             IndexModel([("rule_level", DESCENDING)]),
             IndexModel([("ai_verdict", ASCENDING)]),
+            IndexModel([("severity_label", ASCENDING)]),         # v2: filter by severity label
+            IndexModel([("project_id", ASCENDING)]),             # project scoping
             # Compound for the most common list query: by agent + recency
             IndexModel([("agent_id", ASCENDING), ("timestamp", DESCENDING)]),
             # Compound for severity dashboard queries (rule_level >= X ORDER BY timestamp)
@@ -130,6 +144,7 @@ class AiVerdict(Document):
         name = "ai_verdicts"
         indexes = [
             IndexModel([("alert_id", ASCENDING)]),
+            IndexModel([("rule_id", ASCENDING)]),
             IndexModel([("created_at", DESCENDING)]),
             # TTL — expire AI verdict records after 90 days
             IndexModel([("created_at", ASCENDING)], expireAfterSeconds=7_776_000),

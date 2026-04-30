@@ -24,6 +24,9 @@ from domains.soc.schemas import (
     CustomRuleResponse,
     TenantSettingsUpdate,
     WazuhTokenResponse,
+    BatchRetriangeRequest,
+    TriageResultResponse,
+    FalsePositivePatternResponse,
 )
 from domains.soc import service
 from domains.audit import service as audit_service
@@ -44,6 +47,7 @@ def _to_summary(a: Alert) -> AlertSummaryResponse:
         ai_verdict=a.ai_verdict,
         ai_confidence=a.ai_confidence,
         ai_action=a.ai_action,
+        severity_label=a.severity_label,
         analyst_override=a.analyst_override,
         mitre_techniques=a.mitre_techniques,
         matched_rules=a.matched_rules,
@@ -69,6 +73,13 @@ def _to_detail(a: Alert) -> AlertDetailResponse:
         ai_confidence=a.ai_confidence,
         ai_action=a.ai_action,
         ai_reasoning=a.ai_reasoning,
+        severity_label=a.severity_label,
+        response_recommendations=a.response_recommendations,
+        false_positive_indicators=a.false_positive_indicators,
+        iocs=a.iocs,
+        triage_notes=a.triage_notes,
+        triage_version=a.triage_version,
+        triage_duration_ms=a.triage_duration_ms,
         analyst_override=a.analyst_override,
         analyst_notes=a.analyst_notes,
         ingested_at=a.ingested_at,
@@ -112,7 +123,6 @@ async def alert_stats(
 async def wazuh_health(user: User = Depends(get_current_user)):
     """
     Test Wazuh Manager connectivity — does NOT expose credentials or the manager URL.
-    Use /api/soc/health for the richer dashboard health endpoint.
     """
     from domains.soc.wazuh_client import wazuh_client
     try:
@@ -249,6 +259,25 @@ async def delete_detection_rule(rule_id: str, user: User = Depends(get_current_u
     return {"deleted": rule_id}
 
 
+@router.post("/rules/deploy")
+async def deploy_custom_rules(
+    user: User = Depends(get_current_user),
+    x_wazuh_url: Optional[str] = Header(None, alias="X-Wazuh-Url"),
+    x_wazuh_username: Optional[str] = Header(None, alias="X-Wazuh-Username"),
+    x_wazuh_password: Optional[str] = Header(None, alias="X-Wazuh-Password"),
+):
+    """Deploy custom SIEM rules to Wazuh."""
+    has_user_credentials = bool(x_wazuh_url)
+    if not has_user_credentials and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required to deploy SIEM rules")
+    from domains.soc.wazuh_rules import deploy_rules_to_wazuh
+    return await deploy_rules_to_wazuh(
+        wazuh_url=x_wazuh_url,
+        wazuh_user=x_wazuh_username,
+        wazuh_password=x_wazuh_password,
+    )
+
+
 _MAX_WEBHOOK_BYTES = 10 * 1024 * 1024  # 10 MB — prevents memory DoS from huge payloads
 
 
@@ -260,21 +289,11 @@ async def wazuh_webhook(
     """
     Wazuh push webhook — receives alert events from Wazuh integration.
 
-    Configure in Wazuh's ossec.conf:
-      <integration>
-        <name>custom-webhook</name>
-        <hook_url>https://<server>/api/alerts/webhook</hook_url>
-        <level>7</level>
-        <alert_format>json</alert_format>
-      </integration>
-
     Security:
-      - If WAZUH_WEBHOOK_TOKEN is set, the X-Wazuh-Token header must match
-        (compared with hmac.compare_digest to prevent timing attacks).
-      - Payload is limited to 10 MB to prevent memory DoS.
-      - Content-Type must be application/json.
+      - Per-user token takes priority: routes alert to correct tenant automatically.
+      - Falls back to global WAZUH_WEBHOOK_TOKEN for admin/shared ingestion.
+      - Payload limited to 10 MB. Content-Type must be application/json.
     """
-    # ── Content-Type guard ──────────────────────────────────────────────────
     ct = request.headers.get("content-type", "")
     if "application/json" not in ct:
         raise HTTPException(
@@ -282,7 +301,6 @@ async def wazuh_webhook(
             detail="Content-Type must be application/json",
         )
 
-    # ── Payload size guard ──────────────────────────────────────────────────
     content_length = request.headers.get("content-length")
     if content_length and int(content_length) > _MAX_WEBHOOK_BYTES:
         raise HTTPException(
@@ -291,14 +309,11 @@ async def wazuh_webhook(
         )
 
     # ── Token resolution: per-user token takes priority over global token ──────
-    # Professor's recommendation: each user has their own token so alerts are
-    # automatically routed to the correct tenant without sharing a secret.
     tenant_id: Optional[str] = None
     tenant_min_level: int = 0
 
     provided_token = x_wazuh_token or ""
     if provided_token:
-        # Try per-user token first (DB lookup is not timing-sensitive here)
         owner = await User.find_one({"wazuh_token": provided_token})
         if owner:
             tenant_id = str(owner.id)
@@ -317,9 +332,7 @@ async def wazuh_webhook(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing X-Wazuh-Token header",
         )
-    # else: no auth configured — allow through (dev/lab mode)
 
-    # ── Parse body ──────────────────────────────────────────────────────────
     try:
         body: Any = await request.json()
     except Exception:
@@ -328,7 +341,6 @@ async def wazuh_webhook(
             detail="Invalid JSON payload",
         )
 
-    # Wazuh can send a single alert object or a batch {"alerts": [...]}
     if isinstance(body, list):
         raw_alerts = body
     elif isinstance(body, dict) and "alerts" in body:
@@ -341,15 +353,13 @@ async def wazuh_webhook(
             detail="Unexpected payload shape — expected alert object or {alerts: [...]}",
         )
 
-    # ── Ingest + dispatch triage ────────────────────────────────────────────
     from domains.soc.tasks import triage_single_alert
 
     ingested = []
     skipped = 0
     for raw in raw_alerts:
         if not isinstance(raw, dict):
-            continue  # skip malformed entries in a batch
-        # Per-tenant MIN_LEVEL filter (professor's recommendation: not hardcoded in .env)
+            continue
         level = raw.get("rule", {}).get("level", 0)
         if level < tenant_min_level:
             skipped += 1
@@ -365,17 +375,13 @@ async def wazuh_webhook(
 
 
 # ── Per-user Wazuh tenant management ──────────────────────────────────────────
-# Per professor's recommendation: each user has their own token + min_level + group.
 
 @router.get("/tenant/token", response_model=WazuhTokenResponse)
 async def get_my_wazuh_token(
     request: Request,
     user: User = Depends(get_current_user),
 ):
-    """
-    Get the current user's per-user Wazuh webhook token and setup instructions.
-    Use POST /tenant/token to generate a new token if one hasn't been created yet.
-    """
+    """Get the current user's per-user Wazuh webhook token and setup instructions."""
     if not user.wazuh_token:
         raise HTTPException(
             status_code=404,
@@ -392,7 +398,7 @@ async def get_my_wazuh_token(
             f"  export CYBER_SENTINEL_URL={base_url}\n"
             f"  export WAZUH_WEBHOOK_TOKEN={user.wazuh_token}\n"
             f"  export TENANT_GROUP={user.wazuh_agent_group or 'tenant_<yourproject>'}\n"
-            f"  export MIN_LEVEL={user.wazuh_min_level}  # optional override (backend filters too)"
+            f"  export MIN_LEVEL={user.wazuh_min_level}"
         ),
     )
 
@@ -402,11 +408,7 @@ async def generate_my_wazuh_token(
     request: Request,
     user: User = Depends(get_current_user),
 ):
-    """
-    Generate (or regenerate) a per-user Wazuh webhook token.
-    The token is stored on the user record and must be sent as X-Wazuh-Token
-    in the forwarder's requests so alerts are tagged to this tenant.
-    """
+    """Generate (or regenerate) a per-user Wazuh webhook token."""
     import secrets
     user.wazuh_token = secrets.token_urlsafe(32)
     await user.save()
@@ -428,7 +430,7 @@ async def generate_my_wazuh_token(
             f"  export CYBER_SENTINEL_URL={base_url}\n"
             f"  export WAZUH_WEBHOOK_TOKEN={user.wazuh_token}\n"
             f"  export TENANT_GROUP={user.wazuh_agent_group or 'tenant_<yourproject>'}\n"
-            f"  export MIN_LEVEL={user.wazuh_min_level}  # optional override (backend filters too)"
+            f"  export MIN_LEVEL={user.wazuh_min_level}"
         ),
     )
 
@@ -438,11 +440,7 @@ async def update_tenant_settings(
     data: TenantSettingsUpdate,
     user: User = Depends(get_current_user),
 ):
-    """
-    Update per-user Wazuh settings: minimum alert level and agent group.
-    min_level controls which alerts are stored for this tenant (backend-enforced).
-    agent_group is the Wazuh group name to assign to your agents (e.g. tenant_juiceshop).
-    """
+    """Update per-user Wazuh settings: minimum alert level and agent group."""
     changed: list[str] = []
     if data.wazuh_min_level is not None:
         user.wazuh_min_level = data.wazuh_min_level
@@ -517,7 +515,7 @@ async def trigger_playbook(
     user: User = Depends(get_current_user),
 ):
     """Manually trigger a playbook for an alert. If playbook_id is omitted, auto-selects."""
-    from domains.soc.playbook import PlaybookEngine, PlaybookExecution, PLAYBOOKS
+    from domains.soc.playbook import PlaybookEngine, PLAYBOOKS
     a = await service.get_alert(alert_id)
     engine = PlaybookEngine()
     pb_id = playbook_id or engine.find_matching_playbook(a)
@@ -529,7 +527,7 @@ async def trigger_playbook(
 
 @router.get("/mitre-summary", tags=["SOC"])
 async def get_mitre_summary(current_user: User = Depends(get_current_user)) -> dict:
-    """Aggregate MITRE ATT&CK technique frequency from the most recent 2000 alerts."""
+    """Aggregate MITRE ATT&CK technique frequency from the most recent 500 alerts."""
     alerts = await Alert.find().sort("-timestamp").limit(500).to_list()
 
     by_tactic: dict[str, dict[str, int]] = {}
@@ -556,3 +554,170 @@ async def get_mitre_summary(current_user: User = Depends(get_current_user)) -> d
         "total_technique_hits": total_hits,
         "alerts_analyzed": len(alerts),
     }
+
+
+# ── v2 Triage pipeline endpoints ─────────────────────────────────────────────
+
+@router.post("/{alert_id}/retriage", response_model=TriageResultResponse)
+async def retriage_alert(
+    alert_id: str,
+    user: User = Depends(get_current_user),
+):
+    """Force re-triage of an alert — clears existing verdict and reruns the full pipeline."""
+    from domains.soc.triage_pipeline import retriage_alert as _retriage
+    result = await _retriage(alert_id)
+    return TriageResultResponse(**result)
+
+
+@router.post("/triage/batch", response_model=list[TriageResultResponse])
+async def batch_retriage_alerts(
+    body: BatchRetriangeRequest,
+    user: User = Depends(get_current_user),
+):
+    """Re-triage up to 50 alerts (max 3 concurrent pipelines)."""
+    from domains.soc.triage_pipeline import batch_retriage
+    results = await batch_retriage(body.alert_ids, concurrency=3)
+    return [TriageResultResponse(**r) for r in results]
+
+
+@router.post("/{alert_id}/remediation")
+async def get_alert_remediation(
+    alert_id: str,
+    user: User = Depends(get_current_user),
+):
+    """Generate a structured incident response plan for a TRUE_POSITIVE alert."""
+    a = await service.get_alert(alert_id)
+    if not a.ai_verdict or a.ai_verdict == "FALSE_POSITIVE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Remediation is only generated for TRUE_POSITIVE alerts.",
+        )
+    from ai.llm_service import llm_service
+    alert_payload = {
+        "rule_id": a.rule_id,
+        "rule_description": a.rule_description,
+        "rule_level": a.rule_level,
+        "rule_groups": a.rule_groups,
+        "full_log": a.full_log[:3000],
+        "data": a.data,
+        "agent_name": a.agent_name,
+        "agent_ip": a.agent_ip,
+        "mitre_techniques": a.mitre_techniques,
+        "mitre_tactics": a.mitre_tactics,
+    }
+    verdict = {
+        "classification": a.ai_verdict,
+        "severity_label": a.severity_label,
+        "confidence": a.ai_confidence,
+        "action": a.ai_action,
+        "reasoning": a.ai_reasoning,
+        "iocs": a.iocs,
+        "response_recommendations": a.response_recommendations,
+    }
+    guide = await llm_service.generate_alert_remediation(alert_payload, verdict)
+    return {"alert_id": alert_id, "remediation": guide}
+
+
+@router.get("/stats/false-positive-patterns", response_model=list[FalsePositivePatternResponse])
+async def false_positive_patterns(
+    min_alerts: int = Query(5, ge=1, description="Minimum alert count to include a rule"),
+    limit: int = Query(20, ge=1, le=100),
+    user: User = Depends(get_current_user),
+):
+    """Return rules ranked by false positive rate to identify noisy detections."""
+    from domains.soc.models import Alert as AlertModel
+    pipeline = [
+        {"$group": {
+            "_id": "$rule_id",
+            "rule_description": {"$first": "$rule_description"},
+            "total": {"$sum": 1},
+            "fps": {"$sum": {"$cond": [{"$eq": ["$ai_verdict", "FALSE_POSITIVE"]}, 1, 0]}},
+            "analyst_fps": {"$sum": {"$cond": [{"$eq": ["$analyst_override", "FALSE_POSITIVE"]}, 1, 0]}},
+        }},
+        {"$match": {"total": {"$gte": min_alerts}}},
+        {"$addFields": {"fp_rate": {"$divide": ["$fps", "$total"]}}},
+        {"$sort": {"fp_rate": -1}},
+        {"$limit": limit},
+    ]
+    rows = await AlertModel.aggregate(pipeline).to_list()
+    return [
+        FalsePositivePatternResponse(
+            rule_id=r["_id"],
+            rule_description=r.get("rule_description", ""),
+            total_alerts=r["total"],
+            fp_count=r["fps"],
+            fp_rate=round(r["fp_rate"], 3),
+            analyst_confirmed_fps=r.get("analyst_fps", 0),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/wazuh/agents/{agent_id}/context")
+async def get_agent_context(agent_id: str, user: User = Depends(get_current_user)):
+    """Rich agent snapshot: OS, open ports, processes, FIM changes, vuln summary."""
+    from domains.soc.wazuh_client import wazuh_client
+    try:
+        return await wazuh_client.build_agent_context(agent_id)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+
+@router.get("/wazuh/agents/{agent_id}/vulnerabilities")
+async def get_agent_vulnerabilities(
+    agent_id: str,
+    severity: Optional[str] = Query(None, description="critical | high | medium | low"),
+    limit: int = Query(50, ge=1, le=500),
+    user: User = Depends(get_current_user),
+):
+    """CVE vulnerabilities detected on a Wazuh agent."""
+    from domains.soc.wazuh_client import wazuh_client
+    try:
+        vulns = await wazuh_client.get_vulnerabilities(agent_id, severity=severity, limit=limit)
+        return {"agent_id": agent_id, "vulnerabilities": vulns, "total": len(vulns)}
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+
+@router.get("/wazuh/agents/{agent_id}/sca")
+async def get_agent_sca(
+    agent_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    user: User = Depends(get_current_user),
+):
+    """SCA policy results for an agent."""
+    from domains.soc.wazuh_client import wazuh_client
+    try:
+        results = await wazuh_client.get_sca_results(agent_id, limit=limit)
+        return {"agent_id": agent_id, "sca_policies": results, "total": len(results)}
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+
+@router.get("/wazuh/agents/{agent_id}/fim")
+async def get_agent_fim(
+    agent_id: str,
+    event_type: Optional[str] = Query(None, description="added | modified | deleted"),
+    limit: int = Query(50, ge=1, le=200),
+    user: User = Depends(get_current_user),
+):
+    """FIM events for an agent."""
+    from domains.soc.wazuh_client import wazuh_client
+    try:
+        events = await wazuh_client.get_fim_events(agent_id, event_type=event_type, limit=limit)
+        return {"agent_id": agent_id, "fim_events": events, "total": len(events)}
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+
+@router.get("/wazuh/manager/info")
+async def get_wazuh_manager_info(user: User = Depends(get_current_user)):
+    """Wazuh Manager version, cluster status, and operational stats."""
+    from domains.soc.wazuh_client import wazuh_client
+    try:
+        info = await wazuh_client.get_manager_info()
+        cluster = await wazuh_client.get_cluster_status()
+        stats = await wazuh_client.get_manager_stats()
+        return {"manager": info, "cluster": cluster, "stats": stats}
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))

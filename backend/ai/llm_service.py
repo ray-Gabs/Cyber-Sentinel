@@ -756,7 +756,24 @@ class LLMService:
 
     # ======================== SOC / WAZUH ========================
 
-    async def analyse_alert(self, alert_dict: dict, context: dict) -> dict[str, Any]:
+    async def analyse_alert(
+        self,
+        alert_dict: dict,
+        context: dict,
+        use_v2_prompt: bool = True,
+    ) -> dict[str, Any]:
+        """
+        Triage a Wazuh alert using the configured LLM.
+
+        Returns a dict with:
+          classification, confidence, severity_label, reasoning, action,
+          response_recommendations, false_positive_indicators, iocs, triage_notes
+
+        Args:
+            alert_dict:    Serialised alert fields (rule_id, description, level, log, etc.)
+            context:       Agent metadata, MITRE techniques, open ports, etc.
+            use_v2_prompt: If True, use the enhanced v2 prompt (recommended).
+        """
         from domains.soc.models import AiVerdict
 
         similar = (
@@ -764,39 +781,170 @@ class LLMService:
                 {"rule_id": alert_dict.get("rule_id"), "analyst_agreed": {"$exists": True}},
             )
             .sort("-created_at")
-            .limit(3)
+            .limit(5)
             .to_list()
         )
 
         few_shot = [
-            {"verdict": s.verdict, "analyst_agreed": s.analyst_agreed, "reasoning": s.reasoning}
+            {
+                "verdict": s.verdict,
+                "analyst_agreed": s.analyst_agreed,
+                "reasoning": s.reasoning,
+                "action": s.action,
+            }
             for s in similar
         ]
 
-        template = self._load_prompt("alert_analysis")
-        prompt = template or (
-            "You are an expert SOC L1 analyst. Analyse this Wazuh SIEM alert and determine:\n"
-            "1. classification: TRUE_POSITIVE or FALSE_POSITIVE\n"
-            "2. confidence: 0-100\n"
-            "3. reasoning: 2-3 sentences\n"
-            "4. action: ESCALATE | MONITOR | DISMISS\n\n"
-            "Respond ONLY in valid JSON with those 4 keys.\n\n"
-        )
-        prompt += f"\nALERT:\n{json.dumps(alert_dict, separators=(',', ':'))}"
-        prompt += f"\n\nCONTEXT:\n{json.dumps(context, separators=(',', ':'))}"
-        if few_shot:
-            prompt += f"\n\nHISTORICAL ANALYST FEEDBACK:\n{json.dumps(few_shot, separators=(',', ':'))}"
+        prompt_name = "alert_triage_v2" if use_v2_prompt else "alert_analysis"
+        template = self._load_prompt(prompt_name)
+        if not template:
+            template = self._load_prompt("alert_analysis")
 
-        text = await self._generate(prompt, use_cache=False)
+        prompt = template or (
+            "You are an expert SOC L2 analyst. Analyse this Wazuh SIEM alert.\n"
+            "Respond ONLY in valid JSON with keys: classification, confidence, "
+            "severity_label, reasoning, action, response_recommendations, "
+            "false_positive_indicators, iocs, triage_notes\n\n"
+        )
+        prompt += f"\n\nALERT:\n{json.dumps(alert_dict, separators=(',', ':'))}"
+        prompt += f"\n\nAGENT CONTEXT:\n{json.dumps(context, separators=(',', ':'))}"
+        if few_shot:
+            prompt += (
+                f"\n\nHISTORICAL ANALYST FEEDBACK ({len(few_shot)} similar alerts):\n"
+                + json.dumps(few_shot, separators=(",", ":"))
+            )
+
+        text = await self._generate(prompt, use_cache=False, max_tokens=1024)
         try:
-            return json.loads(self._extract_json(text))
+            result = json.loads(self._extract_json(text))
         except json.JSONDecodeError:
-            return {
+            result = {
                 "classification": "UNKNOWN",
-                "confidence": 0.0,
+                "confidence": 0,
                 "reasoning": text[:300],
                 "action": "MONITOR",
             }
+
+        # Ensure all v2 keys are present with safe defaults
+        result.setdefault("severity_label", self._map_severity_label(
+            alert_dict.get("rule_level", 0),
+            result.get("classification", "UNKNOWN"),
+        ))
+        result.setdefault("response_recommendations", [])
+        result.setdefault("false_positive_indicators", [])
+        result.setdefault("iocs", {
+            "ips": [], "domains": [], "hashes": [],
+            "users": [], "processes": [], "files": [],
+        })
+        result.setdefault("triage_notes", "")
+
+        # Normalise iocs — each field must be a list
+        iocs = result["iocs"]
+        for key in ("ips", "domains", "hashes", "users", "processes", "files"):
+            if not isinstance(iocs.get(key), list):
+                iocs[key] = []
+
+        return result
+
+    @staticmethod
+    def _map_severity_label(rule_level: int, classification: str) -> str:
+        """
+        Derive a human severity label from Wazuh rule_level.
+        Used as a fallback when the LLM does not return severity_label.
+        """
+        if classification == "FALSE_POSITIVE":
+            return "INFO"
+        if rule_level >= 12:
+            return "CRITICAL"
+        if rule_level >= 8:
+            return "HIGH"
+        if rule_level >= 4:
+            return "MEDIUM"
+        if rule_level >= 1:
+            return "LOW"
+        return "INFO"
+
+    async def generate_alert_remediation(
+        self,
+        alert_dict: dict,
+        verdict: dict,
+    ) -> str:
+        """
+        Generate a structured incident response plan for a confirmed TRUE_POSITIVE alert.
+
+        Args:
+            alert_dict: The serialised alert (same shape used in analyse_alert)
+            verdict:    The AI triage result (classification, severity_label, iocs, etc.)
+
+        Returns a plain-text remediation guide with sections:
+          THREAT SUMMARY / IMMEDIATE CONTAINMENT / INVESTIGATION CHECKLIST /
+          ROOT CAUSE ANALYSIS / LONG-TERM REMEDIATION
+        """
+        template = self._load_prompt("alert_remediation")
+        if not template:
+            template = (
+                "You are a senior SOC analyst writing a remediation guide.\n"
+                "Produce sections: THREAT SUMMARY, IMMEDIATE CONTAINMENT, "
+                "INVESTIGATION CHECKLIST, ROOT CAUSE ANALYSIS, LONG-TERM REMEDIATION.\n"
+                "Be specific. Reference actual alert fields.\n\n"
+            )
+
+        combined = {
+            "alert": alert_dict,
+            "ai_verdict": {
+                "classification": verdict.get("classification"),
+                "severity_label": verdict.get("severity_label"),
+                "confidence": verdict.get("confidence"),
+                "action": verdict.get("action"),
+                "reasoning": verdict.get("reasoning"),
+                "iocs": verdict.get("iocs", {}),
+                "response_recommendations": verdict.get("response_recommendations", []),
+                "mitre_techniques": alert_dict.get("mitre_techniques", []),
+            },
+        }
+
+        prompt = template + f"\n\nALERT + TRIAGE CONTEXT:\n{json.dumps(combined, separators=(',', ':'))}"
+        return await self._generate(prompt, max_tokens=1500)
+
+    async def batch_analyse_alerts(
+        self,
+        alerts: list[dict],
+        context_map: dict[str, dict] | None = None,
+    ) -> list[dict]:
+        """
+        Analyse a list of alerts sequentially with a 1-second gap between calls
+        to respect provider rate limits.
+
+        Args:
+            alerts:      List of alert_dicts (same shape as analyse_alert)
+            context_map: Optional {alert_id → context_dict} mapping
+
+        Returns list of result dicts, each including the original alert_id.
+        """
+        results: list[dict] = []
+        for i, alert in enumerate(alerts):
+            if i > 0:
+                await asyncio.sleep(1)
+            alert_id = alert.get("alert_id", str(i))
+            ctx = (context_map or {}).get(alert_id, {})
+            try:
+                verdict = await self.analyse_alert(alert, ctx)
+            except Exception as exc:
+                log.warning("batch_analyse_alerts failed for alert %s: %s", alert_id, exc)
+                verdict = {
+                    "classification": "UNKNOWN",
+                    "confidence": 0,
+                    "severity_label": "MEDIUM",
+                    "reasoning": f"Analysis error: {str(exc)[:150]}",
+                    "action": "MONITOR",
+                    "response_recommendations": [],
+                    "false_positive_indicators": [],
+                    "iocs": {"ips": [], "domains": [], "hashes": [], "users": [], "processes": [], "files": []},
+                    "triage_notes": "Batch triage failed — manual review required.",
+                }
+            verdict["alert_id"] = alert_id
+            results.append(verdict)
+        return results
 
     # ======================== HELPERS ========================
 
