@@ -21,6 +21,7 @@ class AlertSummaryResponse(BaseModel):
     ai_verdict: Optional[str] = None
     ai_confidence: Optional[float] = None
     ai_action: Optional[str] = None
+    severity_label: Optional[str] = None       # v2: CRITICAL | HIGH | MEDIUM | LOW | INFO
     analyst_override: Optional[str] = None
     mitre_techniques: list[dict] = []
     matched_rules: list[str] = []
@@ -39,6 +40,13 @@ class AlertDetailResponse(AlertSummaryResponse):
     mitre_tactics: list[str] = []
     threat_intel: Optional[dict] = None
     matched_rules: list[str] = []
+    # v2 triage fields
+    response_recommendations: list[str] = []
+    false_positive_indicators: list[str] = []
+    iocs: Optional[dict] = None
+    triage_notes: Optional[str] = None
+    triage_version: str = "v1"
+    triage_duration_ms: Optional[int] = None
 
 
 # --------------- Requests ---------------
@@ -94,9 +102,13 @@ class AlertFilterParams(BaseModel):
 
 class TenantSettingsUpdate(BaseModel):
     """Update per-user Wazuh integration settings."""
-    wazuh_min_level: Optional[int] = Field(None, ge=0, le=15,
-                                           description="Minimum Wazuh alert level to ingest (0–15)")
-    wazuh_agent_group: Optional[str] = Field(None, description="Agent group name, e.g. tenant_juiceshop")
+    wazuh_min_level: Optional[int] = Field(
+        None, ge=0, le=15,
+        description="Minimum Wazuh alert level to ingest (0–15)",
+    )
+    wazuh_agent_group: Optional[str] = Field(
+        None, description="Agent group name, e.g. tenant_juiceshop",
+    )
 
 
 class WazuhTokenResponse(BaseModel):
@@ -105,3 +117,31 @@ class WazuhTokenResponse(BaseModel):
     min_level: int
     agent_group: Optional[str]
     instructions: str
+
+
+# --------------- v2 Triage pipeline ---------------
+
+class BatchRetriangeRequest(BaseModel):
+    """Request body for batch re-triage."""
+    alert_ids: list[str] = Field(..., min_length=1, max_length=50)
+
+
+class TriageResultResponse(BaseModel):
+    """Result from a single triage pipeline run."""
+    alert_id: str
+    wazuh_id: Optional[str] = None
+    stages_completed: list[str] = []
+    stages_failed: list[str] = []
+    elapsed_ms: Optional[int] = None
+    verdict: Optional[dict] = None
+    error: Optional[str] = None
+
+
+class FalsePositivePatternResponse(BaseModel):
+    """Aggregated false positive pattern for a rule."""
+    rule_id: str
+    rule_description: str
+    total_alerts: int
+    fp_count: int
+    fp_rate: float
+    analyst_confirmed_fps: int

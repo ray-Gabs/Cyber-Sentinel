@@ -37,6 +37,8 @@ backend/scan_output/
 
 # Secrets and tokens (extra safety)
 *.txt
+# Allow LLM prompt files checked into the repo
+!backend/ai/prompts/*.txt
 token*
 scan_id*
 secrets/
