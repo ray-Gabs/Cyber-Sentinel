@@ -115,6 +115,7 @@ export interface DetectionRuleUpdate {
   pattern?: string;
   severity?: "low" | "medium" | "high" | "critical";
   enabled?: boolean;
+  project_id?: string | null;
 }
 
 export interface AlertStats {

@@ -1,14 +1,13 @@
 # ============================================================
-# backend/domains/soc/project_models.py — SOC Project + SIEM Config Documents
+# backend/domains/soc/project_models.py — SOC Project Document
 # ============================================================
 
 import re
 from datetime import datetime, timezone
 from typing import Optional
-from uuid import uuid4
 
 from beanie import Document
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 
 def _slugify(name: str) -> str:
@@ -41,28 +40,3 @@ class SocProject(Document):
         indexes = ["owner_id"]
 
 
-class CustomRule(BaseModel):
-    """A user-defined Wazuh XML detection rule scoped to a project."""
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    name: str
-    description: str
-    xml_content: str
-    enabled: bool = True
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-class ProjectSIEMConfig(Document):
-    """
-    Per-project SIEM configuration — stores user-defined Wazuh XML rules.
-    One document per (owner_id, project_id) pair.
-    """
-    owner_id: str
-    project_id: str
-    custom_rules: list[CustomRule] = []
-    rules_last_pushed: Optional[datetime] = None
-    rules_push_status: Optional[str] = None  # "success" | "failed" | "pending"
-
-    class Settings:
-        name = "project_siem_configs"
-        indexes = ["owner_id", "project_id"]

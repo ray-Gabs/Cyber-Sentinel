@@ -118,11 +118,6 @@ CUSTOM_RULES: list[dict[str, Any]] = [
 ]
 
 
-def get_custom_rules() -> list[dict[str, Any]]:
-    """Return all custom rule definitions."""
-    return CUSTOM_RULES
-
-
 def get_rules_xml() -> str:
     """Compile all custom rules into a single Wazuh-compatible XML block."""
     rules_xml = ['<group name="cyber_sentinel_custom,">']

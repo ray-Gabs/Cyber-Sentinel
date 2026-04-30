@@ -46,7 +46,6 @@ import AuditLog from "@/pages/AuditLog";
 import Onboarding from "@/pages/Onboarding";
 import AdminNotifications from "@/pages/AdminNotifications";
 import SocDashboard from "@/pages/soc/SocDashboard";
-import SiemConfig from "@/pages/soc/SiemConfig";
 import MitreNavigator from "@/pages/soc/MitreNavigator";
 import DetectionRules from "@/pages/soc/DetectionRules";
 
@@ -141,7 +140,6 @@ function AppRoutes() {
         <Route path="/agents" element={<AgentsMonitor />} />
         <Route path="/projects" element={<UserProjects />} />
         <Route path="/soc/dashboard" element={<SocDashboard />} />
-        <Route path="/soc/siem-config" element={<SiemConfig />} />
         <Route path="/mitre" element={<MitreNavigator />} />
         <Route path="/detection-rules" element={<DetectionRules />} />
         <Route path="/analytics" element={<Analytics />} />

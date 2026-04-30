@@ -35,11 +35,35 @@ async def ingest_wazuh_alert(
     rule = raw.get("rule", {})
     agent = raw.get("agent", {})
 
-    # Run custom rule matching
+    # Run custom rule matching — scope to global platform rules + this tenant's personal rules.
+    # Loading ALL rules would fire User B's personal patterns against User A's alerts.
     from domains.soc.rule_matcher import match_alert
-    all_rules = await CustomDetectionRule.find(
-        CustomDetectionRule.enabled == True  # noqa: E712
-    ).to_list()
+    rule_conditions: list[dict] = [{"user_id": "system", "enabled": True}]
+    if tenant_id:
+        rule_conditions.append({"user_id": tenant_id, "project_id": None, "enabled": True})
+
+    # Also load project-scoped rules if the alert came from a known project agent
+    cs_group = raw.get("_cs_group", "")
+    if tenant_id and cs_group:
+        from domains.soc.project_models import SocProject
+        project = await SocProject.find_one(
+            {
+                "owner_id": tenant_id,
+                "$or": [
+                    {"wazuh_agent_name": cs_group},
+                    {"wazuh_agent_id": cs_group},
+                    {"slug": {"$regex": re.escape(cs_group), "$options": "i"}},
+                ],
+            }
+        )
+        if project:
+            rule_conditions.append({
+                "user_id": tenant_id,
+                "project_id": str(project.id),
+                "enabled": True,
+            })
+
+    all_rules = await CustomDetectionRule.find({"$or": rule_conditions}).to_list()
     matched_rules = match_alert(raw, all_rules)
 
     alert = Alert(
@@ -84,11 +108,10 @@ async def ingest_wazuh_alert(
 # ── Custom Detection Rules CRUD ──────────────────────────────────────────────
 
 def _validate_regex(pattern: str) -> None:
-    """Raise ValueError if pattern is not a valid regex."""
-    try:
-        re.compile(pattern)
-    except re.error as exc:
-        raise ValueError(f"Invalid regex pattern: {exc}") from exc
+    """Raise ValueError if pattern is not a valid regex or appears unsafe (ReDoS)."""
+    from domains.soc.rule_matcher import _compile
+    if _compile(pattern) is None:
+        raise ValueError("Invalid or unsafe regex pattern — check syntax and avoid catastrophic backtracking")
 
 
 async def get_rules(
@@ -138,14 +161,14 @@ async def create_rule(user_id: str, data: CustomRuleCreate) -> CustomDetectionRu
     return rule
 
 
-async def update_rule(rule_id: str, user_id: str, data: CustomRuleUpdate) -> CustomDetectionRule:
+async def update_rule(rule_id: str, user_id: str, data: CustomRuleUpdate, is_admin: bool = False) -> CustomDetectionRule:
     from bson import ObjectId
     rule = await CustomDetectionRule.get(ObjectId(rule_id))
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
-    if rule.user_id == "system":
+    if rule.user_id == "system" and not is_admin:
         raise HTTPException(status_code=403, detail="Platform rules cannot be modified")
-    if rule.user_id != user_id:
+    if rule.user_id != user_id and not is_admin:
         raise HTTPException(status_code=403, detail="Not authorized to edit this rule")
     if data.pattern is not None:
         _validate_regex(data.pattern)
@@ -156,13 +179,13 @@ async def update_rule(rule_id: str, user_id: str, data: CustomRuleUpdate) -> Cus
     return rule
 
 
-async def delete_rule(rule_id: str, user_id: str) -> None:
+async def delete_rule(rule_id: str, user_id: str, is_admin: bool = False) -> None:
     from bson import ObjectId
     rule = await CustomDetectionRule.get(ObjectId(rule_id))
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
-    if rule.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Cannot delete system default rules")
+    if rule.user_id != user_id and not (is_admin and rule.user_id == "system"):
+        raise HTTPException(status_code=403, detail="Cannot delete this rule")
     await rule.delete()
 
 

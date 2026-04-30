@@ -1,13 +1,11 @@
 /**
  * DetectionRules — per-user CRUD management for regex-based detection rules.
  *
- * Two sections:
+ * Sections:
  *   • Platform Rules  — user_id="system", read-only, shared across all users
- *   • My Rules        — owned by the current user, full CRUD
- *
- * Platform rules serve as a global baseline. Users add their own rules on top.
+ *   • My Rules        — owned by the current user, full CRUD (personal or project-scoped)
  */
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   listDetectionRules,
@@ -15,17 +13,25 @@ import {
   updateDetectionRule,
   deleteDetectionRule,
 } from "@/services/alertService";
+import { getSocProjects, type SocProject } from "@/services/socService";
 import ConfirmModal from "@/components/common/ConfirmModal";
 import StatusBadge from "@/components/common/StatusBadge";
 import {
   Filter, Plus, Pencil, Trash2, ToggleLeft, ToggleRight,
-  AlertCircle, Globe, Lock, Info,
+  AlertCircle, Globe, Lock, Info, Search, FolderKanban, User,
 } from "lucide-react";
 import type { DetectionRule, DetectionRuleCreate, DetectionRuleUpdate } from "@/types";
-import { useAuth } from "@/hooks/useAuth";
 
-const SEVERITIES = ["critical", "high", "medium", "low", "info"] as const;
+const SEVERITIES = ["critical", "high", "medium", "low"] as const;
 type Severity = typeof SEVERITIES[number];
+
+const SEV_COLOR: Record<string, string> = {
+  critical: "#ef4444",
+  high:     "#f97316",
+  medium:   "#f59e0b",
+  low:      "#22c55e",
+  info:     "#3b82f6",
+};
 
 const EMPTY_FORM: DetectionRuleCreate = {
   name: "",
@@ -33,6 +39,7 @@ const EMPTY_FORM: DetectionRuleCreate = {
   pattern: "",
   severity: "medium",
   enabled: true,
+  project_id: null,
 };
 
 function isValidRegex(pattern: string): boolean {
@@ -59,24 +66,31 @@ interface RuleFormProps {
   onClose: () => void;
   saving: boolean;
   title: string;
+  projects: SocProject[];
 }
 
-function RuleFormModal({ initial, onSave, onClose, saving, title }: RuleFormProps) {
+function RuleFormModal({ initial, onSave, onClose, saving, title, projects }: RuleFormProps) {
   const [form, setForm] = useState<DetectionRuleCreate>(initial);
+  const [scope, setScope] = useState<"personal" | "project">(
+    initial.project_id ? "project" : "personal"
+  );
   const [patternError, setPatternError] = useState("");
-  const [testInput, setTestInput] = useState("");
+  const [testInput, setTestInput]       = useState("");
 
-  const set = (field: keyof DetectionRuleCreate, value: unknown) =>
+  const set = <K extends keyof DetectionRuleCreate>(field: K, value: DetectionRuleCreate[K]) =>
     setForm((f) => ({ ...f, [field]: value }));
+
+  const handleScopeChange = (next: "personal" | "project") => {
+    setScope(next);
+    if (next === "personal") set("project_id", null);
+    else if (projects.length > 0) set("project_id", projects[0].id);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) return;
-    if (!form.pattern.trim()) return;
-    if (!isValidRegex(form.pattern)) {
-      setPatternError("Invalid regular expression.");
-      return;
-    }
+    if (!form.name.trim() || !form.pattern.trim()) return;
+    if (!isValidRegex(form.pattern)) { setPatternError("Invalid regular expression."); return; }
+    if (scope === "project" && !form.project_id) { return; }
     setPatternError("");
     await onSave(form);
   };
@@ -92,24 +106,69 @@ function RuleFormModal({ initial, onSave, onClose, saving, title }: RuleFormProp
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+      style={{ backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}
       onClick={onClose}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 8 }}
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 8 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
         transition={{ duration: 0.18 }}
         className="card w-full max-w-lg"
         style={{ padding: "1.5rem" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text-base)" }}>{title}</h2>
+        <h2 className="text-base font-semibold mb-5" style={{ color: "var(--text-base)", fontFamily: "Syne, sans-serif" }}>
+          {title}
+        </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
+
+          {/* Scope selector */}
           <div>
-            <label className="text-xs font-medium mb-1 block" style={{ color: "var(--text-muted)" }}>
-              Rule Name *
-            </label>
+            <label className="text-xs font-medium mb-1.5 block" style={{ color: "var(--text-muted)" }}>Scope</label>
+            <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+              {(["personal", "project"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => handleScopeChange(s)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: scope === s ? "var(--accent-dim)" : "var(--surface)",
+                    color: scope === s ? "var(--accent)" : "var(--text-muted)",
+                    borderRight: s === "personal" ? "1px solid var(--border)" : "none",
+                  }}
+                >
+                  {s === "personal" ? <User size={12} /> : <FolderKanban size={12} />}
+                  {s === "personal" ? "Personal" : "Project"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Project dropdown (only when project scope) */}
+          {scope === "project" && (
+            <div>
+              <label className="text-xs font-medium mb-1 block" style={{ color: "var(--text-muted)" }}>Project</label>
+              {projects.length === 0 ? (
+                <p className="text-xs" style={{ color: "var(--text-subtle)" }}>No projects yet — create one in Projects first.</p>
+              ) : (
+                <select
+                  className="w-full input text-sm"
+                  value={form.project_id ?? ""}
+                  onChange={(e) => set("project_id", e.target.value || null)}
+                  required
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs font-medium mb-1 block" style={{ color: "var(--text-muted)" }}>Rule Name *</label>
             <input
               required
               type="text"
@@ -121,9 +180,7 @@ function RuleFormModal({ initial, onSave, onClose, saving, title }: RuleFormProp
           </div>
 
           <div>
-            <label className="text-xs font-medium mb-1 block" style={{ color: "var(--text-muted)" }}>
-              Description
-            </label>
+            <label className="text-xs font-medium mb-1 block" style={{ color: "var(--text-muted)" }}>Description</label>
             <input
               type="text"
               value={form.description ?? ""}
@@ -134,9 +191,7 @@ function RuleFormModal({ initial, onSave, onClose, saving, title }: RuleFormProp
           </div>
 
           <div>
-            <label className="text-xs font-medium mb-1 block" style={{ color: "var(--text-muted)" }}>
-              Pattern (regex) *
-            </label>
+            <label className="text-xs font-medium mb-1 block" style={{ color: "var(--text-muted)" }}>Pattern (regex) *</label>
             <input
               required
               type="text"
@@ -150,7 +205,6 @@ function RuleFormModal({ initial, onSave, onClose, saving, title }: RuleFormProp
                 <AlertCircle size={11} /> {patternError}
               </p>
             )}
-            {/* Live regex tester */}
             {form.pattern.trim() && (
               <div className="mt-2 rounded-lg p-2.5" style={{ backgroundColor: "var(--bg-muted)", border: "1px solid var(--border)" }}>
                 <div className="flex items-center justify-between mb-1.5">
@@ -164,7 +218,7 @@ function RuleFormModal({ initial, onSave, onClose, saving, title }: RuleFormProp
                           : "#f87171",
                       }}
                     >
-                      {testStatus === "match" ? "Match" : testStatus === "no_match" ? "No match" : "Invalid regex"}
+                      {testStatus === "match" ? "✓ Match" : testStatus === "no_match" ? "✗ No match" : "Invalid regex"}
                     </span>
                   )}
                 </div>
@@ -210,10 +264,8 @@ function RuleFormModal({ initial, onSave, onClose, saving, title }: RuleFormProp
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary text-sm" disabled={saving}>
-              Cancel
-            </button>
-            <button type="submit" className="btn-primary text-sm" disabled={saving}>
+            <button type="button" onClick={onClose} className="btn-secondary text-sm" disabled={saving}>Cancel</button>
+            <button type="submit" className="btn-primary text-sm" disabled={saving || (scope === "project" && !form.project_id)}>
               {saving ? "Saving…" : "Save Rule"}
             </button>
           </div>
@@ -226,26 +278,45 @@ function RuleFormModal({ initial, onSave, onClose, saving, title }: RuleFormProp
 // ── Rule row — user-owned ─────────────────────────────────────────────────
 interface UserRuleRowProps {
   rule: DetectionRule;
+  projectName?: string;
   onToggle: (rule: DetectionRule) => void;
   onEdit: (rule: DetectionRule) => void;
   onDelete: (rule: DetectionRule) => void;
 }
 
-function UserRuleRow({ rule, onToggle, onEdit, onDelete }: UserRuleRowProps) {
+function UserRuleRow({ rule, projectName, onToggle, onEdit, onDelete }: UserRuleRowProps) {
+  const sevColor = SEV_COLOR[rule.severity] ?? "var(--border)";
   return (
     <motion.div
-      variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { duration: 0.22 } } }}
+      variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { duration: 0.2 } } }}
       className="card flex items-center gap-4"
       style={{
         padding: "0.875rem 1.25rem",
-        borderLeft: `3px solid ${rule.enabled ? "var(--accent)" : "var(--border)"}`,
-        opacity: rule.enabled ? 1 : 0.6,
+        borderLeft: `3px solid ${rule.enabled ? sevColor : "var(--border)"}`,
+        opacity: rule.enabled ? 1 : 0.55,
       }}
     >
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold truncate" style={{ color: "var(--text-base)" }}>{rule.name}</p>
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-sm font-semibold truncate" style={{ color: "var(--text-base)" }}>{rule.name}</p>
+          {projectName ? (
+            <span
+              className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+              style={{ backgroundColor: "rgba(59,130,246,0.12)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.2)" }}
+            >
+              <FolderKanban size={9} /> {projectName}
+            </span>
+          ) : (
+            <span
+              className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+              style={{ backgroundColor: "rgba(148,163,184,0.08)", color: "var(--text-subtle)", border: "1px solid var(--border)" }}
+            >
+              <User size={9} /> Personal
+            </span>
+          )}
+        </div>
         {rule.description && (
-          <p className="text-xs truncate mt-0.5" style={{ color: "var(--text-muted)" }}>{rule.description}</p>
+          <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{rule.description}</p>
         )}
         <p
           className="text-[11px] font-mono mt-1 truncate"
@@ -273,6 +344,7 @@ function UserRuleRow({ rule, onToggle, onEdit, onDelete }: UserRuleRowProps) {
 
 // ── Rule row — platform/global (read-only) ───────────────────────────────
 function PlatformRuleRow({ rule }: { rule: DetectionRule }) {
+  const sevColor = SEV_COLOR[rule.severity] ?? "var(--border)";
   return (
     <div
       className="flex items-center gap-4 rounded-xl"
@@ -280,7 +352,7 @@ function PlatformRuleRow({ rule }: { rule: DetectionRule }) {
         padding: "0.875rem 1.25rem",
         backgroundColor: "var(--bg-muted)",
         border: "1px solid var(--border)",
-        borderLeft: "3px solid rgba(148,163,184,0.3)",
+        borderLeft: `3px solid ${rule.enabled ? sevColor + "55" : "var(--border)"}`,
         opacity: rule.enabled ? 1 : 0.5,
       }}
     >
@@ -305,17 +377,43 @@ function PlatformRuleRow({ rule }: { rule: DetectionRule }) {
         </p>
       </div>
       <StatusBadge value={rule.severity} variant="severity" />
-      <div title="Platform rules cannot be modified" className="p-1.5 rounded" style={{ color: "var(--text-subtle)" }}>
+      <div title="Platform rules are managed by the platform" className="p-1.5 rounded" style={{ color: "var(--text-subtle)" }}>
         <Lock size={13} />
       </div>
     </div>
   );
 }
 
+// ── Stats strip ───────────────────────────────────────────────────────────
+function StatsStrip({ platform, personal, project, active }: {
+  platform: number; personal: number; project: number; active: number;
+}) {
+  const items = [
+    { label: "Platform", value: platform, color: "var(--text-subtle)" },
+    { label: "Personal", value: personal, color: "#94a3b8" },
+    { label: "Project",  value: project,  color: "#60a5fa" },
+    { label: "Active",   value: active,   color: "#22c55e" },
+  ];
+  return (
+    <div
+      className="flex items-center gap-6 px-4 py-2.5 rounded-xl"
+      style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+    >
+      {items.map((item, i) => (
+        <div key={item.label} className="flex items-center gap-2">
+          {i > 0 && <div className="w-px h-3" style={{ backgroundColor: "var(--border)" }} />}
+          <span className="text-xs font-mono font-bold" style={{ color: item.color }}>{item.value}</span>
+          <span className="text-xs" style={{ color: "var(--text-subtle)" }}>{item.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────
 export default function DetectionRules() {
-  const { user } = useAuth();
   const [rules, setRules]           = useState<DetectionRule[]>([]);
+  const [projects, setProjects]     = useState<SocProject[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState("");
   const [modalMode, setModalMode]   = useState<"add" | "edit" | null>(null);
@@ -323,12 +421,18 @@ export default function DetectionRules() {
   const [saving, setSaving]         = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DetectionRule | null>(null);
   const [deleting, setDeleting]     = useState(false);
+  const [search, setSearch]         = useState("");
 
-  const fetchRules = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      setRules(await listDetectionRules());
+      const [fetchedRules, fetchedProjects] = await Promise.all([
+        listDetectionRules(),
+        getSocProjects().catch(() => []),
+      ]);
+      setRules(fetchedRules);
+      setProjects(fetchedProjects);
     } catch {
       setError("Failed to load detection rules.");
     } finally {
@@ -336,14 +440,28 @@ export default function DetectionRules() {
     }
   }, []);
 
-  useEffect(() => { fetchRules(); }, [fetchRules]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // Global platform rules: seeded by system with no project scope
-  const platformRules  = rules.filter((r) => r.user_id === "system" && !r.project_id);
-  // Project-preset rules: system-seeded but scoped to a project the user owns (read-only)
-  const presetRules    = rules.filter((r) => r.user_id === "system" && !!r.project_id);
-  // Personal rules: created by this user
-  const myRules        = rules.filter((r) => r.user_id !== "system");
+  const projectById = useMemo(
+    () => Object.fromEntries(projects.map((p) => [p.id, p.name])),
+    [projects]
+  );
+
+  const platformRules = rules.filter((r) => r.user_id === "system" && !r.project_id);
+  const presetRules   = rules.filter((r) => r.user_id === "system" && !!r.project_id);
+  const myRules       = rules.filter((r) => r.user_id !== "system");
+
+  const filteredMyRules = search.trim()
+    ? myRules.filter((r) =>
+        r.name.toLowerCase().includes(search.toLowerCase()) ||
+        r.pattern.toLowerCase().includes(search.toLowerCase()) ||
+        (r.description ?? "").toLowerCase().includes(search.toLowerCase())
+      )
+    : myRules;
+
+  const personalCount = myRules.filter((r) => !r.project_id).length;
+  const projectCount  = myRules.filter((r) => !!r.project_id).length;
+  const activeCount   = rules.filter((r) => r.enabled).length;
 
   const handleSave = async (form: DetectionRuleCreate) => {
     setSaving(true);
@@ -392,8 +510,15 @@ export default function DetectionRules() {
     setModalMode("edit");
   };
 
-  const formInitial = modalMode === "edit" && editTarget
-    ? { name: editTarget.name, description: editTarget.description ?? "", pattern: editTarget.pattern, severity: editTarget.severity, enabled: editTarget.enabled }
+  const formInitial: DetectionRuleCreate = modalMode === "edit" && editTarget
+    ? {
+        name: editTarget.name,
+        description: editTarget.description ?? "",
+        pattern: editTarget.pattern,
+        severity: editTarget.severity,
+        enabled: editTarget.enabled,
+        project_id: editTarget.project_id ?? null,
+      }
     : EMPTY_FORM;
 
   return (
@@ -418,11 +543,12 @@ export default function DetectionRules() {
             onSave={handleSave}
             onClose={() => { setModalMode(null); setEditTarget(null); }}
             saving={saving}
+            projects={projects}
           />
         )}
       </AnimatePresence>
 
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* ── Header ──────────────────────────────────────────── */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -438,30 +564,43 @@ export default function DetectionRules() {
               Detection Rules
             </h1>
             <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
-              Regex patterns matched against incoming Wazuh alert descriptions
+              Regex patterns matched against every incoming Wazuh alert
             </p>
           </div>
           <button className="btn-primary shrink-0" onClick={() => setModalMode("add")}>
-            <Plus size={14} /> Add Rule
+            <Plus size={14} /> New Rule
           </button>
         </motion.div>
+
+        {/* ── Stats ───────────────────────────────────────────── */}
+        {!loading && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.05 }}>
+            <StatsStrip
+              platform={platformRules.length + presetRules.length}
+              personal={personalCount}
+              project={projectCount}
+              active={activeCount}
+            />
+          </motion.div>
+        )}
 
         {/* ── How it works ────────────────────────────────────── */}
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05, duration: 0.25 }}
+          transition={{ delay: 0.08, duration: 0.25 }}
           className="flex items-start gap-3 rounded-xl px-4 py-3"
           style={{ backgroundColor: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)" }}
         >
           <Info size={14} className="mt-0.5 shrink-0" style={{ color: "var(--accent)" }} />
           <div className="text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>
-            <strong style={{ color: "var(--text-base)" }}>How detection rules work: </strong>
-            When a Wazuh alert arrives via the webhook, its{" "}
-            <code className="font-mono text-[11px] px-1 rounded" style={{ backgroundColor: "var(--bg-muted)" }}>rule_description</code>{" "}
-            is matched against every enabled rule. Matched rules are stored on the alert and used to
-            classify severity. <strong style={{ color: "var(--text-base)" }}>Platform Rules</strong> apply to
-            all users. <strong style={{ color: "var(--text-base)" }}>My Rules</strong> are private to your account.
+            <strong style={{ color: "var(--text-base)" }}>How it works: </strong>
+            On alert ingestion, its{" "}
+            <code className="font-mono text-[11px] px-1 rounded" style={{ backgroundColor: "var(--bg-muted)" }}>rule_description</code>,{" "}
+            <code className="font-mono text-[11px] px-1 rounded" style={{ backgroundColor: "var(--bg-muted)" }}>full_log</code>, and other fields
+            are matched against your enabled rules. Matched rule names are stored on the alert and influence severity.{" "}
+            <strong style={{ color: "var(--text-base)" }}>Personal</strong> rules match your alerts only.{" "}
+            <strong style={{ color: "var(--text-base)" }}>Project</strong> rules are scoped to one project.
           </div>
         </motion.div>
 
@@ -477,7 +616,7 @@ export default function DetectionRules() {
           </div>
         )}
 
-        {/* ── Loading skeletons ────────────────────────────────── */}
+        {/* ── Loading ─────────────────────────────────────────── */}
         {loading && (
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => <RuleSkeleton key={i} />)}
@@ -494,9 +633,7 @@ export default function DetectionRules() {
             >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-base)" }}>
-                    My Rules
-                  </h2>
+                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-base)" }}>My Rules</h2>
                   {myRules.length > 0 && (
                     <span
                       className="text-[11px] px-1.5 py-0.5 rounded font-mono"
@@ -506,9 +643,21 @@ export default function DetectionRules() {
                     </span>
                   )}
                 </div>
-                <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
-                  Visible only to: <strong style={{ color: "var(--text-muted)" }}>{user?.username ?? "you"}</strong>
-                </span>
+                {myRules.length > 0 && (
+                  <div
+                    className="flex items-center gap-2 rounded-lg px-3 py-1.5"
+                    style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+                  >
+                    <Search size={12} style={{ color: "var(--text-subtle)" }} />
+                    <input
+                      className="bg-transparent text-xs outline-none"
+                      style={{ color: "var(--text-base)", width: "140px" }}
+                      placeholder="Filter rules…"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </div>
+                )}
               </div>
 
               {myRules.length === 0 ? (
@@ -521,12 +670,16 @@ export default function DetectionRules() {
                   </div>
                   <p className="font-semibold text-sm" style={{ color: "var(--text-base)" }}>No rules yet</p>
                   <p className="text-xs mt-1 mb-4" style={{ color: "var(--text-muted)" }}>
-                    Create your own regex rules to auto-classify alerts
+                    Create regex rules to auto-classify incoming alerts
                   </p>
                   <button className="btn-primary text-sm" onClick={() => setModalMode("add")}>
                     <Plus size={13} /> Add First Rule
                   </button>
                 </div>
+              ) : filteredMyRules.length === 0 ? (
+                <p className="text-sm text-center py-6" style={{ color: "var(--text-muted)" }}>
+                  No rules match "{search}"
+                </p>
               ) : (
                 <motion.div
                   initial="hidden"
@@ -534,10 +687,11 @@ export default function DetectionRules() {
                   variants={{ hidden: {}, show: { transition: { staggerChildren: 0.04 } } }}
                   className="space-y-2"
                 >
-                  {myRules.map((rule) => (
+                  {filteredMyRules.map((rule) => (
                     <UserRuleRow
                       key={rule.id}
                       rule={rule}
+                      projectName={rule.project_id ? projectById[rule.project_id] : undefined}
                       onToggle={handleToggle}
                       onEdit={openEdit}
                       onDelete={setDeleteTarget}
@@ -547,7 +701,7 @@ export default function DetectionRules() {
               )}
             </motion.section>
 
-            {/* ── Project Preset Rules (system-seeded, owner-only, read-only) ── */}
+            {/* ── Project Preset Rules ─────────────────────────── */}
             {presetRules.length > 0 && (
               <motion.section
                 initial={{ opacity: 0, y: 8 }}
@@ -555,24 +709,18 @@ export default function DetectionRules() {
                 transition={{ delay: 0.15, duration: 0.25 }}
               >
                 <div className="flex items-center gap-2 mb-3">
-                  <Globe size={13} style={{ color: "var(--accent)" }} />
-                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-muted)" }}>
-                    Project Presets
-                  </h2>
+                  <FolderKanban size={13} style={{ color: "var(--accent)" }} />
+                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-muted)" }}>Project Presets</h2>
                   <span
                     className="text-[11px] px-1.5 py-0.5 rounded font-mono"
                     style={{ backgroundColor: "var(--bg-muted)", color: "var(--text-subtle)", border: "1px solid var(--border)" }}
                   >
                     {presetRules.length}
                   </span>
-                  <span className="text-xs ml-1" style={{ color: "var(--text-subtle)" }}>
-                    · scoped to your projects · read-only
-                  </span>
+                  <span className="text-xs ml-1" style={{ color: "var(--text-subtle)" }}>· scoped to your projects · read-only</span>
                 </div>
                 <div className="space-y-2">
-                  {presetRules.map((rule) => (
-                    <PlatformRuleRow key={rule.id} rule={rule} />
-                  ))}
+                  {presetRules.map((rule) => <PlatformRuleRow key={rule.id} rule={rule} />)}
                 </div>
               </motion.section>
             )}
@@ -586,23 +734,17 @@ export default function DetectionRules() {
               >
                 <div className="flex items-center gap-2 mb-3">
                   <Globe size={13} style={{ color: "var(--text-subtle)" }} />
-                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-muted)" }}>
-                    Platform Rules
-                  </h2>
+                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-muted)" }}>Platform Rules</h2>
                   <span
                     className="text-[11px] px-1.5 py-0.5 rounded font-mono"
                     style={{ backgroundColor: "var(--bg-muted)", color: "var(--text-subtle)", border: "1px solid var(--border)" }}
                   >
                     {platformRules.length}
                   </span>
-                  <span className="text-xs ml-1" style={{ color: "var(--text-subtle)" }}>
-                    · shared across all users · read-only
-                  </span>
+                  <span className="text-xs ml-1" style={{ color: "var(--text-subtle)" }}>· shared across all users · always active</span>
                 </div>
                 <div className="space-y-2">
-                  {platformRules.map((rule) => (
-                    <PlatformRuleRow key={rule.id} rule={rule} />
-                  ))}
+                  {platformRules.map((rule) => <PlatformRuleRow key={rule.id} rule={rule} />)}
                 </div>
               </motion.section>
             )}
