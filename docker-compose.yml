@@ -207,7 +207,7 @@ services:
     restart: unless-stopped
     # pidfile written by beat on startup; kill -0 checks the process is alive without signalling it
     healthcheck:
-      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 $(cat /tmp/celerybeat.pid) 2>/dev/null || exit 1"]
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 $$(cat /tmp/celerybeat.pid) 2>/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 5
