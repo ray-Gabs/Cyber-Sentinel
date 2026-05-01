@@ -218,6 +218,16 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return response
+
+
 # --------------- Routers ---------------
 
 from domains.auth.router import router as auth_router
@@ -330,10 +340,16 @@ async def websocket_endpoint(
         await websocket.close(code=1008)
         return
     try:
-        decode_access_token(token)
+        payload = decode_access_token(token)
+        user_id = payload.get("sub", "")
     except Exception:
         await websocket.close(code=1008)
         return
+
+    # Scope scan/alert channels to the authenticated user so users only
+    # receive their own real-time events (not every other user's).
+    if channel in ("scans", "alerts"):
+        channel = f"user:{user_id}"
 
     await ws_manager.connect(websocket, channel)
     try:

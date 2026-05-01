@@ -200,10 +200,19 @@ async def delete_all_rules(user_id: str) -> int:
     return count
 
 
-async def get_alert(alert_id: str) -> Alert:
+async def get_alert(alert_id: str, current_user: Optional[User] = None) -> Alert:
     alert = await Alert.get(alert_id)
     if not alert:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+    if current_user and current_user.role != "admin":
+        if current_user.wazuh_token:
+            authorized = alert.tenant_id == str(current_user.id)
+        elif current_user.wazuh_agent_name:
+            authorized = alert.agent_name == current_user.wazuh_agent_name
+        else:
+            authorized = alert.tenant_id == str(current_user.id)
+        if not authorized:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Alert not found")
     return alert
 
 
@@ -288,12 +297,12 @@ async def apply_ai_verdict(alert_id: str, verdict: dict) -> Alert:
     return alert
 
 
-async def override_verdict(alert_id: str, data: AnalystOverrideRequest) -> Alert:
+async def override_verdict(alert_id: str, data: AnalystOverrideRequest, current_user: Optional[User] = None) -> Alert:
     """
     Human analyst overrides the AI's classification.
     This feeds back into future prompts (few-shot learning).
     """
-    alert = await get_alert(alert_id)
+    alert = await get_alert(alert_id, current_user=current_user)
     alert.analyst_override = data.override
     alert.analyst_notes = data.notes
     await alert.save()
@@ -309,11 +318,11 @@ async def override_verdict(alert_id: str, data: AnalystOverrideRequest) -> Alert
     return alert
 
 
-async def enrich_alert_threat_intel(alert_id: str) -> Alert:
+async def enrich_alert_threat_intel(alert_id: str, current_user: Optional[User] = None) -> Alert:
     """Enrich an alert with VirusTotal + AbuseIPDB threat intelligence."""
     from domains.soc.threat_intel import threat_intel_service
 
-    alert = await get_alert(alert_id)
+    alert = await get_alert(alert_id, current_user=current_user)
     results = await threat_intel_service.enrich_alert(alert)
     alert.threat_intel = results
     await alert.save()

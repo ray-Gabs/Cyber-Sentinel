@@ -257,20 +257,12 @@ async def delete_detection_rule(rule_id: str, user: User = Depends(get_current_u
 @router.post("/rules/deploy")
 async def deploy_custom_rules(
     user: User = Depends(get_current_user),
-    x_wazuh_url: Optional[str] = Header(None, alias="X-Wazuh-Url"),
-    x_wazuh_username: Optional[str] = Header(None, alias="X-Wazuh-Username"),
-    x_wazuh_password: Optional[str] = Header(None, alias="X-Wazuh-Password"),
 ):
-    """Deploy custom SIEM rules to Wazuh."""
-    has_user_credentials = bool(x_wazuh_url)
-    if not has_user_credentials and user.role != "admin":
+    """Deploy custom SIEM rules to Wazuh. Admin only."""
+    if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin role required to deploy SIEM rules")
     from domains.soc.wazuh_rules import deploy_rules_to_wazuh
-    return await deploy_rules_to_wazuh(
-        wazuh_url=x_wazuh_url,
-        wazuh_user=x_wazuh_username,
-        wazuh_password=x_wazuh_password,
-    )
+    return await deploy_rules_to_wazuh()
 
 
 _MAX_WEBHOOK_BYTES = 10 * 1024 * 1024  # 10 MB — prevents memory DoS from huge payloads
@@ -308,24 +300,24 @@ async def wazuh_webhook(
     tenant_min_level: int = 0
 
     provided_token = x_wazuh_token or ""
-    if provided_token:
-        owner = await User.find_one({"wazuh_token": provided_token})
-        if owner:
-            tenant_id = str(owner.id)
-            tenant_min_level = owner.wazuh_min_level
-        elif settings.wazuh_webhook_token and hmac.compare_digest(
-            provided_token, settings.wazuh_webhook_token
-        ):
-            pass  # global shared token — no tenant assignment (admin ingest)
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid webhook token",
-            )
-    elif settings.wazuh_webhook_token:
+    if not provided_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing X-Wazuh-Token header",
+        )
+
+    owner = await User.find_one({"wazuh_token": provided_token})
+    if owner:
+        tenant_id = str(owner.id)
+        tenant_min_level = owner.wazuh_min_level
+    elif settings.wazuh_webhook_token and hmac.compare_digest(
+        provided_token, settings.wazuh_webhook_token
+    ):
+        pass  # global shared token — no tenant assignment (admin ingest)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid webhook token",
         )
 
     try:
@@ -463,7 +455,15 @@ async def update_tenant_settings(
 @router.get("/mitre-summary", tags=["SOC"])
 async def get_mitre_summary(current_user: User = Depends(get_current_user)) -> dict:
     """Aggregate MITRE ATT&CK technique frequency from the most recent 500 alerts."""
-    alerts = await Alert.find().sort("-timestamp").limit(500).to_list()
+    query: dict = {}
+    if current_user.role != "admin":
+        if current_user.wazuh_token:
+            query["tenant_id"] = str(current_user.id)
+        elif current_user.wazuh_agent_name:
+            query["agent_name"] = current_user.wazuh_agent_name
+        else:
+            query["tenant_id"] = str(current_user.id)
+    alerts = await Alert.find(query).sort("-timestamp").limit(500).to_list()
 
     by_tactic: dict[str, dict[str, int]] = {}
     total_hits = 0
@@ -494,7 +494,7 @@ async def get_mitre_summary(current_user: User = Depends(get_current_user)) -> d
 @router.get("/{alert_id}", response_model=AlertDetailResponse)
 async def get_alert(alert_id: str, user: User = Depends(get_current_user)):
     """Get full details for a single alert including AI verdict."""
-    a = await service.get_alert(alert_id)
+    a = await service.get_alert(alert_id, current_user=user)
     return _to_detail(a)
 
 
@@ -505,7 +505,7 @@ async def override_verdict(
     user: User = Depends(get_current_user),
 ):
     """Human analyst overrides the AI classification for an alert."""
-    a = await service.override_verdict(alert_id, data)
+    a = await service.override_verdict(alert_id, data, current_user=user)
     await audit_service.log_event(
         user_id=str(user.id),
         username=user.username,
@@ -520,7 +520,7 @@ async def override_verdict(
 @router.post("/{alert_id}/enrich", response_model=AlertDetailResponse)
 async def enrich_alert(alert_id: str, user: User = Depends(get_current_user)):
     """Run threat intelligence enrichment (VT + AbuseIPDB) for an alert."""
-    a = await service.enrich_alert_threat_intel(alert_id)
+    a = await service.enrich_alert_threat_intel(alert_id, current_user=user)
     return _to_detail(a)
 
 
@@ -542,7 +542,7 @@ async def trigger_playbook(
 ):
     """Manually trigger a playbook for an alert. If playbook_id is omitted, auto-selects."""
     from domains.soc.playbook import PlaybookEngine, PLAYBOOKS
-    a = await service.get_alert(alert_id)
+    a = await service.get_alert(alert_id, current_user=user)
     engine = PlaybookEngine()
     pb_id = playbook_id or engine.find_matching_playbook(a)
     if not pb_id or pb_id not in PLAYBOOKS:
@@ -581,7 +581,7 @@ async def get_alert_remediation(
     user: User = Depends(get_current_user),
 ):
     """Generate a structured incident response plan for a TRUE_POSITIVE alert."""
-    a = await service.get_alert(alert_id)
+    a = await service.get_alert(alert_id, current_user=user)
     if not a.ai_verdict or a.ai_verdict == "FALSE_POSITIVE":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

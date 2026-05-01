@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, Query, Request
 
 from core.dependencies import get_current_user
@@ -17,7 +19,7 @@ async def global_search(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Full-text search across scans and alerts."""
-    term = q.strip()
+    term = re.escape(q.strip())
 
     scan_filter: dict = {"target": {"$regex": term, "$options": "i"}}
     if current_user.role != "admin":
@@ -25,12 +27,21 @@ async def global_search(
 
     scans = await Scan.find(scan_filter).sort("-created_at").limit(8).to_list()
 
-    alert_filter: dict = {
-        "$or": [
-            {"rule_description": {"$regex": term, "$options": "i"}},
-            {"agent_name": {"$regex": term, "$options": "i"}},
-        ]
-    }
+    search_clause: dict = {"$or": [
+        {"rule_description": {"$regex": term, "$options": "i"}},
+        {"agent_name": {"$regex": term, "$options": "i"}},
+    ]}
+
+    if current_user.role != "admin":
+        if current_user.wazuh_token:
+            tenant_scope: dict = {"tenant_id": str(current_user.id)}
+        elif current_user.wazuh_agent_name:
+            tenant_scope = {"agent_name": current_user.wazuh_agent_name}
+        else:
+            tenant_scope = {"tenant_id": str(current_user.id)}
+        alert_filter: dict = {"$and": [tenant_scope, search_clause]}
+    else:
+        alert_filter = search_clause
 
     alerts = await Alert.find(alert_filter).sort("-timestamp").limit(8).to_list()
 

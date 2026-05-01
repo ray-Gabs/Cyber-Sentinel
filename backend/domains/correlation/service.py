@@ -115,7 +115,7 @@ async def list_correlations(
     """List correlations newest first. If user_id given, scope to that user's scans."""
     if user_id is not None:
         # Limit scan ID fetch to recent 30 days to prevent O(N) memory load
-        cutoff = datetime.utcnow() - timedelta(days=30)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
         user_scans = await Scan.find({"user_id": user_id, "created_at": {"$gte": cutoff}}).limit(200).to_list()
         scan_ids = [str(s.id) for s in user_scans]
         return (
@@ -137,7 +137,7 @@ async def list_correlations(
 async def count_correlations(user_id: Optional[str] = None) -> int:
     """Count correlations scoped to a user's scans."""
     if user_id is not None:
-        cutoff = datetime.utcnow() - timedelta(days=30)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
         user_scans = await Scan.find({"user_id": user_id, "created_at": {"$gte": cutoff}}).limit(200).to_list()
         scan_ids = [str(s.id) for s in user_scans]
         return await Correlation.find({"scan_id": {"$in": scan_ids}}).count()
@@ -154,7 +154,7 @@ async def delete_correlation(correlation_id: str, user_id: str) -> None:
         corr = None
     if not corr:
         raise HTTPException(status_code=404, detail="Correlation not found")
-    scan = await Scan.find_one({"_id": corr.scan_id})
+    scan = await Scan.find_one({"_id": PydanticObjectId(corr.scan_id)})
     if not scan or (scan.user_id != user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     await corr.delete()
