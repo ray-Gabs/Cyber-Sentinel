@@ -224,7 +224,7 @@ async def list_alerts(
     - Admin role: sees ALL alerts (instructor / SOC analyst view).
     - Non-admin with a wazuh_token: sees ONLY their tenant_id alerts (primary isolation).
     - Non-admin with only wazuh_agent_name: sees that agent's alerts (legacy binding).
-    - Non-admin with neither: sees all alerts (student hasn't linked yet).
+    - Non-admin with neither: sees only their own tenant bucket (empty until linked).
     - Explicit filter params always narrow further on top of tenant scope.
     """
     query: dict = {}
@@ -236,6 +236,11 @@ async def list_alerts(
         elif current_user.wazuh_agent_name:
             # Legacy: agent name binding (no token configured yet)
             query["agent_name"] = current_user.wazuh_agent_name
+        else:
+            # No Wazuh config linked yet — scope to this user's tenant bucket.
+            # Returns empty until alerts arrive tagged with their ID, but never
+            # leaks another student's alerts.
+            query["tenant_id"] = str(current_user.id)
 
     if rule_level_min is not None:
         query["rule_level"] = {"$gte": rule_level_min}

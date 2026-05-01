@@ -45,12 +45,24 @@ celery.conf.update(
     broker_transport_options={"visibility_timeout": 4800},
 )
 
+# --------------- Task Routing ---------------
+# Scan tasks stay on the default 'celery' queue (main worker).
+# SOC tasks (poll + triage) go to the dedicated 'soc' queue (celery-soc worker).
+# This prevents poll/triage tasks from starving run_scan in the same queue.
+celery.conf.task_routes = {
+    "domains.soc.tasks.poll_wazuh_alerts": {"queue": "soc"},
+    "domains.soc.tasks.triage_single_alert": {"queue": "soc"},
+}
+
 # --------------- Beat Schedule (Periodic Tasks) ---------------
 celery.conf.beat_schedule = {
-    # Poll Wazuh for new alerts every 30 seconds
+    # Poll Wazuh for new alerts every 30 seconds.
+    # expires=25: if the worker is busy when beat fires, discard the stale copy
+    # rather than letting them pile up and block the queue.
     "poll-wazuh-alerts": {
         "task": "domains.soc.tasks.poll_wazuh_alerts",
         "schedule": 30.0,  # seconds
+        "options": {"expires": 25},
     },
 }
 

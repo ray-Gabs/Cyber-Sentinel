@@ -142,7 +142,7 @@ services:
     container_name: cyber-sentinel-celery
     networks:
       - sentinel-net
-    command: celery -A core.celery_app worker --loglevel=info --pool=solo
+    command: celery -A core.celery_app worker --loglevel=info --pool=solo -Q celery
     env_file:
       - .env
     environment:
@@ -183,7 +183,7 @@ services:
     container_name: cyber-sentinel-celery-beat
     networks:
       - sentinel-net
-    command: celery -A core.celery_app beat --loglevel=info --scheduler celery.beat.PersistentScheduler
+    command: celery -A core.celery_app beat --loglevel=info --scheduler celery.beat.PersistentScheduler --pidfile /tmp/celerybeat.pid
     env_file:
       - .env
     environment:
@@ -205,13 +205,51 @@ services:
     volumes:
       - ./backend:/app
     restart: unless-stopped
-    # Beat doesn't serve HTTP — check that the process is alive
+    # pidfile written by beat on startup; kill -0 checks the process is alive without signalling it
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'celery.*beat' > /dev/null && echo ok || exit 1"]
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 $(cat /tmp/celerybeat.pid) 2>/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  # ── Celery SOC Worker (dedicated queue for Wazuh poll + AI triage) ─────────
+  # Isolated from the scan worker so poll/triage tasks cannot starve run_scan.
+  # Beat must target this worker — all soc-queue tasks route here via task_routes.
+  celery-soc:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cyber-sentinel-celery-soc
+    networks:
+      - sentinel-net
+    command: celery -A core.celery_app worker --loglevel=info --pool=solo -Q soc
+    env_file:
+      - .env
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - ALLOW_PRIVATE_TARGETS=true
+      - WAZUH_API_URL=https://host.docker.internal:55000
+      - WAZUH_VERIFY_SSL=false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping --timeout 10 2>&1 | grep -q pong || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
 
   # ── React Frontend (nginx serving the Vite static build) ─────────────────
   frontend:

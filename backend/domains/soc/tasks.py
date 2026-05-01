@@ -24,17 +24,6 @@ async def _ws_publish(channel: str, payload: dict) -> None:
         log.warning("WS publish to Redis failed: %s", exc)
 
 
-def _get_event_loop():
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            raise RuntimeError
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    return loop
-
-
 @celery.task(
     name="domains.soc.tasks.triage_single_alert",
     autoretry_for=(Exception,),
@@ -50,8 +39,7 @@ def triage_single_alert(alert_id: str):
       context build → MITRE mapping → LLM analysis → playbook → threat intel → notify.
     Called by the webhook endpoint and poll task after a new alert is ingested.
     """
-    loop = _get_event_loop()
-    loop.run_until_complete(_triage_async(alert_id))
+    asyncio.run(_triage_async(alert_id))
 
 
 async def _triage_async(alert_id: str):
@@ -72,8 +60,7 @@ def poll_wazuh_alerts():
     Fetches alerts directly from the Wazuh REST API when the forwarder is not in use.
     Primary ingestion path is the webhook (wazuh_forwarder.py → POST /api/alerts/webhook).
     """
-    loop = _get_event_loop()
-    loop.run_until_complete(_poll_async())
+    asyncio.run(_poll_async())
 
 
 async def _poll_async():
