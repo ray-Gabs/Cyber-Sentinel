@@ -388,7 +388,14 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
             })
 
     # Admin sees per-project health in the cards; skip the user-scoped global check
-    system_notifications = [] if user.role == "admin" else await _get_global_health_issues(str(user.id))
+    if user.role == "admin":
+        system_notifications = []
+    else:
+        try:
+            system_notifications = await _get_global_health_issues(str(user.id))
+        except Exception as exc:
+            log.warning("Global health check failed for user %s: %s", str(user.id), exc)
+            system_notifications = []
 
     return {
         "summary": {

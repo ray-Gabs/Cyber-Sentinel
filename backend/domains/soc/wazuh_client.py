@@ -569,6 +569,27 @@ class WazuhClient:
         return self._items(data)
 
     # ─────────────────────────────────────────────
+    # Convenience helpers used by projects_router
+    # ─────────────────────────────────────────────
+
+    async def check_reachable(self) -> bool:
+        """Return True if the Wazuh manager is reachable, False otherwise (never raises)."""
+        try:
+            await self.authenticate()
+            return True
+        except Exception:
+            return False
+
+    async def get_agent_by_name(self, name: str) -> dict | None:
+        """Find a registered agent by its name field. Returns None if not found or unreachable."""
+        try:
+            data = await self._request("GET", "/agents", params={"name": name, "limit": 1})
+            items = self._items(data)
+            return items[0] if items else None
+        except Exception:
+            return None
+
+    # ─────────────────────────────────────────────
     # Context helper for triage pipeline
     # ─────────────────────────────────────────────
 

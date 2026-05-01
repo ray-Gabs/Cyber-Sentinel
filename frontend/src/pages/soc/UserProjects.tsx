@@ -300,7 +300,7 @@ export default function UserProjects() {
                 >
                   {project.wazuh_agent_name ? (
                     <Link
-                      to={`/soc/alerts?agent=${encodeURIComponent(project.wazuh_agent_name)}`}
+                      to={`/alerts?agent_name=${encodeURIComponent(project.wazuh_agent_name)}`}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-1 justify-center transition-colors"
                       style={{
                         backgroundColor: "rgba(245,158,11,0.08)",
