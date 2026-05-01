@@ -331,15 +331,27 @@ async def apply_mitre_mapping(alert: Alert) -> Alert:
     return alert
 
 
-async def get_alert_stats(project_id: Optional[str] = None) -> dict:
+async def get_alert_stats(
+    project_id: Optional[str] = None,
+    current_user: Optional[User] = None,
+) -> dict:
     """
     Get aggregated alert statistics for the analytics dashboard.
 
     Args:
         project_id: If provided, restrict all counts to alerts tagged with
                     this project (e.g. a specific intern/class project scope).
+        current_user: Scopes all counts to the user's tenant when non-admin,
+                      using the same rules as list_alerts.
     """
     base: dict = {}
+    if current_user and current_user.role != "admin":
+        if current_user.wazuh_token:
+            base["tenant_id"] = str(current_user.id)
+        elif current_user.wazuh_agent_name:
+            base["agent_name"] = current_user.wazuh_agent_name
+        else:
+            base["tenant_id"] = str(current_user.id)
     if project_id:
         base["project_id"] = project_id
 

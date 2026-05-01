@@ -116,7 +116,7 @@ async def alert_stats(
     user: User = Depends(get_current_user),
 ):
     """Get aggregated alert statistics for the analytics dashboard."""
-    return await service.get_alert_stats(project_id=project_id)
+    return await service.get_alert_stats(project_id=project_id, current_user=user)
 
 
 @router.get("/health")
