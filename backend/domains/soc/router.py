@@ -524,6 +524,19 @@ async def enrich_alert(alert_id: str, user: User = Depends(get_current_user)):
     return _to_detail(a)
 
 
+@router.get("/{alert_id}/raw-wazuh")
+async def get_raw_wazuh_alert(alert_id: str, user: User = Depends(get_current_user)):
+    """Fetch the original alert payload directly from the Wazuh Manager API."""
+    if not settings.wazuh_api_password:
+        raise HTTPException(status_code=503, detail="Wazuh API not configured")
+    a = await service.get_alert(alert_id, current_user=user)
+    from domains.soc.wazuh_client import wazuh_client
+    raw = await wazuh_client.get_alert(a.wazuh_id)
+    if raw is None:
+        raise HTTPException(status_code=404, detail="Alert not found in Wazuh Manager")
+    return {"alert": raw}
+
+
 @router.get("/{alert_id}/playbooks")
 async def get_alert_playbooks(alert_id: str, user: User = Depends(get_current_user)):
     """List all playbook executions for a specific alert."""

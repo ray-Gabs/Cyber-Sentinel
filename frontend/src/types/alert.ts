@@ -32,6 +32,15 @@ export interface ThreatIntelResult {
   }>;
 }
 
+export interface AlertIOCs {
+  ips?: string[];
+  domains?: string[];
+  hashes?: string[];
+  users?: string[];
+  processes?: string[];
+  files?: string[];
+}
+
 export interface Alert {
   id: string;
   wazuh_id: string;
@@ -39,6 +48,7 @@ export interface Alert {
   agent_id: string;
   agent_name: string;
   agent_ip: string;
+  agent_group?: string;
   rule_id: string;
   rule_description: string;
   rule_level: number;
@@ -49,6 +59,7 @@ export interface Alert {
   ai_confidence?: number;
   ai_action?: string;
   ai_reasoning?: string;
+  severity_label?: string;
   analyst_override?: string;
   analyst_notes?: string;
   ingested_at: string;
@@ -56,6 +67,11 @@ export interface Alert {
   mitre_tactics?: string[];
   mitre_techniques?: MitreTechnique[];
   threat_intel?: ThreatIntelResult;
+  response_recommendations?: string[];
+  false_positive_indicators?: string[];
+  iocs?: AlertIOCs;
+  triage_notes?: string;
+  triage_version?: string;
 }
 
 export interface AlertSummary {

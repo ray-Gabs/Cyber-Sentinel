@@ -168,6 +168,12 @@ export async function getMitreSummary(): Promise<MitreSummary> {
   return res.data;
 }
 
+/** GET /api/alerts/:id/raw-wazuh → fetch original alert payload from Wazuh Manager */
+export async function getAlertRawWazuh(id: string): Promise<{ alert: Record<string, unknown> }> {
+  const res = await api.get<{ alert: Record<string, unknown> }>(`/alerts/${id}/raw-wazuh`);
+  return res.data;
+}
+
 /** POST /api/alerts/:id/playbooks/trigger → manually trigger a playbook */
 export async function triggerPlaybook(
   alertId: string,

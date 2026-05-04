@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getAlert, overrideAlert, enrichAlert, getAlertPlaybooks, triggerPlaybook, createDetectionRule, PlaybookExecution } from "@/services/alertService";
+import { getAlert, overrideAlert, enrichAlert, getAlertPlaybooks, triggerPlaybook, createDetectionRule, getAlertRawWazuh, PlaybookExecution } from "@/services/alertService";
 import { formatDate, cn } from "@/lib/utils";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import {
@@ -23,6 +23,10 @@ import {
   Plus,
   X,
   CheckCheck,
+  Database,
+  Target,
+  ListChecks,
+  RefreshCw,
 } from "lucide-react";
 import type { Alert, DetectionRuleCreate } from "@/types";
 
@@ -265,6 +269,9 @@ export default function AlertDetail() {
   const [selectedPlaybook, setSelectedPlaybook] = useState("");
   const [expandedExecution, setExpandedExecution] = useState<string | null>(null);
   const [showCreateRule, setShowCreateRule] = useState(false);
+  const [wazuhRaw, setWazuhRaw] = useState<Record<string, unknown> | null>(null);
+  const [fetchingWazuh, setFetchingWazuh] = useState(false);
+  const [wazuhFetchError, setWazuhFetchError] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -310,6 +317,20 @@ export default function AlertDetail() {
       // ignore
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleFetchWazuh = async () => {
+    if (!id) return;
+    setFetchingWazuh(true);
+    setWazuhFetchError("");
+    try {
+      const res = await getAlertRawWazuh(id);
+      setWazuhRaw(res.alert);
+    } catch {
+      setWazuhFetchError("Could not fetch from Wazuh Manager — check connection settings.");
+    } finally {
+      setFetchingWazuh(false);
     }
   };
 
@@ -571,11 +592,122 @@ export default function AlertDetail() {
 
       {/* Raw Log */}
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-400 uppercase mb-2">Full Log</h2>
-        <pre className="text-xs text-gray-400 bg-gray-900 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap max-h-48">
-          {alert.full_log || "No log data available"}
-        </pre>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase">Full Log</h2>
+          <button
+            onClick={handleFetchWazuh}
+            disabled={fetchingWazuh}
+            className="btn-secondary text-xs flex items-center gap-1.5"
+          >
+            {fetchingWazuh ? <RefreshCw size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            Fetch from Wazuh
+          </button>
+        </div>
+        {alert.full_log ? (
+          <pre className="text-xs text-gray-400 bg-gray-900 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap max-h-48">
+            {alert.full_log}
+          </pre>
+        ) : (
+          <p className="text-xs italic text-gray-600 bg-gray-900 rounded-lg p-4">
+            No raw log captured for this alert type — see Structured Event Data below or fetch from Wazuh.
+          </p>
+        )}
+        {wazuhFetchError && (
+          <p className="mt-2 text-xs text-red-400">{wazuhFetchError}</p>
+        )}
+        {wazuhRaw && (
+          <div className="mt-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Live Wazuh API Response</p>
+            <pre className="text-xs text-green-300 bg-gray-900 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap max-h-96">
+              {JSON.stringify(wazuhRaw, null, 2)}
+            </pre>
+          </div>
+        )}
       </div>
+
+      {/* Structured Event Data */}
+      {alert.data && Object.keys(alert.data).length > 0 && (
+        <div className="card">
+          <div className="flex items-center gap-3 mb-3">
+            <Database size={18} className="text-cyan-400" />
+            <h2 className="text-sm font-semibold text-gray-400 uppercase">Structured Event Data</h2>
+          </div>
+          <pre className="text-xs text-cyan-200 bg-gray-900 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap max-h-64">
+            {JSON.stringify(alert.data, null, 2)}
+          </pre>
+        </div>
+      )}
+
+      {/* Extracted IOCs */}
+      {alert.iocs && Object.values(alert.iocs).some((v) => v && v.length > 0) && (
+        <div className="card">
+          <div className="flex items-center gap-3 mb-3">
+            <Target size={18} className="text-red-400" />
+            <h2 className="text-sm font-semibold text-gray-400 uppercase">Extracted IOCs</h2>
+          </div>
+          <div className="space-y-2">
+            {(["ips", "domains", "hashes", "users", "processes", "files"] as const).map((kind) => {
+              const items = alert.iocs?.[kind];
+              if (!items || items.length === 0) return null;
+              return (
+                <div key={kind}>
+                  <p className="text-xs font-medium uppercase mb-1" style={{ color: "var(--text-muted)" }}>
+                    {kind}
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {items.map((item) => (
+                      <span
+                        key={item}
+                        className="font-mono text-xs bg-red-500/10 text-red-300 border border-red-500/20 px-2 py-0.5 rounded"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Response Recommendations */}
+      {alert.response_recommendations && alert.response_recommendations.length > 0 && (
+        <div className="card">
+          <div className="flex items-center gap-3 mb-3">
+            <ListChecks size={18} className="text-blue-400" />
+            <h2 className="text-sm font-semibold text-gray-400 uppercase">Response Recommendations</h2>
+          </div>
+          <ol className="space-y-2">
+            {alert.response_recommendations.map((rec, i) => (
+              <li key={i} className="flex items-start gap-3 text-sm text-gray-300">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] font-bold flex items-center justify-center mt-0.5">
+                  {i + 1}
+                </span>
+                {rec}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {/* False Positive Indicators */}
+      {alert.false_positive_indicators && alert.false_positive_indicators.length > 0 && (
+        <div className="card">
+          <div className="flex items-center gap-3 mb-3">
+            <CheckCircle size={18} className="text-green-400" />
+            <h2 className="text-sm font-semibold text-gray-400 uppercase">False Positive Indicators</h2>
+          </div>
+          <ul className="space-y-1">
+            {alert.false_positive_indicators.map((ind, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
+                <span className="shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-green-400" />
+                {ind}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Rule Groups */}
       {alert.rule_groups && alert.rule_groups.length > 0 && (

@@ -66,6 +66,22 @@ async def ingest_wazuh_alert(
     all_rules = await CustomDetectionRule.find({"$or": rule_conditions}).to_list()
     matched_rules = match_alert(raw, all_rules)
 
+    # full_log is absent for many Wazuh alert types (FIM, vuln, syscollector).
+    # Fall back to a synthetic line built from location + top-level data fields.
+    full_log: str = raw.get("full_log") or raw.get("message") or ""
+    if not full_log:
+        location = raw.get("location", "")
+        data_dict = raw.get("data") or {}
+        parts: list[str] = []
+        if location:
+            parts.append(location)
+        parts.extend(
+            f"{k}={v}"
+            for k, v in data_dict.items()
+            if isinstance(v, (str, int, float)) and str(v).strip()
+        )
+        full_log = "  ".join(parts[:12])
+
     alert = Alert(
         wazuh_id=str(wazuh_id),
         timestamp=raw.get("timestamp", datetime.now(timezone.utc)),
@@ -76,7 +92,7 @@ async def ingest_wazuh_alert(
         rule_description=rule.get("description", ""),
         rule_level=rule.get("level", 0),
         rule_groups=rule.get("groups", []),
-        full_log=raw.get("full_log", ""),
+        full_log=full_log,
         data=raw.get("data"),
         matched_rules=matched_rules,
         tenant_id=tenant_id,
