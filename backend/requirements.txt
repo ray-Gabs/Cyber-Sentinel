@@ -22,7 +22,7 @@ pydantic-settings==2.7.*          # Settings from .env
 
 # --- Task Queue ---
 celery==5.4.*
-redis==5.2.*
+redis==7.4.*
 
 # --- AI (install the one matching your AI_PROVIDER in .env) ---
 groq==0.25.*                      # Groq API SDK (Llama 3.3 70B)    — AI_PROVIDER=groq
