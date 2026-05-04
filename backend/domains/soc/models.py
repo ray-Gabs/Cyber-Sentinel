@@ -90,6 +90,10 @@ class Alert(Document):
             IndexModel([("rule_level", DESCENDING), ("timestamp", DESCENDING)]),
             IndexModel([("tenant_id", ASCENDING)]),
             IndexModel([("tenant_id", ASCENDING), ("timestamp", DESCENDING)]),
+            # SOC dashboard: filter by tenant + severity, sort by recency
+            IndexModel([("tenant_id", ASCENDING), ("severity_label", ASCENDING), ("timestamp", DESCENDING)]),
+            # AI triage queue: unanalyzed alerts by tenant
+            IndexModel([("tenant_id", ASCENDING), ("ai_verdict", ASCENDING), ("timestamp", DESCENDING)]),
             # TTL — auto-expire alerts after 90 days
             IndexModel([("timestamp", ASCENDING)], expireAfterSeconds=7_776_000),
         ]

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from core.cache import TTL_STANDARD, TTL_SLOW, cache_get, cache_set
 from core.dependencies import get_current_user
 from domains.auth.models import User
 from domains.pentesting.models import Scan
@@ -43,9 +44,15 @@ async def get_admin_stats(
       scans / alerts / users — KPI counts, trends, per-day breakdowns
       top_scan_users         — top 5 users by scan count in the period
       top_alert_agents       — top 5 Wazuh agents by alert count (all-time)
+
+    Cached for 60 seconds — invalidated on new scan/alert creation.
     """
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin role required")
+
+    cache_key = f"cs:cache:analytics:admin-stats:{range}"
+    if cached := await cache_get(cache_key):
+        return cached
 
     from domains.auth.models import User as UserModel
     from bson import ObjectId
@@ -161,7 +168,7 @@ async def get_admin_stats(
     ).count()
     users_trend = round((new_period - new_prev) / max(new_prev, 1) * 100, 1)
 
-    return {
+    result = {
         "scans": {
             "total":     total_scans,
             "active":    active_scans,
@@ -192,6 +199,8 @@ async def get_admin_stats(
         "range":            range,
         "generated_at":     now.isoformat(),
     }
+    await cache_set(cache_key, result, ttl=TTL_STANDARD)
+    return result
 
 
 @router.get("/admin-stats/export")
@@ -213,10 +222,15 @@ async def get_analytics(
     """
     Unified analytics endpoint combining pentest and SOC data.
     Query param: range = 7d | 30d | 90d (default 30d)
+    Cached per user+range for 60 seconds.
     """
     days = RANGE_DAYS.get(range, 30)
     since = datetime.now(timezone.utc) - timedelta(days=days)
     user_id = str(current_user.id)
+
+    cache_key = f"cs:cache:analytics:user-stats:{user_id}:{range}"
+    if cached := await cache_get(cache_key):
+        return cached
 
     # ── Pentest analytics ────────────────────────────────────
     scans = await Scan.find(
@@ -314,7 +328,7 @@ async def get_analytics(
 
     alerts_over_time = [{"date": k, "count": v} for k, v in sorted(alerts_by_day.items())]
 
-    return {
+    result = {
         "scans_over_time": scans_over_time,
         "findings_by_severity": findings_by_severity,
         "top_vulnerable_targets": [{"target": t, "count": c} for t, c in top_targets],
@@ -325,3 +339,5 @@ async def get_analytics(
         "total_scans": len(scans),
         "total_alerts": len(alerts),
     }
+    await cache_set(cache_key, result, ttl=TTL_STANDARD)
+    return result

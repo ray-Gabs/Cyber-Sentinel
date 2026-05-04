@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+# Staging: fewer replicas, lower resource limits, staging domain
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+    target:
+      kind: Deployment
+      name: backend
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+    target:
+      kind: Deployment
+      name: celery-worker
+
+configMapGenerator:
+  - name: cyber-sentinel-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=DEBUG
+      - FRONTEND_URL=https://staging.cyber-sentinel.yourdomain.com
+
+# Tag staging images with :staging instead of :latest
+images:
+  - name: ghcr.io/ray-gabs/cyber-sentinel-backend
+    newTag: staging
+  - name: ghcr.io/ray-gabs/cyber-sentinel-frontend
+    newTag: staging

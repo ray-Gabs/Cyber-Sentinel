@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: cyber-sentinel
+  labels:
+    app: celery-worker
+spec:
+  # Scale workers independently from API replicas.
+  # HPA below scales 2→8 based on scan queue depth.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: celery-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: celery
+          image: ghcr.io/ray-gabs/cyber-sentinel-backend:latest
+          command:
+            - celery
+            - -A
+            - core.celery_app
+            - worker
+            - --loglevel=info
+            - --pool=prefork
+            - --concurrency=2
+            - -Q
+            - celery,soc
+          envFrom:
+            - configMapRef:
+                name: cyber-sentinel-config
+            - secretRef:
+                name: cyber-sentinel-secrets
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          # Celery workers have no HTTP server — use process health check
+          livenessProbe:
+            exec:
+              command:
+                - celery
+                - -A
+                - core.celery_app
+                - inspect
+                - ping
+                - --timeout=5
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      terminationGracePeriodSeconds: 60   # Allow running scan tasks to finish
+---
+# Celery Beat — only 1 replica (beat must be a singleton)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: cyber-sentinel
+  labels:
+    app: celery-beat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-beat
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: celery-beat
+          image: ghcr.io/ray-gabs/cyber-sentinel-backend:latest
+          command:
+            - celery
+            - -A
+            - core.celery_app
+            - beat
+            - --loglevel=info
+            - --pidfile=/tmp/celery-beat.pid
+            - --schedule=/tmp/celerybeat-schedule
+          envFrom:
+            - configMapRef:
+                name: cyber-sentinel-config
+            - secretRef:
+                name: cyber-sentinel-secrets
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - test -f /tmp/celery-beat.pid && kill -0 $(cat /tmp/celery-beat.pid) 2>/dev/null || exit 1
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

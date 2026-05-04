@@ -11,6 +11,7 @@
 import asyncio
 import json
 import logging
+import random
 import re as _re
 from datetime import datetime
 from typing import Any
@@ -76,16 +77,19 @@ class LLMService:
             log.warning("AI prompt truncated from %d to 25000 chars", len(prompt))
             prompt = prompt[:25000] + "\n[... findings truncated due to size limit ...]"
 
-        # Exponential backoff on 429 rate-limit responses
-        _retry_delays = [5, 15, 30, 60]  # seconds to wait before each successive retry
+        # Exponential backoff with full jitter on 429 rate-limit responses.
+        # Full jitter: wait = random(0, base_delay) — spreads concurrent Celery
+        # worker retries across the window instead of all retrying simultaneously.
+        _base_delays = [5, 15, 30, 60]
         last_exc: Exception | None = None
 
-        for attempt in range(len(_retry_delays) + 1):
+        for attempt in range(len(_base_delays) + 1):
             if attempt > 0:
-                wait_secs = _retry_delays[attempt - 1]
+                base = _base_delays[attempt - 1]
+                wait_secs = random.uniform(0, base)  # full jitter
                 log.warning(
-                    "AI provider 429 rate limit — waiting %ds before retry %d/%d",
-                    wait_secs, attempt, len(_retry_delays),
+                    "AI provider 429 rate limit — waiting %.1fs (jittered from %ds base) retry %d/%d",
+                    wait_secs, base, attempt, len(_base_delays),
                 )
                 await asyncio.sleep(wait_secs)
             try:
@@ -98,12 +102,13 @@ class LLMService:
                 err_str = str(exc)
                 if "429" in err_str or "rate_limit" in err_str.lower() or "rate limit" in err_str.lower():
                     last_exc = exc
-                    continue  # retry with backoff
+                    continue  # retry with jittered backoff
                 raise  # non-429 error: propagate immediately
 
         # All retries exhausted
-        log.error("AI provider 429 — all %d retries exhausted.", len(_retry_delays))
-        raise last_exc if last_exc is not None else RuntimeError("AI rate limit retries exhausted")
+        log.error("AI provider 429 — all %d retries exhausted.", len(_base_delays))
+        from core.exceptions import AIProviderError
+        raise AIProviderError("AI rate limit retries exhausted — alert queued for manual review")
 
     # ======================== CONTEXT HELPERS ========================
 

@@ -8,29 +8,32 @@
 import asyncio
 import json
 import logging
+import pathlib as _pathlib
 import re
+import subprocess as _subprocess
 import time as _time
+import uuid
 from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from slowapi.errors import RateLimitExceeded
 
 from core.config import settings
 from core.database import init_db, close_db
+from core.exceptions import AppError
+from core.logging_config import configure_logging
+from core.metrics import WS_ACTIVE, metrics_output, record_request
 from core.rate_limit import limiter
 from core.security import decode_access_token
 from core.websocket import ws_manager
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 # Record process start time for uptime reporting
 _start_time = _time.time()
-
-# Cache git SHA and VERSION at import time — avoids blocking I/O on every request
-import subprocess as _subprocess
-import pathlib as _pathlib
 
 try:
     _GIT_SHA: str = _subprocess.check_output(
@@ -90,6 +93,8 @@ async def _redis_ws_relay() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle events."""
+    configure_logging(settings.log_level)
+
     # Startup — fail fast if critical services are unavailable
     try:
         await init_db()
@@ -201,20 +206,41 @@ app.add_middleware(
     max_age=600,
 )
 
-# --------------- Request Logging Middleware ---------------
+# --------------- Request ID + Observability Middleware ---------------
 
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
+async def request_id_middleware(request: Request, call_next):
+    """Propagate or generate X-Request-ID; bind it to structlog context."""
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+
+    # Bind to structlog context so every log line in this request includes trace_id
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(
+        trace_id=request_id,
+        service="cyber-sentinel",
+    )
+
     start = _time.monotonic()
     response = await call_next(request)
-    duration_ms = int((_time.monotonic() - start) * 1000)
-    log.info(
-        "REQUEST method=%s path=%s status=%d duration_ms=%d",
-        request.method,
-        request.url.path,
-        response.status_code,
-        duration_ms,
+    duration_s = _time.monotonic() - start
+
+    record_request(
+        method=request.method,
+        path=request.url.path,
+        status=response.status_code,
+        duration_s=duration_s,
     )
+
+    log.info(
+        "request",
+        method=request.method,
+        path=request.url.path,
+        status=response.status_code,
+        duration_ms=round(duration_s * 1000),
+    )
+
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Response-Time-Ms"] = str(round(duration_s * 1000))
     return response
 
 
@@ -296,6 +322,20 @@ async def health():
     )
 
 
+# --------------- Metrics Endpoint (Prometheus scrape) ---------------
+
+@app.get("/api/metrics", tags=["System"], include_in_schema=False)
+async def prometheus_metrics():
+    """
+    Prometheus-compatible metrics endpoint.
+    Scrape with Grafana → Prometheus datasource pointed at /api/metrics.
+    Returns: http_requests_total, http_request_duration_seconds,
+             websocket_connections_active, celery_tasks_total
+    """
+    body, content_type = metrics_output()
+    return Response(content=body, media_type=content_type)
+
+
 # --------------- Version Endpoint ---------------
 
 @app.get("/api/version", tags=["System"])
@@ -304,21 +344,33 @@ async def version():
     return {"version": _VERSION, "commit": _GIT_SHA}
 
 
-# --------------- Global Error Handler ---------------
+# --------------- Exception Handlers ---------------
+
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    """Map typed domain exceptions to structured HTTP responses."""
+    log.warning(
+        "app_error",
+        code=exc.error_code,
+        message=exc.message,
+        path=request.url.path,
+    )
+    return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
+
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Catch any unhandled error and return a clean JSON response."""
-    # HTTPExceptions are already handled by FastAPI — this catches everything else
     if isinstance(exc, HTTPException):
         raise exc
-    log.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    log.exception(
+        "unhandled_error",
+        method=request.method,
+        path=request.url.path,
+    )
     return JSONResponse(
         status_code=500,
-        content={
-            "error": "Internal server error",
-            "code": "INTERNAL_ERROR",
-        },
+        content={"error": "INTERNAL_ERROR", "message": "An unexpected error occurred"},
     )
 
 
@@ -352,6 +404,7 @@ async def websocket_endpoint(
         channel = f"user:{user_id}"
 
     await ws_manager.connect(websocket, channel)
+    WS_ACTIVE.inc()
     try:
         while True:
             await websocket.receive_text()
@@ -359,3 +412,4 @@ async def websocket_endpoint(
         pass
     finally:
         ws_manager.disconnect(websocket, channel)
+        WS_ACTIVE.dec()

@@ -9,6 +9,7 @@ from typing import Optional
 
 from fastapi import HTTPException, status
 
+from core.cache import cache_invalidate_analytics
 from domains.auth.models import User
 from domains.soc.models import Alert, AiVerdict, CustomDetectionRule
 from domains.soc.schemas import AnalystOverrideRequest, CustomRuleCreate, CustomRuleUpdate
@@ -117,6 +118,9 @@ async def ingest_wazuh_alert(
                 )
         except Exception as exc:
             log.warning("[SOC] Agent-owner notification failed for %s: %s", alert.wazuh_id, exc)
+
+    # New alert → analytics totals are stale
+    await cache_invalidate_analytics()
 
     return alert
 

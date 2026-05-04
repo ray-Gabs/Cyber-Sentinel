@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     # ---- App ----
     app_name: str = "Cyber Sentinel"
     debug: bool = False
+    log_level: str = "INFO"   # DEBUG | INFO | WARNING | ERROR
 
     # ---- MongoDB ----
     mongodb_uri: str = "mongodb://localhost:27017"
@@ -89,6 +90,18 @@ class Settings(BaseSettings):
     # ---- Threat Intelligence ----
     virustotal_api_key: str = ""
     abuseipdb_api_key: str = ""
+
+    # ---- S3 Report Storage ----
+    # When S3_BUCKET is set, reports (PDF/HTML) are uploaded to S3 and
+    # served via pre-signed URLs. When empty, reports are served from memory.
+    s3_bucket: str = ""
+    s3_region: str = "ap-southeast-1"
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
+    # Prefix for all report objects in the bucket — keeps them namespaced
+    s3_reports_prefix: str = "reports/"
+    # Pre-signed URL expiry in seconds (default: 1 hour)
+    s3_url_expires: int = 3600
 
     # ---- Metasploit RPC (Advanced) ----
     msf_rpc_host: str = "127.0.0.1"

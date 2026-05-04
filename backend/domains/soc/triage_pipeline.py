@@ -253,6 +253,16 @@ async def _stage_llm_triage(alert, context: dict, result: dict):
         log.warning("[Triage] LLM triage failed for %s: %s", alert.wazuh_id, exc)
         result["stages_failed"].append(f"llm_triage:{exc!s:.100}")
 
+        # Mark as triage-failed so analysts can find it in the queue.
+        # Better to surface the failure than to leave ai_verdict=None (ambiguous).
+        try:
+            alert.ai_verdict = "TRIAGE_FAILED"
+            alert.ai_reasoning = f"Automated triage failed: {exc!s:.200}"
+            alert.triage_version = PIPELINE_VERSION
+            await alert.save()
+        except Exception:
+            pass
+
     return alert
 
 
@@ -321,7 +331,7 @@ async def _stage_notify(alert, result: dict):
                 "ai_action": alert.ai_action,
                 "agent_name": alert.agent_name,
             }
-            await ws_manager.broadcast(payload, channel="alerts")
+            await ws_manager.broadcast("alerts", payload)
         except Exception as exc:
             log.debug("[Triage] WebSocket broadcast failed: %s", exc)
 
