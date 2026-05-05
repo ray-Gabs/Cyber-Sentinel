@@ -346,6 +346,20 @@ async def version():
 
 # --------------- Exception Handlers ---------------
 
+_HTTP_ERROR_CODES: dict[int, str] = {
+    400: "BAD_REQUEST",
+    401: "UNAUTHORIZED",
+    403: "FORBIDDEN",
+    404: "NOT_FOUND",
+    405: "METHOD_NOT_ALLOWED",
+    409: "CONFLICT",
+    422: "VALIDATION_ERROR",
+    429: "RATE_LIMITED",
+    500: "INTERNAL_ERROR",
+    503: "SERVICE_UNAVAILABLE",
+}
+
+
 @app.exception_handler(AppError)
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     """Map typed domain exceptions to structured HTTP responses."""
@@ -358,6 +372,18 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
 
 
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    """Map FastAPI HTTPExceptions to the standard envelope format with trace_id."""
+    code = _HTTP_ERROR_CODES.get(exc.status_code, "HTTP_ERROR")
+    log.info("http_exception", status=exc.status_code, code=code, path=request.url.path)
+    ctx = structlog.contextvars.get_contextvars()
+    content: dict = {"error": code, "message": str(exc.detail)}
+    if trace_id := ctx.get("trace_id"):
+        content["trace_id"] = trace_id
+    return JSONResponse(status_code=exc.status_code, content=content)
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Catch any unhandled error and return a clean JSON response."""
@@ -367,11 +393,13 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
         "unhandled_error",
         method=request.method,
         path=request.url.path,
+        exc_type=type(exc).__name__,
     )
-    return JSONResponse(
-        status_code=500,
-        content={"error": "INTERNAL_ERROR", "message": "An unexpected error occurred"},
-    )
+    ctx = structlog.contextvars.get_contextvars()
+    content: dict = {"error": "INTERNAL_ERROR", "message": "An unexpected error occurred"}
+    if trace_id := ctx.get("trace_id"):
+        content["trace_id"] = trace_id
+    return JSONResponse(status_code=500, content=content)
 
 
 # --------------- WebSocket Endpoint ---------------

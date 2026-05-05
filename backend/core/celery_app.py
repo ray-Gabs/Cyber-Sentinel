@@ -1,10 +1,23 @@
 # ============================================================
 # backend/core/celery_app.py — Celery Configuration
 # ============================================================
-# Start the worker:
-#   celery -A core.celery_app worker --loglevel=info
-# Start the beat scheduler (for periodic Wazuh polling):
-#   celery -A core.celery_app beat --loglevel=info
+#
+# ── Development (Windows) ───────────────────────────────────
+#   Pentest worker (must use --pool=solo on Windows):
+#     celery -A core.celery_app worker --loglevel=info --pool=solo -Q celery
+#   SOC worker (separate queue, also solo on Windows):
+#     celery -A core.celery_app worker --loglevel=info --pool=solo -Q soc -n soc@%%h
+#   Beat scheduler (Wazuh polling):
+#     celery -A core.celery_app beat --loglevel=info
+#
+# ── Production (Linux / Ubuntu VM) ─────────────────────────
+#   Single worker handling both queues with 4 concurrent processes:
+#     celery -A core.celery_app worker --loglevel=info --concurrency=4 -Q celery,soc
+#   Or two workers with separate concurrency budgets:
+#     celery -A core.celery_app worker --loglevel=info --concurrency=4 -Q celery -n pentest@%%h
+#     celery -A core.celery_app worker --loglevel=info --concurrency=2 -Q soc -n soc@%%h
+#   Beat scheduler:
+#     celery -A core.celery_app beat --loglevel=info
 # ============================================================
 
 import os, sys

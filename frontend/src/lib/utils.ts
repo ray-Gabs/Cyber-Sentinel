@@ -70,6 +70,49 @@ export function severityBadge(severity: string): string {
   return map[severity.toLowerCase()] ?? "badge-info";
 }
 
+/**
+ * Extract a human-readable message from an API error.
+ *
+ * Handles: Axios error objects, raw Error instances, plain strings,
+ * FastAPI 422 validation arrays, and the project's standard envelope
+ * format { error: "CODE", message: "Human readable" }.
+ */
+export function extractErrorMessage(error: unknown, fallback = "Something went wrong"): string {
+  if (!error) return fallback;
+  if (typeof error === "string") return error;
+
+  const e = error as Record<string, unknown>;
+  const data = (e?.response as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+
+  // Standard envelope: { message: "..." }
+  if (typeof data?.message === "string" && data.message) return data.message;
+
+  // FastAPI 422 validation array: [{ msg: "..." }]
+  if (Array.isArray(data?.detail)) {
+    const msgs = (data.detail as Array<Record<string, string>>)
+      .map((d) => d?.msg?.replace(/^Value error,\s*/i, ""))
+      .filter(Boolean);
+    if (msgs.length) return msgs.join("; ");
+  }
+
+  // FastAPI string detail
+  if (typeof data?.detail === "string" && data.detail) return data.detail;
+
+  // Axios / native Error message (skip generic network errors)
+  if (typeof e?.message === "string" && e.message && e.message !== "Network Error")
+    return e.message;
+
+  return fallback;
+}
+
+/** Dispatch a toast notification from anywhere without importing the toast component. */
+export function showToast(
+  msg: string,
+  type: "success" | "error" | "warning" | "info" = "error",
+): void {
+  window.dispatchEvent(new CustomEvent("cs:toast", { detail: { msg, type } }));
+}
+
 /** Get status badge variant */
 export function statusColor(status: string): string {
   const map: Record<string, string> = {

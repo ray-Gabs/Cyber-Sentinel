@@ -28,7 +28,15 @@ class AppError(Exception):
         self.message = message
 
     def to_dict(self) -> dict:
-        return {"error": self.error_code, "message": self.message}
+        d: dict = {"error": self.error_code, "message": self.message}
+        try:
+            import structlog
+            trace_id = structlog.contextvars.get_contextvars().get("trace_id")
+            if trace_id:
+                d["trace_id"] = trace_id
+        except Exception:
+            pass
+        return d
 
 
 # ----- 4xx -----

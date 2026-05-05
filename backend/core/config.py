@@ -50,21 +50,35 @@ class Settings(BaseSettings):
     # claude (Anthropic) is the recommended provider.
     ai_provider: str = "claude"
 
-    # ---- Groq (Llama 3.3 70B — free tier) ----
-    groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
-
     # ---- Claude (Anthropic) ----
     claude_api_key: str = ""
     claude_model: str = "claude-sonnet-4-6"
+    # Additional Claude keys for key-pool rotation (comma-separated, no spaces).
+    # e.g. CLAUDE_API_KEYS=sk-ant-key2,sk-ant-key3
+    # When all keys are rate-limited, the normal jitter-backoff retry kicks in.
+    claude_api_keys: str = ""
 
     # ---- OpenAI ----
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
+    openai_api_keys: str = ""
+
+    # ---- Groq (Llama 3.3 70B — free tier) ----
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
+    groq_api_keys: str = ""
 
     # ---- Gemini (Google) ----
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
+    # Note: Gemini's SDK uses a global configure() — multi-key pool not supported.
+
+    # ---- SOC AI Provider (optional dedicated provider for alert triage) ----
+    # When set, SOC alert triage uses this provider; pentest reports use ai_provider.
+    # Recommended: SOC_AI_PROVIDER=groq (free Llama 70B — fast for quick triage)
+    # This prevents triage tasks from burning your Claude quota during heavy scan periods.
+    # Leave empty to share the same provider for both SOC and pentesting.
+    soc_ai_provider: str = ""
 
     # ---- Wazuh ----
     wazuh_api_url: str = "https://localhost:55000"
@@ -149,6 +163,11 @@ class Settings(BaseSettings):
     # Per-user scan quota (MongoDB-based, checked against authenticated user ID)
     scan_rate_limit: int = 20                    # max scans per user per hour
 
+    # Max scans a single user may have actively running/pending at the same time.
+    # Prevents one user from flooding the Celery queue and starving others.
+    # Increase if the deployment has a high-concurrency Celery worker pool.
+    max_concurrent_scans_per_user: int = 3
+
     @property
     def cors_origins(self) -> list[str]:
         """All allowed CORS origins: primary frontend + any extras from env.
@@ -197,6 +216,13 @@ class Settings(BaseSettings):
             warnings.warn(
                 f"No API key found for AI provider '{self.ai_provider}' — "
                 "AI analysis will be disabled. Set the matching *_API_KEY in .env.",
+                stacklevel=2,
+            )
+        soc = (self.soc_ai_provider or "").lower().strip()
+        if soc and soc != self.ai_provider.lower() and not _provider_key_map.get(soc, ""):
+            warnings.warn(
+                f"SOC_AI_PROVIDER='{soc}' has no API key — SOC triage will fall back to "
+                f"the main provider '{self.ai_provider}'. Set {soc.upper()}_API_KEY in .env.",
                 stacklevel=2,
             )
         return self

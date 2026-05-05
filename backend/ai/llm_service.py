@@ -19,7 +19,7 @@ from pathlib import Path
 
 from core.config import settings
 from ai.cache import AiCache
-from ai.providers import get_provider
+from ai.providers import get_provider, get_soc_provider
 
 log = logging.getLogger(__name__)
 
@@ -45,8 +45,13 @@ class LLMService:
 
     @property
     def _provider(self):
-        """Lazily fetch the configured provider (singleton via get_provider)."""
+        """Lazily fetch the main provider (pentest reports, etc.)."""
         return get_provider()
+
+    @property
+    def _soc_provider(self):
+        """Lazily fetch the SOC triage provider (may be same as _provider)."""
+        return get_soc_provider()
 
     @property
     def is_available(self) -> bool:
@@ -58,9 +63,19 @@ class LLMService:
             return path.read_text(encoding="utf-8")
         return ""
 
-    async def _generate(self, prompt: str, use_cache: bool = True, max_tokens: int = 2048) -> str:
-        """Generate text via the configured provider, with caching and 429 retry backoff."""
-        provider = self._provider
+    async def _generate(
+        self,
+        prompt: str,
+        use_cache: bool = True,
+        max_tokens: int = 2048,
+        _provider=None,
+    ) -> str:
+        """Generate text via the configured provider, with caching and 429 retry backoff.
+
+        Pass _provider to route a call to a specific provider (e.g. the SOC provider)
+        without changing the default for other callers.
+        """
+        provider = _provider if _provider is not None else self._provider
         if provider is None:
             raise RuntimeError(
                 f"AI provider '{settings.ai_provider}' is not configured. "
@@ -819,7 +834,7 @@ class LLMService:
                 + json.dumps(few_shot, separators=(",", ":"))
             )
 
-        text = await self._generate(prompt, use_cache=False, max_tokens=1024)
+        text = await self._generate(prompt, use_cache=False, max_tokens=1024, _provider=self._soc_provider)
         try:
             result = json.loads(self._extract_json(text))
         except json.JSONDecodeError:
@@ -909,7 +924,7 @@ class LLMService:
         }
 
         prompt = template + f"\n\nALERT + TRIAGE CONTEXT:\n{json.dumps(combined, separators=(',', ':'))}"
-        return await self._generate(prompt, max_tokens=1500)
+        return await self._generate(prompt, max_tokens=1500, _provider=self._soc_provider)
 
     async def batch_analyse_alerts(
         self,
