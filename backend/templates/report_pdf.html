@@ -6,638 +6,564 @@
 <style>
 /* ═══════════════════════════════════════════════════════════════
    CYBER SENTINEL — PDF Report Stylesheet
-   Target: WeasyPrint / wkhtmltopdf
-   Design: Dark-accented professional security report
+   Style: ITS Smart City & Cybersecurity Lab document brief style
+   Engine: xhtml2pdf / pisa (table-based layout, no flex/grid)
 ═══════════════════════════════════════════════════════════════ */
 
 @page {
   size: A4;
-  margin: 0;
+  margin: 2.2cm 1.8cm 2.0cm 1.8cm;
 }
 @page :first {
   margin: 0;
-}
-@page content {
-  margin: 2.2cm 1.8cm 2cm 1.8cm;
-  @bottom-center {
-    content: "Cyber Sentinel  ·  Penetration Test Report  ·  " string(target) "  ·  Page " counter(page) " of " counter(pages);
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-size: 8px;
-    color: #94a3b8;
-    border-top: 1px solid #e2e8f0;
-    padding-top: 6px;
-  }
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  color: #1e293b;
-  font-size: 11.5px;
+  color: #1a1a2e;
+  font-size: 11px;
   line-height: 1.65;
+  background: #ffffff;
+}
+
+/* ── PAGE HEADER (repeated on every non-cover page) ─────────── */
+.page-header {
+  border-bottom: 1px solid #d1d5db;
+  padding-bottom: 6px;
+  margin-bottom: 18px;
+  font-size: 9px;
+  color: #6b7280;
+  display: table;
+  width: 100%;
+}
+.page-header-left  { display: table-cell; text-align: left;  }
+.page-header-right { display: table-cell; text-align: right; }
+
+/* ── PAGE FOOTER ─────────────────────────────────────────────── */
+.page-footer {
+  border-top: 1px solid #d1d5db;
+  padding-top: 6px;
+  margin-top: 24px;
+  font-size: 9px;
+  color: #9ca3af;
+  text-align: center;
 }
 
 /* ── COVER PAGE ──────────────────────────────────────────────── */
 .cover {
-  page: cover;
   width: 210mm;
   height: 297mm;
-  background: #0f172a;
-  display: block;
+  background: #ffffff;
   position: relative;
   overflow: hidden;
 }
 
-.cover-accent-bar {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 6px;
-  background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 50%, #06b6d4 100%);
+.cover-top-bar {
+  height: 5px;
+  background: #1d4ed8;
+  width: 100%;
 }
 
 .cover-body {
-  padding: 72px 64px 48px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+  padding: 56px 64px 48px;
+  height: calc(100% - 5px);
 }
 
-.cover-logo-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 80px;
+.cover-header-row {
+  display: table;
+  width: 100%;
+  margin-bottom: 64px;
 }
+.cover-header-left  { display: table-cell; vertical-align: middle; }
+.cover-header-right { display: table-cell; text-align: right; vertical-align: middle; }
 
-.cover-logo-icon {
-  width: 42px;
-  height: 42px;
-  background: linear-gradient(135deg, rgba(59,130,246,0.3) 0%, rgba(139,92,246,0.2) 100%);
-  border: 1px solid rgba(59,130,246,0.4);
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.cover-lab-name {
+  font-size: 11px;
+  color: #374151;
+  font-weight: 600;
 }
-
-.cover-logo-text {
-  font-size: 15px;
-  font-weight: 700;
-  color: #f1f5f9;
-  letter-spacing: -0.02em;
-}
-
-.cover-logo-sub {
+.cover-lab-sub {
   font-size: 9px;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
+  color: #6b7280;
   margin-top: 2px;
 }
 
 .cover-badge {
   display: inline-block;
-  background: rgba(239,68,68,0.15);
-  border: 1px solid rgba(239,68,68,0.35);
-  color: #fca5a5;
-  font-size: 9px;
+  border: 1px solid #d1d5db;
+  color: #6b7280;
+  font-size: 8.5px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 4px 12px;
+  padding: 3px 10px;
   border-radius: 2px;
-  margin-bottom: 20px;
 }
 
 .cover-title {
-  font-size: 34px;
-  font-weight: 700;
-  color: #f8fafc;
-  line-height: 1.15;
+  font-size: 38px;
+  font-weight: 800;
+  color: #111827;
+  line-height: 1.1;
   letter-spacing: -0.03em;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .cover-subtitle {
-  font-size: 16px;
-  color: #64748b;
-  font-weight: 400;
+  font-size: 18px;
+  color: #1d4ed8;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.cover-org-line {
+  font-size: 10px;
+  color: #6b7280;
   margin-bottom: 48px;
-  letter-spacing: -0.01em;
 }
 
-.cover-target-box {
-  background: rgba(59,130,246,0.08);
-  border: 1px solid rgba(59,130,246,0.25);
-  border-radius: 8px;
-  padding: 18px 22px;
-  margin-bottom: 40px;
-  display: inline-block;
-}
-
-.cover-target-label {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: #60a5fa;
-  font-weight: 600;
-  margin-bottom: 5px;
-}
-
-.cover-target-value {
-  font-size: 16px;
-  font-weight: 600;
-  color: #e2e8f0;
-  font-family: 'Courier New', 'Lucida Console', monospace;
-  word-break: break-all;
-}
-
-.cover-meta-grid {
-  display: table;
+/* Cover meta table */
+.cover-meta-table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: auto;
+  border: 1px solid #d1d5db;
+  margin-bottom: 48px;
 }
-
-.cover-meta-grid td {
-  width: 50%;
+.cover-meta-table td {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  font-size: 10.5px;
   vertical-align: top;
-  padding: 0 0 14px;
 }
-
-.cover-meta-label {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: #475569;
-  font-weight: 600;
-  margin-bottom: 3px;
-}
-
-.cover-meta-value {
-  font-size: 12px;
-  color: #94a3b8;
-  font-weight: 500;
-}
-
-/* Risk pill on cover */
-.cover-risk-pill {
-  display: inline-block;
-  font-size: 11px;
+.cover-meta-table td.label-col {
   font-weight: 700;
-  padding: 3px 12px;
-  border-radius: 3px;
-  letter-spacing: 0.04em;
+  background: #f3f4f6;
+  width: 140px;
+  color: #374151;
 }
+.cover-meta-table td.value-col { color: #111827; }
 
-.cover-footer {
-  border-top: 1px solid rgba(255,255,255,0.06);
-  padding-top: 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.cover-footer-left {
+.cover-bottom-rule {
+  border-top: 1px solid #d1d5db;
+  padding-top: 12px;
+  margin-top: auto;
   font-size: 9px;
-  color: #334155;
-}
-
-.cover-footer-right {
-  font-size: 9px;
-  color: #334155;
-  text-align: right;
-}
-
-/* Geometric decoration */
-.cover-deco {
+  color: #9ca3af;
+  display: table;
+  width: 100%;
   position: absolute;
-  right: -60px;
-  top: 80px;
-  width: 320px;
-  height: 320px;
-  border: 1px solid rgba(59,130,246,0.08);
-  border-radius: 50%;
+  bottom: 48px;
+  left: 64px;
+  right: 64px;
+  width: calc(100% - 128px);
 }
-.cover-deco2 {
-  position: absolute;
-  right: -20px;
-  top: 120px;
-  width: 200px;
-  height: 200px;
-  border: 1px solid rgba(139,92,246,0.06);
-  border-radius: 50%;
-}
+.cover-bottom-left  { display: table-cell; text-align: left; }
+.cover-bottom-right { display: table-cell; text-align: right; }
 
-/* ── CONTENT PAGES ───────────────────────────────────────────── */
-.content {
-  page: content;
-  string-set: target content("{{ scan.target | truncate(50, true) }}");
-}
-
-h1 { font-size: 20px; color: #0f172a; margin: 0 0 4px; font-weight: 700; }
-h3 { font-size: 12px; margin: 14px 0 6px; color: #1e293b; font-weight: 700; }
-p  { margin: 0 0 8px; }
-
-/* Section heading */
+/* ── SECTION HEADINGS ────────────────────────────────────────── */
 .section-heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 28px 0 14px;
+  margin: 28px 0 12px;
   page-break-after: avoid;
-}
-
-.section-number {
-  background: #0f172a;
-  color: #60a5fa;
-  font-size: 9px;
-  font-weight: 700;
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  text-align: center;
-  line-height: 22px;
+  border-bottom: 2px solid #1d4ed8;
+  padding-bottom: 5px;
 }
 
 .section-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  color: #0f172a;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  flex: 1;
+  color: #1d4ed8;
 }
 
-.section-rule {
-  flex: 1;
-  height: 1px;
-  background: #e2e8f0;
+.section-number {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1d4ed8;
+  margin-right: 2px;
 }
 
-/* ── META TABLE ────────────────────────────────────────────── */
-.meta-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 11px; }
-.meta-table tr:nth-child(odd) td { background: #f8fafc; }
-.meta-table td { padding: 6px 10px; border: 1px solid #e2e8f0; vertical-align: top; }
+/* Sub-heading (blue, smaller) */
+.sub-heading {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1d4ed8;
+  margin: 16px 0 8px;
+  page-break-after: avoid;
+}
+
+/* ── META TABLE ──────────────────────────────────────────────── */
+.meta-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+  font-size: 10.5px;
+  border: 1px solid #d1d5db;
+}
+.meta-table td {
+  padding: 7px 12px;
+  border: 1px solid #d1d5db;
+  vertical-align: top;
+}
 .meta-table td:first-child {
-  font-weight: 600;
-  width: 140px;
-  color: #475569;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  width: 150px;
+  background: #f3f4f6;
+  color: #374151;
 }
-.meta-table td:last-child { color: #1e293b; }
+.meta-table td:last-child { color: #111827; }
 
-/* ── RISK SECTION ──────────────────────────────────────────── */
-.risk-wrapper {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+/* ── RISK BLOCK ──────────────────────────────────────────────── */
+.risk-block {
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
   overflow: hidden;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
-
-.risk-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.risk-block-header {
+  background: #1e3a6e;
+  color: #ffffff;
   padding: 14px 18px;
-  background: #0f172a;
+  display: table;
+  width: 100%;
 }
-
+.risk-block-score-cell { display: table-cell; vertical-align: middle; }
+.risk-block-bar-cell   { display: table-cell; text-align: right; vertical-align: middle; }
 .risk-score-big {
-  font-size: 36px;
+  font-size: 34px;
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.02em;
 }
-
-.risk-label-big {
-  font-size: 11px;
+.risk-label {
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   margin-top: 3px;
 }
-
 .risk-bar-track {
   height: 6px;
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.15);
   border-radius: 3px;
   width: 200px;
   overflow: hidden;
 }
+.risk-bar-fill  { height: 6px; border-radius: 3px; }
+.risk-body      { padding: 12px 18px; background: #fff; }
 
-.risk-bar-fill { height: 6px; border-radius: 3px; }
-
-.risk-body {
-  padding: 12px 18px;
-  background: #fff;
-}
-
-/* ── SEVERITY SUMMARY ──────────────────────────────────────── */
-.sev-grid {
-  display: table;
+/* ── SEVERITY SUMMARY TABLE ──────────────────────────────────── */
+.sev-summary-table {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 6px;
-  margin: 0 -6px 14px;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+  border: 1px solid #d1d5db;
 }
-
-.sev-cell {
-  display: table-cell;
-  text-align: center;
-  padding: 12px 6px;
-  border-radius: 6px;
-  width: 20%;
-  border: 1px solid #e2e8f0;
-}
-
-.sev-count {
-  font-size: 26px;
-  font-weight: 800;
-  line-height: 1;
-  display: block;
-  margin-bottom: 4px;
-}
-
-.sev-lbl {
-  font-size: 8px;
+.sev-summary-table th {
+  padding: 8px 14px;
+  background: #1e3a6e;
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-weight: 600;
-  color: #94a3b8;
-  display: block;
+  letter-spacing: 0.06em;
+  text-align: left;
+  border: 1px solid #1e3a6e;
 }
-
-.sev-critical-cell { background: #fff1f2; border-color: #fecdd3; }
-.sev-high-cell     { background: #fff7ed; border-color: #fed7aa; }
-.sev-medium-cell   { background: #fefce8; border-color: #fef08a; }
-.sev-low-cell      { background: #f0fdf4; border-color: #bbf7d0; }
-.sev-info-cell     { background: #f8fafc; border-color: #e2e8f0; }
+.sev-summary-table td {
+  padding: 9px 14px;
+  border: 1px solid #e5e7eb;
+  font-size: 11px;
+  text-align: center;
+  font-weight: 700;
+}
+.sev-summary-table tr:nth-child(even) td { background: #f9fafb; }
 
 .c-critical { color: #dc2626; }
 .c-high     { color: #ea580c; }
 .c-medium   { color: #ca8a04; }
 .c-low      { color: #16a34a; }
-.c-info     { color: #64748b; }
+.c-info     { color: #6b7280; }
 
-/* ── OWASP TABLE ───────────────────────────────────────────── */
-.owasp-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 0 0 14px; }
-.owasp-table th {
-  text-align: left; padding: 7px 10px;
-  background: #0f172a; color: #94a3b8;
-  font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+/* ── STANDARD TABLES (OWASP, Tech, Tool Coverage) ────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10.5px;
+  margin-bottom: 16px;
+  border: 1px solid #d1d5db;
 }
-.owasp-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-.owasp-table tr:last-child td { border-bottom: none; }
-.owasp-table tr:nth-child(even) td { background: #f8fafc; }
-
-/* ── TECH TABLE ────────────────────────────────────────────── */
-.tech-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 0 0 14px; }
-.tech-table th {
-  text-align: left; padding: 7px 10px;
-  background: #0f172a; color: #94a3b8;
-  font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+.data-table th {
+  text-align: left;
+  padding: 8px 12px;
+  background: #1e3a6e;
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid #1e3a6e;
 }
-.tech-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
-.tech-table tr:nth-child(even) td { background: #f8fafc; }
+.data-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  border-left: 1px solid #e5e7eb;
+  border-right: 1px solid #e5e7eb;
+  vertical-align: middle;
+}
+.data-table tr:last-child td { border-bottom: 1px solid #d1d5db; }
+.data-table tr:nth-child(even) td { background: #f9fafb; }
 
-/* ── AI ANALYSIS BOXES ─────────────────────────────────────── */
-.ai-section {
-  background: #f8faff;
-  border: 1px solid #dbeafe;
-  border-left: 4px solid #3b82f6;
-  border-radius: 0 6px 6px 0;
-  padding: 13px 16px;
+/* ── CALLOUT BOXES ───────────────────────────────────────────── */
+/* Blue callout — AI analysis, key notes */
+.callout-blue {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-left: 4px solid #1d4ed8;
+  border-radius: 0 4px 4px 0;
+  padding: 12px 16px;
   margin-bottom: 10px;
   page-break-inside: avoid;
 }
-
-.ai-section-title {
+.callout-blue-title {
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: #1d4ed8;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  margin-bottom: 7px;
 }
+.callout-blue p { font-size: 11px; line-height: 1.7; color: #1e293b; margin: 0 0 5px; }
 
-.ai-section p {
-  font-size: 11.5px;
-  line-height: 1.7;
-  color: #334155;
-  margin: 0 0 5px;
-}
-
-/* Remediation */
-.remed-item {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  padding: 8px 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 5px;
-  margin-bottom: 5px;
-  background: #fff;
+/* Green callout — positive findings, remediation */
+.callout-green {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #16a34a;
+  border-radius: 0 4px 4px 0;
+  padding: 12px 16px;
+  margin-bottom: 10px;
   page-break-inside: avoid;
 }
-
-.remed-num {
-  min-width: 20px;
-  height: 20px;
-  background: #0f172a;
-  color: #60a5fa;
+.callout-green-title {
   font-size: 9px;
   font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 3px;
-  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #166534;
+  margin-bottom: 7px;
 }
+.callout-green p { font-size: 11px; line-height: 1.7; color: #1e293b; margin: 0 0 5px; }
 
-.remed-sev {
-  font-size: 8px;
+/* Orange callout — warnings, disclaimers */
+.callout-orange {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #d97706;
+  border-radius: 0 4px 4px 0;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  page-break-inside: avoid;
+}
+.callout-orange-title {
+  font-size: 9px;
   font-weight: 700;
-  padding: 2px 7px;
-  white-space: nowrap;
-  border-radius: 3px;
-  flex-shrink: 0;
-  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #92400e;
+  margin-bottom: 7px;
 }
+.callout-orange p { font-size: 11px; line-height: 1.7; color: #1e293b; margin: 0 0 5px; }
 
-.remed-text { font-size: 11px; color: #334155; line-height: 1.55; flex: 1; }
-
-.remed-sev-critical { background: #fee2e2; color: #dc2626; }
-.remed-sev-high     { background: #ffedd5; color: #ea580c; }
-.remed-sev-medium   { background: #fef9c3; color: #ca8a04; }
-.remed-sev-low      { background: #dcfce7; color: #16a34a; }
-
-/* ── TOOL COVERAGE ─────────────────────────────────────────── */
-.cov-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 0 0 14px; }
-.cov-table th {
-  text-align: left; padding: 7px 10px;
-  background: #0f172a; color: #94a3b8;
-  font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+/* Red callout — critical alerts */
+.callout-red {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 4px solid #dc2626;
+  border-radius: 0 4px 4px 0;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  page-break-inside: avoid;
 }
-.cov-table td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-.cov-table tr:nth-child(even) td { background: #f8fafc; }
+.callout-red-title {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #991b1b;
+  margin-bottom: 7px;
+}
+.callout-red p { font-size: 11px; line-height: 1.7; color: #1e293b; margin: 0 0 5px; }
 
-.status-success { color: #16a34a; font-weight: 700; font-size: 9px; text-transform: uppercase; }
-.status-timeout { color: #ea580c; font-weight: 700; font-size: 9px; text-transform: uppercase; }
-.status-error   { color: #dc2626; font-weight: 700; font-size: 9px; text-transform: uppercase; }
-.status-skipped { color: #94a3b8; font-weight: 700; font-size: 9px; text-transform: uppercase; }
-
-/* ── FINDING CARDS ─────────────────────────────────────────── */
+/* ── FINDING CARDS ───────────────────────────────────────────── */
 .finding-card {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
   margin-bottom: 14px;
   overflow: hidden;
   page-break-inside: avoid;
 }
-
 .finding-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 14px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  display: table;
+  width: 100%;
+  padding: 10px 14px;
+  background: #f3f4f6;
+  border-bottom: 1px solid #d1d5db;
 }
-
-.finding-sev-bar {
-  width: 4px;
-  align-self: stretch;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
+.finding-head-left   { display: table-cell; vertical-align: middle; width: 1px; white-space: nowrap; }
+.finding-head-center { display: table-cell; vertical-align: middle; padding: 0 10px; }
+.finding-head-right  { display: table-cell; vertical-align: middle; text-align: right; white-space: nowrap; }
 
 .finding-sev-badge {
   display: inline-block;
-  padding: 3px 9px;
+  padding: 3px 10px;
   font-size: 9px;
   font-weight: 700;
   color: #fff;
-  border-radius: 3px;
+  border-radius: 2px;
   white-space: nowrap;
-  flex-shrink: 0;
-  margin-top: 2px;
 }
+.badge-critical { background: #dc2626; }
+.badge-high     { background: #ea580c; }
+.badge-medium   { background: #ca8a04; }
+.badge-low      { background: #16a34a; }
+.badge-info     { background: #6b7280; }
 
-.sev-critical .finding-sev-bar, .sev-badge-critical { background: #dc2626; }
-.sev-high .finding-sev-bar,     .sev-badge-high     { background: #ea580c; }
-.sev-medium .finding-sev-bar,   .sev-badge-medium   { background: #ca8a04; }
-.sev-low .finding-sev-bar,      .sev-badge-low      { background: #16a34a; }
-.sev-info .finding-sev-bar,     .sev-badge-info     { background: #64748b; }
+.finding-name { font-size: 11.5px; font-weight: 700; color: #111827; line-height: 1.3; }
+.finding-meta { font-size: 9.5px; color: #6b7280; margin-top: 2px; }
 
-.finding-head-info { flex: 1; min-width: 0; }
-.finding-name { font-size: 12px; font-weight: 700; color: #0f172a; line-height: 1.3; }
-.finding-meta { font-size: 10px; color: #64748b; margin-top: 3px; }
+.conf-badge {
+  display: inline-block;
+  font-size: 8.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 2px;
+}
+.conf-confirmed { background: #dcfce7; color: #166534; }
+.conf-likely    { background: #fef9c3; color: #854d0e; }
+.conf-possible  { background: #f1f5f9; color: #374151; }
 
-.conf-confirmed { background: #dcfce7; color: #166534; font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 3px; }
-.conf-likely    { background: #fef9c3; color: #854d0e; font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 3px; }
-.conf-possible  { background: #f1f5f9; color: #64748b; font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 3px; }
-
-.finding-body { padding: 12px 14px; }
-.finding-desc { font-size: 11.5px; color: #334155; margin-bottom: 8px; line-height: 1.6; }
+.finding-body { padding: 12px 14px; background: #fff; }
+.finding-desc { font-size: 11px; color: #374151; margin-bottom: 8px; line-height: 1.65; }
 
 .label-sm {
   font-size: 8.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #94a3b8;
+  color: #9ca3af;
   margin-bottom: 4px;
 }
 
 .code-block {
-  background: #0f172a;
-  color: #93c5fd;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #1d4ed8;
   font-family: 'Courier New', 'Lucida Console', monospace;
-  font-size: 10px;
-  padding: 10px 12px;
+  font-size: 9.5px;
+  padding: 9px 12px;
   white-space: pre-wrap;
   word-break: break-all;
   margin-bottom: 10px;
   line-height: 1.5;
-  border-radius: 4px;
-  border-left: 3px solid #3b82f6;
+  border-radius: 0 3px 3px 0;
+  color: #1e293b;
 }
 
 .tag-owasp {
   display: inline-block;
   background: #dbeafe;
   color: #1e40af;
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
   padding: 1px 7px;
   margin-right: 4px;
   margin-bottom: 2px;
-  border-radius: 3px;
+  border-radius: 2px;
 }
-
 .tag-cve {
   display: inline-block;
   background: #fef3c7;
   color: #92400e;
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
   padding: 1px 7px;
   margin-right: 4px;
   margin-bottom: 2px;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
-/* ── INFORMATIONAL TABLE ───────────────────────────────────── */
-.info-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 14px; }
-.info-table th {
-  text-align: left; padding: 6px 10px;
-  background: #f1f5f9; color: #64748b;
-  font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;
-  border-bottom: 2px solid #e2e8f0;
-}
-.info-table td { padding: 5px 10px; border-bottom: 1px solid #f1f5f9; color: #64748b; }
+/* ── TOOL STATUS BADGES ──────────────────────────────────────── */
+.status-success { color: #16a34a; font-weight: 700; font-size: 9px; text-transform: uppercase; }
+.status-timeout { color: #ea580c; font-weight: 700; font-size: 9px; text-transform: uppercase; }
+.status-error   { color: #dc2626; font-weight: 700; font-size: 9px; text-transform: uppercase; }
+.status-skipped { color: #9ca3af; font-weight: 700; font-size: 9px; text-transform: uppercase; }
 
-/* ── DISCLAIMER ────────────────────────────────────────────── */
-.disclaimer {
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  border-left: 4px solid #f97316;
-  border-radius: 0 6px 6px 0;
-  padding: 10px 14px;
-  font-size: 10px;
-  color: #7c2d12;
-  margin: 10px 0 14px;
-  line-height: 1.6;
-}
-
-/* ── PAGE BREAKS ───────────────────────────────────────────── */
-.page-break { page-break-before: always; }
-
-/* ── SEVERITY BAR COLORS (for risk bar) ─────────────────────── */
+/* ── RISK BAR COLORS ─────────────────────────────────────────── */
 .bar-critical { background: #dc2626; }
 .bar-high     { background: #ea580c; }
 .bar-moderate { background: #ca8a04; }
 .bar-low      { background: #16a34a; }
-.bar-minimal  { background: #94a3b8; }
+.bar-minimal  { background: #9ca3af; }
 
 .col-critical { color: #dc2626; }
 .col-high     { color: #ea580c; }
 .col-moderate { color: #ca8a04; }
 .col-low      { color: #16a34a; }
-.col-minimal  { color: #64748b; }
+.col-minimal  { color: #6b7280; }
 
-/* ── DOT (for OWASP) ─────────────────────────────────────────── */
+/* ── INFO FINDINGS TABLE ─────────────────────────────────────── */
+.info-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+  margin-bottom: 14px;
+  border: 1px solid #d1d5db;
+}
+.info-table th {
+  text-align: left;
+  padding: 7px 12px;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid #d1d5db;
+}
+.info-table td {
+  padding: 5px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  color: #4b5563;
+}
+.info-table tr:last-child td { border-bottom: none; }
+
+/* ── REMEDIATION ITEMS ───────────────────────────────────────── */
+.remed-item {
+  display: table;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 3px;
+  margin-bottom: 5px;
+  background: #fff;
+  page-break-inside: avoid;
+}
+.remed-num-cell  { display: table-cell; vertical-align: top; width: 24px; }
+.remed-text-cell { display: table-cell; vertical-align: top; font-size: 10.5px; color: #374151; line-height: 1.55; padding-left: 8px; }
+.remed-num {
+  width: 20px;
+  height: 20px;
+  background: #1e3a6e;
+  color: #93c5fd;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 20px;
+  border-radius: 2px;
+}
+
+/* ── DOT ─────────────────────────────────────────────────────── */
 .sev-dot {
   display: inline-block;
   width: 8px; height: 8px;
@@ -645,6 +571,12 @@ p  { margin: 0 0 8px; }
   margin-right: 4px;
   vertical-align: middle;
 }
+
+/* ── PAGE BREAK ──────────────────────────────────────────────── */
+.page-break { page-break-before: always; }
+
+p { margin: 0 0 7px; }
+h3 { font-size: 11.5px; font-weight: 700; margin: 12px 0 6px; color: #111827; }
 </style>
 </head>
 <body>
@@ -653,100 +585,95 @@ p  { margin: 0 0 8px; }
      COVER PAGE
 ═══════════════════════════════════════════════════════════════ -->
 <div class="cover">
-  <div class="cover-accent-bar"></div>
-  <div class="cover-deco"></div>
-  <div class="cover-deco2"></div>
-
+  <div class="cover-top-bar"></div>
   <div class="cover-body">
-    <!-- Logo -->
-    <div class="cover-logo-row">
-      <div style="background:linear-gradient(135deg,rgba(59,130,246,0.25),rgba(139,92,246,0.2));border:1px solid rgba(59,130,246,0.35);border-radius:10px;width:42px;height:42px;display:table-cell;text-align:center;vertical-align:middle;">
-        <span style="font-size:18px;color:#60a5fa;">&#x26E8;</span>
+
+    <!-- Header row -->
+    <div class="cover-header-row">
+      <div class="cover-header-left">
+        <div class="cover-lab-name">Smart City and Cybersecurity Lab &nbsp;&middot;&nbsp; ITS</div>
+        <div class="cover-lab-sub">Institut Teknologi Sepuluh Nopember &nbsp;&bull;&nbsp; 2026</div>
       </div>
-      <div>
-        <div class="cover-logo-text">Cyber Sentinel</div>
-        <div class="cover-logo-sub">Pentest &middot; SOC</div>
+      <div class="cover-header-right">
+        <div class="cover-badge">Confidential &mdash; Authorised Recipients Only</div>
       </div>
     </div>
 
     <!-- Title block -->
-    <div class="cover-badge">&#x26A0; Confidential &mdash; Authorised Recipients Only</div>
-    <div class="cover-title">Automated<br>Penetration Test<br>Report</div>
-    <div class="cover-subtitle">Security Assessment &amp; Vulnerability Analysis</div>
+    <div class="cover-title">PENETRATION TEST<br>REPORT</div>
+    <div class="cover-subtitle">AI-Powered Web Application Security Assessment</div>
+    <div class="cover-org-line">Cyber Sentinel &nbsp;&bull;&nbsp; Smart City and Cybersecurity Lab &nbsp;&bull;&nbsp; ITS</div>
 
-    <!-- Target -->
-    <div class="cover-target-box">
-      <div class="cover-target-label">Assessment Target</div>
-      <div class="cover-target-value">{{ scan.target }}</div>
-    </div>
-
-    <!-- Meta grid -->
-    <table class="cover-meta-grid" cellpadding="0" cellspacing="0">
+    <!-- Meta table -->
+    <table class="cover-meta-table" cellpadding="0" cellspacing="0">
       <tr>
-        <td>
-          <div class="cover-meta-label">Scan Type</div>
-          <div class="cover-meta-value">{{ scan.scan_type | title }}</div>
-        </td>
-        <td>
-          <div class="cover-meta-label">Status</div>
-          <div class="cover-meta-value">{{ scan.status | title }}</div>
+        <td class="label-col">Assessment Target</td>
+        <td class="value-col" style="font-family:'Courier New',monospace;font-weight:600;">{{ scan.target }}</td>
+      </tr>
+      <tr>
+        <td class="label-col">Scan Type</td>
+        <td class="value-col">{{ scan.scan_type | title }}</td>
+      </tr>
+      <tr>
+        <td class="label-col">Assessment Date</td>
+        <td class="value-col">{{ scan.completed_at.strftime('%d %B %Y') if scan.completed_at else 'In Progress' }}</td>
+      </tr>
+      <tr>
+        <td class="label-col">Risk Score</td>
+        {% set rs = scan.risk_score or 0.0 %}
+        {% if rs >= 8.0 %}{% set risk_cls = "col-critical" %}{% set risk_txt = "CRITICAL" %}
+        {% elif rs >= 6.0 %}{% set risk_cls = "col-high" %}{% set risk_txt = "HIGH" %}
+        {% elif rs >= 4.0 %}{% set risk_cls = "col-moderate" %}{% set risk_txt = "MODERATE" %}
+        {% elif rs >= 2.0 %}{% set risk_cls = "col-low" %}{% set risk_txt = "LOW" %}
+        {% else %}{% set risk_cls = "col-minimal" %}{% set risk_txt = "MINIMAL" %}{% endif %}
+        <td class="value-col">
+          <strong class="{{ risk_cls }}">{{ '%.1f' | format(rs) }}/10</strong>
+          &nbsp;
+          <span style="font-size:9px;font-weight:700;letter-spacing:0.06em;" class="{{ risk_cls }}">{{ risk_txt }}</span>
         </td>
       </tr>
       <tr>
-        <td>
-          <div class="cover-meta-label">Assessment Date</div>
-          <div class="cover-meta-value">{{ scan.completed_at.strftime('%d %B %Y') if scan.completed_at else 'In Progress' }}</div>
-        </td>
-        <td>
-          <div class="cover-meta-label">Risk Score</div>
-          {% set rs = scan.risk_score or 0.0 %}
-          {% if rs >= 8.0 %}{% set risk_cls = "col-critical" %}{% set risk_txt = "CRITICAL" %}
-          {% elif rs >= 6.0 %}{% set risk_cls = "col-high" %}{% set risk_txt = "HIGH" %}
-          {% elif rs >= 4.0 %}{% set risk_cls = "col-moderate" %}{% set risk_txt = "MODERATE" %}
-          {% elif rs >= 2.0 %}{% set risk_cls = "col-low" %}{% set risk_txt = "LOW" %}
-          {% else %}{% set risk_cls = "col-minimal" %}{% set risk_txt = "MINIMAL" %}{% endif %}
-          <div class="cover-meta-value {{ risk_cls }}">
-            {{ '%.1f' | format(rs) }}/10 &nbsp;
-            <span style="font-size:9px;font-weight:700;letter-spacing:0.08em;">{{ risk_txt }}</span>
-          </div>
-        </td>
+        <td class="label-col">Total Findings</td>
+        <td class="value-col">{{ findings | length }} total &mdash; {{ findings | selectattr('severity', 'ne', 'info') | list | length }} actionable</td>
       </tr>
       <tr>
-        <td>
-          <div class="cover-meta-label">Total Findings</div>
-          <div class="cover-meta-value">{{ findings | length }} ({{ findings | selectattr('severity', 'ne', 'info') | list | length }} actionable)</div>
-        </td>
-        <td>
-          <div class="cover-meta-label">Report Generated</div>
-          <div class="cover-meta-value">{{ generated_at }}</div>
-        </td>
+        <td class="label-col">Report Generated</td>
+        <td class="value-col">{{ generated_at }}</td>
+      </tr>
+      <tr>
+        <td class="label-col">Report ID</td>
+        <td class="value-col" style="font-family:'Courier New',monospace;font-size:9.5px;color:#6b7280;">{{ scan.id }}</td>
       </tr>
     </table>
 
-    <!-- Footer -->
-    <div class="cover-footer">
-      <div class="cover-footer-left">
-        Smart City and Cybersecurity Lab &middot; ITS<br>
-        Automated Pentest Engine — Cyber Sentinel v2
+    <!-- Cover footer -->
+    <div class="cover-bottom-rule">
+      <div class="cover-bottom-left">
+        Cyber Sentinel &nbsp;&middot;&nbsp; Automated Pentest Engine v2 &nbsp;&middot;&nbsp; Smart City and Cybersecurity Lab, ITS
       </div>
-      <div class="cover-footer-right">
-        Report ID<br>
-        <span style="font-family:'Courier New',monospace;font-size:8px;">{{ scan.id }}</span>
+      <div class="cover-bottom-right">
+        Confidential &mdash; For Authorised Recipients Only
       </div>
     </div>
+
   </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
      CONTENT PAGES
 ═══════════════════════════════════════════════════════════════ -->
-<div class="content">
+<div class="page-break"></div>
+
+<!-- Page header (appears at top of each content page) -->
+<div class="page-header">
+  <div class="page-header-left">Cyber Sentinel &nbsp;|&nbsp; Penetration Test Report &nbsp;|&nbsp; Smart City and Cybersecurity Lab, ITS</div>
+  <div class="page-header-right">Confidential &mdash; Authorised Recipients Only</div>
+</div>
 
 <!-- ── 1. Scan Details ──────────────────────────────────────── -->
 <div class="section-heading">
-  <div class="section-number">1</div>
-  <div class="section-title">Scan Details</div>
-  <div class="section-rule"></div>
+  <span class="section-number">1.</span>
+  <span class="section-title">Scan Details</span>
 </div>
 
 <table class="meta-table">
@@ -761,95 +688,98 @@ p  { margin: 0 0 8px; }
   <tr><td>Total Findings</td><td>{{ findings | length }} total &mdash; {{ findings | selectattr('severity', 'ne', 'info') | list | length }} actionable, {{ findings | selectattr('severity', 'equalto', 'info') | list | length }} informational</td></tr>
   <tr><td>Tools Executed</td><td>{{ scan.completed_tools | join(', ') if scan.completed_tools else 'N/A' }}</td></tr>
   <tr><td>Report Generated</td><td>{{ generated_at }}</td></tr>
-  <tr><td>Report ID</td><td style="font-family:'Courier New',monospace;font-size:10px;color:#64748b;">{{ scan.id }}</td></tr>
+  <tr><td>Report ID</td><td style="font-family:'Courier New',monospace;font-size:9.5px;color:#6b7280;">{{ scan.id }}</td></tr>
 </table>
 
 <!-- ── 2. Risk Assessment ───────────────────────────────────── -->
 <div class="section-heading">
-  <div class="section-number">2</div>
-  <div class="section-title">Risk Assessment</div>
-  <div class="section-rule"></div>
+  <span class="section-number">2.</span>
+  <span class="section-title">Risk Assessment</span>
 </div>
 
 {% set rs = scan.risk_score or 0.0 %}
 {% if rs >= 8.0 %}
   {% set risk_cls = "col-critical" %}{% set bar_cls = "bar-critical" %}
-  {% set risk_txt = "CRITICAL RISK" %}{% set risk_color = "#dc2626" %}
+  {% set risk_txt = "CRITICAL RISK" %}
 {% elif rs >= 6.0 %}
   {% set risk_cls = "col-high" %}{% set bar_cls = "bar-high" %}
-  {% set risk_txt = "HIGH RISK" %}{% set risk_color = "#ea580c" %}
+  {% set risk_txt = "HIGH RISK" %}
 {% elif rs >= 4.0 %}
   {% set risk_cls = "col-moderate" %}{% set bar_cls = "bar-moderate" %}
-  {% set risk_txt = "MODERATE RISK" %}{% set risk_color = "#ca8a04" %}
+  {% set risk_txt = "MODERATE RISK" %}
 {% elif rs >= 2.0 %}
   {% set risk_cls = "col-low" %}{% set bar_cls = "bar-low" %}
-  {% set risk_txt = "LOW RISK" %}{% set risk_color = "#16a34a" %}
+  {% set risk_txt = "LOW RISK" %}
 {% else %}
   {% set risk_cls = "col-minimal" %}{% set bar_cls = "bar-minimal" %}
-  {% set risk_txt = "MINIMAL RISK" %}{% set risk_color = "#64748b" %}
+  {% set risk_txt = "MINIMAL RISK" %}
 {% endif %}
 
-<div class="risk-wrapper">
-  <div class="risk-header">
-    <div>
-      <div class="risk-score-big {{ risk_cls }}">{{ '%.1f' | format(rs) }}<span style="font-size:16px;color:#475569;">/10</span></div>
-      <div class="risk-label-big {{ risk_cls }}">{{ risk_txt }}</div>
+<div class="risk-block">
+  <div class="risk-block-header">
+    <div class="risk-block-score-cell">
+      <div class="risk-score-big {{ risk_cls }}">{{ '%.1f' | format(rs) }}<span style="font-size:16px;color:#9ca3af;">/10</span></div>
+      <div class="risk-label {{ risk_cls }}">{{ risk_txt }}</div>
     </div>
-    <div>
-      <div style="background:rgba(255,255,255,0.06);height:6px;width:220px;border-radius:3px;overflow:hidden;">
-        <div class="{{ bar_cls }}" style="height:6px;border-radius:3px;width:{{ [rs * 10, 100] | min | int }}%;"></div>
+    <div class="risk-block-bar-cell">
+      <div class="risk-bar-track">
+        <div class="{{ bar_cls }} risk-bar-fill" style="width:{{ [rs * 10, 100] | min | int }}%;"></div>
       </div>
-      <div style="font-size:9px;color:#475569;margin-top:5px;text-align:right;">Score {{ '%.1f' | format(rs) }} of 10.0</div>
+      <div style="font-size:9px;color:#9ca3af;margin-top:5px;">Score {{ '%.1f' | format(rs) }} of 10.0</div>
     </div>
   </div>
   <div class="risk-body">
-    <div class="disclaimer" style="margin:0;">
-      <strong>Note:</strong> Generated by automated scanning tools augmented with AI analysis.
-      A qualified security professional should review this report before remediation.
-      Automated scans may produce false positives — verify each finding independently.
+    <div class="callout-orange" style="margin:0;">
+      <div class="callout-orange-title">Important Note</div>
+      <p>This report was generated by automated scanning tools augmented with AI analysis. A qualified security professional should review findings before remediation. Automated scans may produce false positives — verify each finding independently.</p>
     </div>
   </div>
 </div>
 
 <!-- ── 3. Severity Summary ──────────────────────────────────── -->
 <div class="section-heading">
-  <div class="section-number">3</div>
-  <div class="section-title">Severity Summary</div>
-  <div class="section-rule"></div>
+  <span class="section-number">3.</span>
+  <span class="section-title">Severity Summary</span>
 </div>
 
-<table class="sev-grid" cellpadding="0" cellspacing="6">
+<table class="sev-summary-table" cellpadding="0" cellspacing="0">
   <tr>
-    <td class="sev-cell sev-critical-cell"><span class="sev-count c-critical">{{ counts.critical }}</span><span class="sev-lbl">Critical</span></td>
-    <td class="sev-cell sev-high-cell">    <span class="sev-count c-high">{{ counts.high }}</span>        <span class="sev-lbl">High</span></td>
-    <td class="sev-cell sev-medium-cell">  <span class="sev-count c-medium">{{ counts.medium }}</span>    <span class="sev-lbl">Medium</span></td>
-    <td class="sev-cell sev-low-cell">     <span class="sev-count c-low">{{ counts.low }}</span>          <span class="sev-lbl">Low</span></td>
-    <td class="sev-cell sev-info-cell">    <span class="sev-count c-info">{{ counts.info }}</span>        <span class="sev-lbl">Info</span></td>
+    <th style="text-align:center;">Critical</th>
+    <th style="text-align:center;">High</th>
+    <th style="text-align:center;">Medium</th>
+    <th style="text-align:center;">Low</th>
+    <th style="text-align:center;">Informational</th>
+  </tr>
+  <tr>
+    <td class="c-critical" style="font-size:22px;">{{ counts.critical }}</td>
+    <td class="c-high"     style="font-size:22px;">{{ counts.high }}</td>
+    <td class="c-medium"   style="font-size:22px;">{{ counts.medium }}</td>
+    <td class="c-low"      style="font-size:22px;">{{ counts.low }}</td>
+    <td class="c-info"     style="font-size:22px;">{{ counts.info }}</td>
   </tr>
 </table>
 
 {% if owasp_distribution %}
-<!-- ── 4. OWASP Top 10 Coverage ──────────────────────────────── -->
+<!-- ── 4. OWASP Top 10:2025 Coverage ──────────────────────────── -->
 <div class="section-heading">
-  <div class="section-number">4</div>
-  <div class="section-title">OWASP Top 10:2025 Coverage</div>
-  <div class="section-rule"></div>
+  <span class="section-number">4.</span>
+  <span class="section-title">OWASP Top 10:2025 Coverage</span>
 </div>
 
-<table class="owasp-table">
+<table class="data-table">
   <tr>
-    <th style="width:70px;">Category</th>
-    <th>Name</th>
+    <th style="width:80px;">Category</th>
+    <th>Vulnerability Class</th>
     <th style="width:70px;text-align:center;">Findings</th>
     <th style="width:90px;text-align:center;">Max Severity</th>
   </tr>
   {% for item in owasp_distribution %}
   <tr>
-    <td style="font-family:'Courier New',monospace;font-size:10px;color:#60a5fa;font-weight:600;">{{ item.code }}</td>
+    <td style="font-family:'Courier New',monospace;font-size:9.5px;color:#1d4ed8;font-weight:700;">{{ item.code }}</td>
     <td>{{ item.name }}</td>
-    <td style="text-align:center;font-weight:600;">{{ item.count }}</td>
+    <td style="text-align:center;font-weight:700;">{{ item.count }}</td>
     <td style="text-align:center;">
-      <span class="finding-sev-badge sev-badge-{{ item.max_sev }}">{{ item.max_sev | upper }}</span>
+      <span class="finding-sev-badge badge-{{ item.max_sev }}" style="font-size:8.5px;">{{ item.max_sev | upper }}</span>
     </td>
   </tr>
   {% endfor %}
@@ -857,57 +787,71 @@ p  { margin: 0 0 8px; }
 {% endif %}
 
 {% if technologies %}
-<!-- ── 5. Technology Stack ───────────────────────────────────── -->
+<!-- ── 5. Detected Technology Stack ───────────────────────────── -->
 <div class="section-heading">
-  <div class="section-number">5</div>
-  <div class="section-title">Detected Technology Stack</div>
-  <div class="section-rule"></div>
+  <span class="section-number">5.</span>
+  <span class="section-title">Detected Technology Stack</span>
 </div>
 
-<table class="tech-table">
-  <tr><th style="width:40%;">Technology</th><th style="width:30%;">Type</th><th>Version</th></tr>
+<table class="data-table">
+  <tr>
+    <th style="width:40%;">Technology</th>
+    <th style="width:30%;">Type</th>
+    <th>Version</th>
+  </tr>
   {% for tech in technologies %}
   <tr>
     <td><strong>{{ tech.name }}</strong></td>
-    <td style="color:#64748b;">{{ tech.type }}</td>
-    <td style="font-family:'Courier New',monospace;font-size:10px;color:#64748b;">{{ tech.version if tech.version else '&mdash;' }}</td>
+    <td style="color:#6b7280;">{{ tech.type }}</td>
+    <td style="font-family:'Courier New',monospace;font-size:9.5px;color:#6b7280;">{{ tech.version if tech.version else '&mdash;' }}</td>
   </tr>
   {% endfor %}
 </table>
 {% endif %}
 
-<!-- ── 6. AI Analysis ────────────────────────────────────────── -->
+<!-- ── 6. AI Security Analysis ────────────────────────────────── -->
 {% if scan.ai_summary %}
 <div class="section-heading">
-  <div class="section-number">6</div>
-  <div class="section-title">AI Security Analysis</div>
-  <div class="section-rule"></div>
+  <span class="section-number">6.</span>
+  <span class="section-title">AI Security Analysis</span>
 </div>
 
 {% set sections = scan.ai_summary.split('---') %}
 {% for section in sections %}
   {% set section = section.strip() %}
   {% if section %}
-  <div class="ai-section">
     {% set lines = section.split('\n') %}
-    {% set title = lines[0].strip() %}
+    {% set raw_title = lines[0].strip() %}
     {% set body_lines = lines[1:] %}
-    <div class="ai-section-title">
-      &#x1F916;
-      {{ title | replace('🔒','') | replace('⚠','') | replace('🔗','') | replace('🛡','') | replace('🛠','') | replace('📋','') | trim }}
+    {# Pick callout style based on section content #}
+    {% if 'REMEDIATION' in raw_title | upper or 'RECOMMENDATION' in raw_title | upper %}
+      {% set callout_class = 'callout-green' %}
+      {% set title_class = 'callout-green-title' %}
+    {% elif 'RISK' in raw_title | upper or 'ATTACK' in raw_title | upper %}
+      {% set callout_class = 'callout-red' %}
+      {% set title_class = 'callout-red-title' %}
+    {% else %}
+      {% set callout_class = 'callout-blue' %}
+      {% set title_class = 'callout-blue-title' %}
+    {% endif %}
+
+    <div class="{{ callout_class }}">
+      <div class="{{ title_class }}">
+        {{ raw_title | replace('🔒','') | replace('⚠','') | replace('🔗','') | replace('🛡','') | replace('🛠','') | replace('📋','') | trim }}
+      </div>
+      {% for line in body_lines %}
+        {% if line.strip() %}
+          <p>{{ line | e }}</p>
+        {% endif %}
+      {% endfor %}
     </div>
-    {% for line in body_lines %}
-      {% if line.strip() %}
-        <p>{{ line | e }}</p>
-      {% endif %}
-    {% endfor %}
-  </div>
   {% endif %}
 {% endfor %}
 
 {% if scan.ai_remediation %}
-<div class="ai-section" style="background:#f0fdf4;border-color:#86efac;border-left-color:#16a34a;">
-  <div class="ai-section-title" style="color:#166534;">&#x2705; Prioritised Remediation Plan</div>
+<div class="sub-heading">Prioritised Remediation Plan</div>
+<div class="callout-green">
+  <div class="callout-green-title">Remediation Steps</div>
   {% for line in scan.ai_remediation.split('\n') %}
     {% set line = line.strip() %}
     {% if line %}
@@ -915,13 +859,9 @@ p  { margin: 0 0 8px; }
         {% set parts = line.split('. ', 1) %}
         {% set num = parts[0] %}
         {% set text = parts[1] if parts | length > 1 else line %}
-        {% set sev_class = "remed-sev-medium" %}
-        {% if '[CRITICAL]' in text %}{% set sev_class = "remed-sev-critical" %}{% endif %}
-        {% if '[HIGH]' in text %}{% set sev_class = "remed-sev-high" %}{% endif %}
-        {% if '[LOW]' in text %}{% set sev_class = "remed-sev-low" %}{% endif %}
         <div class="remed-item">
-          <div class="remed-num">{{ num }}</div>
-          <div class="remed-text">{{ text | e }}</div>
+          <div class="remed-num-cell"><div class="remed-num">{{ num }}</div></div>
+          <div class="remed-text-cell">{{ text | e }}</div>
         </div>
       {% else %}
         <p>{{ line | e }}</p>
@@ -935,24 +875,23 @@ p  { margin: 0 0 8px; }
 {% if tool_coverage %}
 <!-- ── 7. Tool Coverage Matrix ──────────────────────────────── -->
 <div class="section-heading">
-  <div class="section-number">7</div>
-  <div class="section-title">Tool Coverage Matrix</div>
-  <div class="section-rule"></div>
+  <span class="section-number">7.</span>
+  <span class="section-title">Tool Coverage Matrix</span>
 </div>
 
-<table class="cov-table">
+<table class="data-table">
   <tr>
-    <th style="width:120px;">Tool</th>
-    <th>Label</th>
+    <th style="width:130px;">Tool</th>
+    <th>Description</th>
     <th style="width:80px;">Status</th>
     <th style="width:80px;text-align:center;">Findings</th>
   </tr>
   {% for tc in tool_coverage %}
   <tr>
-    <td><code style="font-size:10px;color:#60a5fa;">{{ tc.tool }}</code></td>
+    <td><code style="font-size:9.5px;color:#1d4ed8;font-family:'Courier New',monospace;">{{ tc.tool }}</code></td>
     <td>{{ tc.label }}</td>
     <td class="status-{{ tc.status }}">{{ tc.status | upper }}</td>
-    <td style="text-align:center;font-weight:600;">{{ tc.finding_count if tc.finding_count else '&mdash;' }}</td>
+    <td style="text-align:center;font-weight:700;">{{ tc.finding_count if tc.finding_count else '&mdash;' }}</td>
   </tr>
   {% endfor %}
 </table>
@@ -960,17 +899,23 @@ p  { margin: 0 0 8px; }
 
 <!-- ── 8. Detailed Findings ──────────────────────────────────── -->
 <div class="page-break"></div>
+
+<!-- Repeat page header after manual page break -->
+<div class="page-header">
+  <div class="page-header-left">Cyber Sentinel &nbsp;|&nbsp; Penetration Test Report &nbsp;|&nbsp; Smart City and Cybersecurity Lab, ITS</div>
+  <div class="page-header-right">Confidential &mdash; Authorised Recipients Only</div>
+</div>
+
 <div class="section-heading">
-  <div class="section-number">8</div>
-  <div class="section-title">Detailed Findings</div>
-  <div class="section-rule"></div>
+  <span class="section-number">8.</span>
+  <span class="section-title">Detailed Findings</span>
 </div>
 
 {% set actionable = findings | rejectattr('severity', 'equalto', 'info') | list %}
 {% set info_findings = findings | selectattr('severity', 'equalto', 'info') | list %}
 
 {% if actionable %}
-<h3 style="margin:0 0 10px;color:#0f172a;">Actionable Findings <span style="font-weight:400;color:#64748b;">({{ actionable | length }})</span></h3>
+<div class="sub-heading">Actionable Findings <span style="font-weight:400;color:#6b7280;">({{ actionable | length }})</span></div>
 
 {% for idx in range(actionable | length) %}
   {% set f = actionable[idx] %}
@@ -979,25 +924,10 @@ p  { margin: 0 0 8px; }
 
   <div class="finding-card">
     <div class="finding-head">
-      <div class="finding-sev-bar" style="
-        background:
-        {% if sev == 'critical' %}#dc2626
-        {% elif sev == 'high' %}#ea580c
-        {% elif sev == 'medium' %}#ca8a04
-        {% elif sev == 'low' %}#16a34a
-        {% else %}#64748b{% endif %};
-      "></div>
-
-      <span class="finding-sev-badge" style="background:
-        {% if sev == 'critical' %}#dc2626
-        {% elif sev == 'high' %}#ea580c
-        {% elif sev == 'medium' %}#ca8a04
-        {% elif sev == 'low' %}#16a34a
-        {% else %}#64748b{% endif %}; color:#fff; margin-top:2px;">
-        {{ sev | upper }}
-      </span>
-
-      <div class="finding-head-info">
+      <div class="finding-head-left">
+        <span class="finding-sev-badge badge-{{ sev }}">{{ sev | upper }}</span>
+      </div>
+      <div class="finding-head-center">
         <div class="finding-name">{{ f.get('name','') if f is mapping else f.name }}</div>
         <div class="finding-meta">
           {{ f.get('matched_at', '') if f is mapping else f.matched_at }}
@@ -1006,15 +936,16 @@ p  { margin: 0 0 8px; }
           {% if owasp %}&nbsp;&bull;&nbsp;<span class="tag-owasp">{{ owasp }}</span>{% endif %}
         </div>
       </div>
-
-      <span class="conf-{{ conf | lower }}">{{ conf }}</span>
+      <div class="finding-head-right">
+        <span class="conf-badge conf-{{ conf | lower }}">{{ conf }}</span>
+      </div>
     </div>
 
     <div class="finding-body">
       {% set desc = f.get('description','') if f is mapping else f.description %}
       {% if desc %}<div class="finding-desc">{{ desc | e }}</div>{% endif %}
 
-      {% set evidence = f.get('evidence','') if f is mapping else (f.evidence if hasattr(f,'evidence') else '') %}
+      {% set evidence = f.get('evidence','') if f is mapping else (f.evidence if f is not mapping or hasattr(f,'evidence') else '') %}
       {% if evidence %}
       <div class="label-sm">Evidence</div>
       <div class="code-block">{{ evidence | e }}</div>
@@ -1027,7 +958,7 @@ p  { margin: 0 0 8px; }
         <span class="tag-cve">{{ cve.get('cve_id','') if cve is mapping else cve.cve_id }}</span>
         CVSS {{ cve.get('cvss_score',0) if cve is mapping else cve.cvss_score }}
         {% set vec = cve.get('cvss_vector','') if cve is mapping else (cve.cvss_vector if hasattr(cve,'cvss_vector') else '') %}
-        {% if vec %}&nbsp;<span style="font-family:'Courier New',monospace;font-size:9px;color:#94a3b8;">{{ vec }}</span>{% endif %}
+        {% if vec %}&nbsp;<span style="font-family:'Courier New',monospace;font-size:8.5px;color:#9ca3af;">{{ vec }}</span>{% endif %}
       {% endfor %}
       {% endif %}
     </div>
@@ -1036,23 +967,27 @@ p  { margin: 0 0 8px; }
 {% endif %}
 
 {% if info_findings %}
-<h3 style="margin:14px 0 8px;color:#0f172a;">Informational Findings <span style="font-weight:400;color:#64748b;">({{ info_findings | length }})</span></h3>
+<div class="sub-heading">Informational Findings <span style="font-weight:400;color:#6b7280;">({{ info_findings | length }})</span></div>
 <table class="info-table">
   <tr>
     <th>Finding</th>
-    <th style="width:90px;">Tool</th>
+    <th style="width:100px;">Tool</th>
     <th>Location</th>
   </tr>
   {% for f in info_findings %}
   <tr>
     <td>{{ f.get('name','') if f is mapping else f.name }}</td>
     <td>{{ f.get('tool','') if f is mapping else f.tool }}</td>
-    <td style="font-size:10px;word-break:break-all;font-family:'Courier New',monospace;color:#94a3b8;">{{ f.get('matched_at','') if f is mapping else f.matched_at }}</td>
+    <td style="font-size:9px;word-break:break-all;font-family:'Courier New',monospace;color:#9ca3af;">{{ f.get('matched_at','') if f is mapping else f.matched_at }}</td>
   </tr>
   {% endfor %}
 </table>
 {% endif %}
 
-</div><!-- end .content -->
+<!-- ── Footer ──────────────────────────────────────────────────── -->
+<div class="page-footer">
+  Cyber Sentinel &nbsp;&middot;&nbsp; Smart City and Cybersecurity Lab, ITS &nbsp;&middot;&nbsp; Confidential &mdash; Authorised Recipients Only
+</div>
+
 </body>
 </html>
