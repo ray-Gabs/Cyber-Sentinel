@@ -7,6 +7,7 @@
 import { useState, useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { TransitionProvider } from "@/components/transitions/TransitionProvider";
+import ErrorBoundary from "@/components/common/ErrorBoundary";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import BottomNav from "./BottomNav";
@@ -81,9 +82,11 @@ export default function AppLayout() {
         <Header onToggleSidebar={toggleSidebar} sidebarOpen={sidebarOpen} />
 
         <main className="flex-1 px-3 sm:px-5 md:px-6 lg:px-8 pt-4 sm:pt-5 md:pt-6 layout-main-content">
-          <TransitionProvider>
-            <Outlet />
-          </TransitionProvider>
+          <ErrorBoundary>
+            <TransitionProvider>
+              <Outlet />
+            </TransitionProvider>
+          </ErrorBoundary>
 
           {/* Decorative security-tools marquee strip */}
           <div className="mt-8 mb-2 hidden md:block" style={{ opacity: 0.18 }}>

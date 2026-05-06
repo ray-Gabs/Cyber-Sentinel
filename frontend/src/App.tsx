@@ -15,7 +15,7 @@
  *   /settings    → Settings
  *   /admin       → User management (admin only)
  */
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/providers/ThemeProvider";
@@ -111,6 +111,15 @@ function RoleRoute({
   return <>{children}</>;
 }
 
+/** Forces ScanDetail to fully remount on every scan navigation.
+ * Without this, React Router reuses the same component instance when the id param changes.
+ * framer-motion's DrillTransition starts at opacity: 0 and the layoutId tab indicator
+ * animation can interrupt the enter animation, leaving the content permanently invisible. */
+function ScanDetailKeyed() {
+  const { id } = useParams<{ id: string }>();
+  return <ScanDetail key={id} />;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -133,7 +142,7 @@ function AppRoutes() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/scans" element={<ScanList />} />
         <Route path="/scans/new" element={<RoleRoute requiredRole="analyst"><ScanConfig /></RoleRoute>} />
-        <Route path="/scans/:id" element={<ScanDetail />} />
+        <Route path="/scans/:id" element={<ScanDetailKeyed />} />
         <Route path="/scans/:id/diff" element={<ScanDiff />} />
         <Route path="/alerts" element={<AlertFeed />} />
         <Route path="/alerts/:id" element={<AlertDetail />} />
