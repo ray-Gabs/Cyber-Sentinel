@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-_MAX_FINDINGS_FOR_AI = 50
+_MAX_FINDINGS_FOR_AI = 25  # narrative report sends at most 25; prevents batch-split duplication
 _MAX_DESC_LEN = 350
 _SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
@@ -692,7 +692,8 @@ class LLMService:
                 if tech_names:
                     whatweb_ctx = f"WhatWeb ({whatweb_raw.get('method', '')}): {', '.join(tech_names[:15])}\n"
 
-        # Build base header (reused by both single and batched calls)
+        # Report header — show exact counts so the AI doesn't infer phantom findings.
+        # "Showing X of Y" prevents hallucination when total > top slice.
         header = template + (
             f"\n\n=== SCAN DATA ===\n"
             f"Target: {scan.target}\n"
@@ -700,7 +701,8 @@ class LLMService:
             f"Scan duration: {duration}\n"
             f"Tools executed: {', '.join(scan.completed_tools or [])}\n"
             f"Tool coverage: {json.dumps(tool_cov)}\n"
-            f"Total findings: {len(scan.findings)}\n"
+            f"Total findings: {len(scan.findings)} "
+            f"(showing top {len(top)} by severity — base your report ONLY on the findings listed below)\n"
             f"Severity breakdown: Critical={counts['critical']}, High={counts['high']}, "
             f"Medium={counts['medium']}, Low={counts['low']}, Info={counts['info']}\n"
             f"{tech_info}{crawler_info}"
@@ -708,7 +710,7 @@ class LLMService:
             f"{zap_ctx}{whatweb_ctx}"
             f"{failed_tools_ctx}{coverage_ctx}"
             f"OWASP 2025 category names: {json.dumps(owasp_names)}\n"
-            f"\nOWASP 2025 Category Distribution:\n"
+            f"\nOWASP 2025 Category Distribution (for reference only — do NOT invent findings for categories not in the findings list below):\n"
         )
         for cat, items in owasp_cats.items():
             header += f"  {cat}: {len(items)} findings\n"
@@ -729,43 +731,19 @@ class LLMService:
             )
 
         try:
-            # Batch split if more than 20 findings to avoid token limits.
-            # Both batches receive the full scan context header so each can
-            # produce complete, accurate sections independently.
-            if len(top) > 20:
-                mid = len(top) // 2
-                batch1 = top[:mid]
-                batch2 = top[mid:]
-
-                prompt1 = (
-                    header
-                    + f"\nTop Findings — Batch 1 of 2 (highest severity):\n"
-                    + json.dumps([_build_finding_entry(f) for f in batch1], indent=1, separators=(",", ":"))
-                    + "\n\nWrite sections: ENGAGEMENT OVERVIEW, RISK ASSESSMENT, KEY FINDINGS, ATTACK CHAIN ANALYSIS, OWASP TOP 10:2025 COVERAGE, ATTACK SURFACE ANALYSIS, PER-FINDING REMEDIATION GUIDE."
-                )
-                prompt2 = (
-                    header
-                    + f"\nTop Findings — Batch 2 of 2 (remaining findings):\n"
-                    + json.dumps([_build_finding_entry(f) for f in batch2], indent=1, separators=(",", ":"))
-                    + "\n\nWrite sections: STRATEGIC RECOMMENDATIONS, TOOL COVERAGE MATRIX."
-                )
-
-                text1 = await asyncio.wait_for(
-                    self._generate(prompt1, max_tokens=4000),
-                    timeout=_NARRATIVE_TIMEOUT,
-                )
-                await asyncio.sleep(3)  # Rate limit buffer between sequential AI calls
-                text2 = await asyncio.wait_for(
-                    self._generate(prompt2, max_tokens=2000),
-                    timeout=_NARRATIVE_TIMEOUT,
-                )
-                return text1 + "\n\n" + text2
-            else:
-                prompt = header + f"\nTop Findings (by severity):\n{json.dumps([_build_finding_entry(f) for f in top], indent=1, separators=(',', ':'))}"
-                return await asyncio.wait_for(
-                    self._generate(prompt, max_tokens=6000),
-                    timeout=_NARRATIVE_TIMEOUT,
-                )
+            # Single-call path only — no batch splitting.
+            # Batch splitting caused KEY FINDINGS and other sections to appear 2-3x because
+            # each batch received the full prompt template and both tried to write all sections.
+            # _MAX_FINDINGS_FOR_AI caps findings at 25 to stay within token budget.
+            prompt = (
+                header
+                + f"\nFindings (top {len(top)} by severity — ONLY base your report on these):\n"
+                + json.dumps([_build_finding_entry(f) for f in top], indent=1, separators=(",", ":"))
+            )
+            return await asyncio.wait_for(
+                self._generate(prompt, max_tokens=6000),
+                timeout=_NARRATIVE_TIMEOUT,
+            )
 
         except (asyncio.TimeoutError, TimeoutError):
             log.warning("Narrative report generation timed out for scan %s", scan.target)
