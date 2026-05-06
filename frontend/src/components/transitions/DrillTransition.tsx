@@ -36,8 +36,7 @@ export function getDrillVariants(direction: DrillDirection) {
       opacity: 0,
       x: exitTo,
       transition: {
-        duration: DURATION_EXIT,
-        ease: EASE_EXIT,
+        duration: 0,
       },
     },
   };
