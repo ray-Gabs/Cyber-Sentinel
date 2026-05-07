@@ -116,33 +116,10 @@ async def lifespan(app: FastAPI):
     await seed_admin()
     await seed_demo_user()
 
-    # Seed demo projects for the demo user (idempotent)
-    import os as _os
-    _demo_email = _os.getenv("DEMO_USER_EMAIL", "").strip()
-    if _demo_email:
-        from domains.auth.models import User as _User
-        from domains.soc.project_models import SocProject as _SocProject
-        _demo = await _User.find_one({"email": _demo_email})
-        if _demo:
-            _count = await _SocProject.find({"owner_id": str(_demo.id)}).count()
-            if _count == 0:
-                _js_url = _os.getenv("DEMO_JUICESHOP_URL", "http://localhost:3000")
-                _dvwa_url = _os.getenv("DEMO_DVWA_URL", "http://localhost:8080")
-                await _SocProject(
-                    owner_id=str(_demo.id), name="Juice Shop", slug="juice-shop",
-                    target_url=_js_url,
-                    description="OWASP Juice Shop — intentionally vulnerable web app",
-                    wazuh_agent_registered=True, wazuh_agent_id="001",
-                    wazuh_agent_name="juice-shop",
-                ).insert()
-                await _SocProject(
-                    owner_id=str(_demo.id), name="DVWA", slug="dvwa",
-                    target_url=_dvwa_url,
-                    description="Damn Vulnerable Web Application",
-                    wazuh_agent_registered=True, wazuh_agent_id="002",
-                    wazuh_agent_name="dvwa",
-                ).insert()
-                log.info("Seeded 2 demo projects for %s", _demo_email)
+    # Demo projects were previously auto-seeded here with fake Wazuh agent IDs.
+    # Removed: fake wazuh_agent_registered=True caused "View Alerts" to appear on
+    # projects where no real Wazuh agent was ever deployed, leading to empty alert pages.
+    # Users (including demo) should create projects and deploy actual agents themselves.
 
     _relay_task = asyncio.create_task(_redis_ws_relay())
 
