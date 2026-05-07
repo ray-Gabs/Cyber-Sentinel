@@ -187,3 +187,27 @@ export async function triggerPlaybook(
   );
   return res.data;
 }
+
+/* ── Admin Maintenance (admin role only) ──────── */
+
+export interface AdminClaimResult {
+  claimed: number;
+  tenant_id: string;
+}
+
+export interface AdminRetriangeResult {
+  queued: number;
+  total_untriaged: number;
+}
+
+/** POST /api/alerts/admin/claim-alerts → assign tenant_id to all None alerts (admin) */
+export async function claimUntenantedAlerts(): Promise<AdminClaimResult> {
+  const res = await api.post<AdminClaimResult>("/alerts/admin/claim-alerts");
+  return res.data;
+}
+
+/** POST /api/alerts/admin/retriage-all → queue triage for all untriaged alerts (admin) */
+export async function retriageAllUntriaged(): Promise<AdminRetriangeResult> {
+  const res = await api.post<AdminRetriangeResult>("/alerts/admin/retriage-all");
+  return res.data;
+}

@@ -491,6 +491,74 @@ async def get_mitre_summary(current_user: User = Depends(get_current_user)) -> d
     }
 
 
+# ── Admin Maintenance ─────────────────────────────────────────────────────────
+
+@router.post("/admin/claim-alerts")
+async def admin_claim_alerts(user: User = Depends(get_current_user)):
+    """
+    Admin only: assign tenant_id to all alerts currently with tenant_id=None.
+
+    Use this after alerts have been ingested via the global WAZUH_WEBHOOK_TOKEN.
+    After running this, the alerts become visible to your account and you can
+    trigger triage via /admin/retriage-all.
+    """
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+
+    collection = Alert.get_motor_collection()
+    result = await collection.update_many(
+        {"$or": [{"tenant_id": None}, {"tenant_id": {"$exists": False}}]},
+        {"$set": {"tenant_id": str(user.id)}},
+    )
+    count = result.modified_count
+
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="alerts.claim_untenanted",
+        resource_type="alert",
+        resource_id="*",
+        details=f"claimed {count} alerts → tenant_id={user.id}",
+    )
+    return {"claimed": count, "tenant_id": str(user.id)}
+
+
+@router.post("/admin/retriage-all")
+async def admin_retriage_all(user: User = Depends(get_current_user)):
+    """
+    Admin only: queue Celery triage tasks for all untriaged/failed alerts in this tenant.
+
+    Returns immediately — processing happens asynchronously in the Celery worker.
+    Covers alerts where ai_verdict is None or TRIAGE_FAILED (previous attempt errored).
+    """
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+
+    alerts = await Alert.find({
+        "tenant_id": str(user.id),
+        "$or": [{"ai_verdict": None}, {"ai_verdict": "TRIAGE_FAILED"}],
+    }).to_list()
+
+    from domains.soc.tasks import triage_single_alert
+    queued = 0
+    for alert in alerts:
+        try:
+            triage_single_alert.delay(str(alert.id))
+            queued += 1
+        except Exception as exc:
+            log.warning("[admin] Failed to queue triage for %s: %s", alert.id, exc)
+
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="alerts.bulk_retriage_queued",
+        resource_type="alert",
+        resource_id="*",
+        details=f"queued triage for {queued}/{len(alerts)} alerts",
+    )
+    return {"queued": queued, "total_untriaged": len(alerts)}
+
+
 @router.get("/{alert_id}", response_model=AlertDetailResponse)
 async def get_alert(alert_id: str, user: User = Depends(get_current_user)):
     """Get full details for a single alert including AI verdict."""

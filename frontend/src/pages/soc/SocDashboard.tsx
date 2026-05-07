@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Activity, AlertTriangle, CheckCircle2, XCircle, AlertCircle,
-  RefreshCw, Monitor, ShieldAlert, Clock,
+  RefreshCw, Monitor, ShieldAlert, Clock, Wrench, Database, Zap,
 } from "lucide-react";
 import {
   getSocDashboard,
@@ -19,7 +19,14 @@ import {
   type PerProjectEntry,
   type RecentAlert,
 } from "@/services/socService";
+import {
+  claimUntenantedAlerts,
+  retriageAllUntriaged,
+  type AdminClaimResult,
+  type AdminRetriangeResult,
+} from "@/services/alertService";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useAuth } from "@/hooks/useAuth";
 
 // ── Small sub-components ──────────────────────────────────────────────────────
 
@@ -301,6 +308,102 @@ function SeverityCountBadge({ severity, count }: { severity: string; count: numb
   );
 }
 
+// ── Admin Maintenance Panel ───────────────────────────────────────────────────
+
+function AdminMaintenancePanel() {
+  const [claimState, setClaimState] = useState<{ loading: boolean; result?: AdminClaimResult; error?: string }>({ loading: false });
+  const [triageState, setTriageState] = useState<{ loading: boolean; result?: AdminRetriangeResult; error?: string }>({ loading: false });
+
+  const handleClaim = async () => {
+    setClaimState({ loading: true });
+    try {
+      const result = await claimUntenantedAlerts();
+      setClaimState({ loading: false, result });
+    } catch (e: unknown) {
+      setClaimState({ loading: false, error: e instanceof Error ? e.message : "Failed" });
+    }
+  };
+
+  const handleRetriage = async () => {
+    setTriageState({ loading: true });
+    try {
+      const result = await retriageAllUntriaged();
+      setTriageState({ loading: false, result });
+    } catch (e: unknown) {
+      setTriageState({ loading: false, error: e instanceof Error ? e.message : "Failed" });
+    }
+  };
+
+  return (
+    <div
+      className="rounded-xl p-4"
+      style={{ backgroundColor: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.20)" }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Wrench size={13} style={{ color: "#F59E0B" }} />
+        <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "#F59E0B" }}>
+          Admin Maintenance
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-4">
+        {/* Step 1: Claim untenanted alerts */}
+        <div className="flex flex-col gap-1">
+          <button
+            onClick={handleClaim}
+            disabled={claimState.loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity disabled:opacity-50"
+            style={{ backgroundColor: "var(--bg-muted)", color: "var(--text-base)", border: "1px solid var(--border)" }}
+          >
+            {claimState.loading
+              ? <RefreshCw size={11} className="animate-spin" />
+              : <Database size={11} style={{ color: "#F59E0B" }} />
+            }
+            1. Claim Untenanted Alerts
+          </button>
+          {claimState.result && (
+            <span className="text-[10px]" style={{ color: "#22C55E" }}>
+              {claimState.result.claimed} alerts claimed to your account
+            </span>
+          )}
+          {claimState.error && (
+            <span className="text-[10px]" style={{ color: "#EF4444" }}>{claimState.error}</span>
+          )}
+        </div>
+
+        {/* Step 2: Queue triage for all untriaged */}
+        <div className="flex flex-col gap-1">
+          <button
+            onClick={handleRetriage}
+            disabled={triageState.loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity disabled:opacity-50"
+            style={{ backgroundColor: "var(--bg-muted)", color: "var(--text-base)", border: "1px solid var(--border)" }}
+          >
+            {triageState.loading
+              ? <RefreshCw size={11} className="animate-spin" />
+              : <Zap size={11} style={{ color: "#F59E0B" }} />
+            }
+            2. Queue Triage Backlog
+          </button>
+          {triageState.result && (
+            <span className="text-[10px]" style={{ color: "#22C55E" }}>
+              {triageState.result.queued}/{triageState.result.total_untriaged} tasks queued — check Celery worker
+            </span>
+          )}
+          {triageState.error && (
+            <span className="text-[10px]" style={{ color: "#EF4444" }}>{triageState.error}</span>
+          )}
+        </div>
+      </div>
+
+      <p className="text-[10px] mt-3" style={{ color: "var(--text-subtle)" }}>
+        Run step 1 to claim alerts ingested via the global webhook token, then step 2 to populate MITRE data and AI verdicts.
+        Ensure the Celery worker is running before step 2.
+      </p>
+    </div>
+  );
+}
+
 // ── Loading / Error states ────────────────────────────────────────────────────
 
 function SkeletonCard() {
@@ -353,6 +456,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function SocDashboard() {
+  const { user } = useAuth();
   const [data, setData] = useState<SocDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -432,6 +536,9 @@ export default function SocDashboard() {
           Refresh
         </button>
       </div>
+
+      {/* Admin maintenance panel — only visible to admins */}
+      {user?.role === "admin" && <AdminMaintenancePanel />}
 
       {/* System notifications */}
       {system_notifications.length > 0 && (
