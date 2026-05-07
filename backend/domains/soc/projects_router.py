@@ -111,8 +111,9 @@ def _severity_from_level(level: int) -> str:
 async def _get_project_health_issues(project: SocProject) -> list[str]:
     """Return human-readable health warnings for a project's Wazuh agent."""
     issues: list[str] = []
+    agent_name = project.wazuh_agent_name or project.slug
     try:
-        agent = await wazuh_client.get_agent_by_name(project.slug)
+        agent = await wazuh_client.get_agent_by_name(agent_name)
     except Exception:
         issues.append("Cannot reach Wazuh manager — check lab network connection")
         return issues
@@ -131,7 +132,7 @@ async def _get_project_health_issues(project: SocProject) -> list[str]:
 
     yesterday = datetime.now(timezone.utc) - timedelta(hours=24)
     alert_count = await Alert.find(
-        Alert.agent_name == project.slug,
+        Alert.agent_name == agent_name,
         Alert.timestamp >= yesterday,
     ).count()
     if agent.get("status") == "active" and alert_count == 0:
@@ -141,7 +142,7 @@ async def _get_project_health_issues(project: SocProject) -> list[str]:
 
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     critical_today = await Alert.find(
-        Alert.agent_name == project.slug,
+        Alert.agent_name == agent_name,
         Alert.rule_level >= 12,
         Alert.timestamp >= today,
     ).count()
@@ -311,18 +312,18 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
         owner_map = {}
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     is_admin = user.role == "admin"
-    project_slugs = [p.slug for p in projects]
+    # Use wazuh_agent_name when set (e.g. "lab-target"); fall back to slug for new projects
+    project_agent_names = [p.wazuh_agent_name or p.slug for p in projects]
 
     # Build the base alert query for this user.
     # Admin sees all alerts. Non-admin: tenant_id bucket (from per-user webhook token)
-    # combined with any project agent names — so alerts show up even when the Wazuh
-    # agent name doesn't match the project slug exactly.
+    # combined with resolved agent names — so alerts show up regardless of name/slug mismatch.
     def _base_query() -> dict:
         if is_admin:
             return {}
         conditions: list[dict] = [{"tenant_id": str(user.id)}]
-        if project_slugs:
-            conditions.append({"agent_name": {"$in": project_slugs}})
+        if project_agent_names:
+            conditions.append({"agent_name": {"$in": project_agent_names}})
         return {"$or": conditions} if len(conditions) > 1 else conditions[0]
 
     base_q = _base_query()
@@ -337,8 +338,9 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
     per_project: list[dict] = []
 
     for project in projects:
+        proj_agent_name = project.wazuh_agent_name or project.slug
         try:
-            agent = await wazuh_client.get_agent_by_name(project.slug)
+            agent = await wazuh_client.get_agent_by_name(proj_agent_name)
             if agent and agent.get("status") == "active":
                 active_agents += 1
                 agent_status = "connected"
@@ -348,23 +350,23 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
             else:
                 agent_status = "never_registered"
         except Exception as exc:
-            log.debug("Wazuh agent lookup failed for project %s: %s", project.slug, exc)
+            log.debug("Wazuh agent lookup failed for project %s: %s", proj_agent_name, exc)
             agent = None
             agent_status = "unknown"
 
         proj_alerts_today = await Alert.find(
-            Alert.agent_name == project.slug,
+            Alert.agent_name == proj_agent_name,
             Alert.timestamp >= today,
         ).count()
 
         proj_critical = await Alert.find(
-            Alert.agent_name == project.slug,
+            Alert.agent_name == proj_agent_name,
             Alert.rule_level >= 12,
             Alert.timestamp >= today,
         ).count()
 
         last_alert = await Alert.find(
-            Alert.agent_name == project.slug,
+            Alert.agent_name == proj_agent_name,
         ).sort(-Alert.timestamp).limit(1).first_or_none()
 
         health_issues = await _get_project_health_issues(project)
@@ -373,7 +375,7 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
         entry: dict = {
             "project_id": str(project.id),
             "project_name": project.name,
-            "agent_name": project.slug,
+            "agent_name": proj_agent_name,
             "agent_status": agent_status,
             "agent_ip": agent_ip,
             "alerts_today": proj_alerts_today,
@@ -399,7 +401,9 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
     }
 
     # Recent alerts from tenant-scoped query (not just project slugs)
+    # Map both slug and wazuh_agent_name → project name for display
     slug_to_name = {p.slug: p.name for p in projects}
+    slug_to_name.update({p.wazuh_agent_name: p.name for p in projects if p.wazuh_agent_name})
     recent = await Alert.find(base_q).sort(-Alert.timestamp).limit(10).to_list()
     recent_alerts: list[dict] = [
         {
@@ -450,20 +454,21 @@ async def agent_status(project_id: str, user: User = Depends(get_current_user)):
     """Rich agent status from Wazuh API. Returns health_issues array."""
     project = await _get_accessible(project_id, user)
 
+    proj_agent_name = project.wazuh_agent_name or project.slug
     reachable = await wazuh_client.check_reachable()
     if not reachable:
         return {
-            "agent_name": project.slug,
+            "agent_name": proj_agent_name,
             "status": "unknown",
             "manager_reachable": False,
             "error": "Cannot reach Wazuh manager",
             "health_issues": ["Cannot reach Wazuh manager — check lab network connection"],
         }
 
-    agent = await wazuh_client.get_agent_by_name(project.slug)
+    agent = await wazuh_client.get_agent_by_name(proj_agent_name)
     if not agent:
         return {
-            "agent_name": project.slug,
+            "agent_name": proj_agent_name,
             "wazuh_agent_id": None,
             "status": "never_registered",
             "manager_reachable": True,
@@ -473,16 +478,16 @@ async def agent_status(project_id: str, user: User = Depends(get_current_user)):
 
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday = datetime.now(timezone.utc) - timedelta(hours=24)
-    alerts_today = await Alert.find(Alert.agent_name == project.slug, Alert.timestamp >= today).count()
-    alerts_24h = await Alert.find(Alert.agent_name == project.slug, Alert.timestamp >= yesterday).count()
+    alerts_today = await Alert.find(Alert.agent_name == proj_agent_name, Alert.timestamp >= today).count()
+    alerts_24h = await Alert.find(Alert.agent_name == proj_agent_name, Alert.timestamp >= yesterday).count()
     last_alert = await Alert.find(
-        Alert.agent_name == project.slug
+        Alert.agent_name == proj_agent_name
     ).sort(-Alert.timestamp).limit(1).first_or_none()
 
     health_issues = await _get_project_health_issues(project)
 
     return {
-        "agent_name": project.slug,
+        "agent_name": proj_agent_name,
         "wazuh_agent_id": agent.get("id"),
         "status": "connected" if agent.get("status") == "active" else "disconnected",
         "last_seen": agent.get("lastKeepAlive"),
@@ -504,7 +509,7 @@ async def agent_status(project_id: str, user: User = Depends(get_current_user)):
 async def agent_compose(project_id: str, user: User = Depends(get_current_user)):
     """Download a docker-compose.yml that connects a Wazuh agent to the lab manager."""
     project = await _get_accessible(project_id, user)
-    agent_name = project.slug
+    agent_name = project.wazuh_agent_name or project.slug
 
     reg_password = settings.wazuh_reg_password or ""
     compose = (
