@@ -563,6 +563,57 @@ async def admin_retriage_all(user: User = Depends(get_current_user)):
     return {"queued": queued, "total_untriaged": len(alerts)}
 
 
+@router.post("/retriage-mine")
+async def retriage_my_alerts(user: User = Depends(get_current_user)):
+    """
+    Queue AI triage for all untriaged/failed alerts visible to the current user.
+
+    Works for any role — admins queue their tenant bucket, analysts queue
+    alerts from their project agents. Returns immediately; processing is async.
+    """
+    user_id = str(user.id)
+    conditions: list[dict] = [{"tenant_id": user_id}]
+
+    if user.role != "admin":
+        if user.wazuh_agent_name:
+            conditions.append({"agent_name": user.wazuh_agent_name})
+        try:
+            from domains.soc.project_models import SocProject
+            user_projects = await SocProject.find(
+                SocProject.owner_id == user_id
+            ).limit(100).to_list()
+            proj_agent_names = [p.wazuh_agent_name or p.slug for p in user_projects]
+            if proj_agent_names:
+                conditions.append({"agent_name": {"$in": proj_agent_names}})
+        except Exception as exc:
+            log.debug("Failed to fetch user projects for retriage scope: %s", exc)
+
+    scope: dict = {"$or": conditions} if len(conditions) > 1 else conditions[0]
+    verdict_filter: dict = {"$or": [{"ai_verdict": None}, {"ai_verdict": "TRIAGE_FAILED"}]}
+    alerts = await Alert.find(
+        {"$and": [scope, verdict_filter]}
+    ).to_list()
+
+    from domains.soc.tasks import triage_single_alert
+    queued = 0
+    for alert in alerts:
+        try:
+            triage_single_alert.delay(str(alert.id))
+            queued += 1
+        except Exception as exc:
+            log.warning("[retriage-mine] Failed to queue triage for %s: %s", alert.id, exc)
+
+    await audit_service.log_event(
+        user_id=user_id,
+        username=user.username,
+        action="alerts.self_retriage_queued",
+        resource_type="alert",
+        resource_id="*",
+        details=f"queued triage for {queued}/{len(alerts)} alerts",
+    )
+    return {"queued": queued, "total_untriaged": len(alerts)}
+
+
 @router.get("/{alert_id}", response_model=AlertDetailResponse)
 async def get_alert(alert_id: str, user: User = Depends(get_current_user)):
     """Get full details for a single alert including AI verdict."""

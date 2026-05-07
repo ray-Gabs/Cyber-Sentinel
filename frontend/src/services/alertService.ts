@@ -211,3 +211,9 @@ export async function retriageAllUntriaged(): Promise<AdminRetriangeResult> {
   const res = await api.post<AdminRetriangeResult>("/alerts/admin/retriage-all");
   return res.data;
 }
+
+/** POST /api/alerts/retriage-mine → queue triage for current user's untriaged alerts (any role) */
+export async function retriageMyAlerts(): Promise<AdminRetriangeResult> {
+  const res = await api.post<AdminRetriangeResult>("/alerts/retriage-mine");
+  return res.data;
+}

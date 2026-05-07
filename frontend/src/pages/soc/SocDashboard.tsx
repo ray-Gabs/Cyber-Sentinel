@@ -22,6 +22,7 @@ import {
 import {
   claimUntenantedAlerts,
   retriageAllUntriaged,
+  retriageMyAlerts,
   type AdminClaimResult,
   type AdminRetriangeResult,
 } from "@/services/alertService";
@@ -404,6 +405,60 @@ function AdminMaintenancePanel() {
   );
 }
 
+// ── Analyst Triage Panel (non-admin) ─────────────────────────────────────────
+
+function AnalystTriagePanel() {
+  const [state, setState] = useState<{ loading: boolean; result?: AdminRetriangeResult; error?: string }>({ loading: false });
+
+  const handle = async () => {
+    setState({ loading: true });
+    try {
+      const result = await retriageMyAlerts();
+      setState({ loading: false, result });
+    } catch (e: unknown) {
+      setState({ loading: false, error: e instanceof Error ? e.message : "Failed" });
+    }
+  };
+
+  return (
+    <div className="p-4 rounded-lg border mt-4" style={{ borderColor: "var(--border)", background: "var(--surface-1)" }}>
+      <div className="flex items-center gap-2 mb-3">
+        <Zap size={13} style={{ color: "#3B82F6" }} />
+        <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "#3B82F6" }}>
+          AI Triage
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <button
+          onClick={handle}
+          disabled={state.loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-medium disabled:opacity-50"
+          style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+        >
+          {state.loading
+            ? <RefreshCw size={11} className="animate-spin" />
+            : <Zap size={11} style={{ color: "#3B82F6" }} />
+          }
+          Queue Untriaged Alerts
+        </button>
+        {state.result && (
+          <span className="text-[10px]" style={{ color: "#22C55E" }}>
+            {state.result.queued}/{state.result.total_untriaged} tasks queued — Celery worker is processing
+          </span>
+        )}
+        {state.error && (
+          <span className="text-[10px]" style={{ color: "#EF4444" }}>{state.error}</span>
+        )}
+      </div>
+
+      <p className="text-[10px] mt-3" style={{ color: "var(--text-subtle)" }}>
+        Queues AI triage for alerts from your linked projects that have not yet been analysed.
+      </p>
+    </div>
+  );
+}
+
 // ── Loading / Error states ────────────────────────────────────────────────────
 
 function SkeletonCard() {
@@ -539,6 +594,9 @@ export default function SocDashboard() {
 
       {/* Admin maintenance panel — only visible to admins */}
       {user?.role === "admin" && <AdminMaintenancePanel />}
+
+      {/* Analyst triage panel — visible to non-admins */}
+      {user?.role !== "admin" && <AnalystTriagePanel />}
 
       {/* System notifications */}
       {system_notifications.length > 0 && (
