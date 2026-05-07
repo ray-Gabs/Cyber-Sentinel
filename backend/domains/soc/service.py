@@ -225,12 +225,20 @@ async def get_alert(alert_id: str, current_user: Optional[User] = None) -> Alert
     if not alert:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
     if current_user and current_user.role != "admin":
-        if current_user.wazuh_token:
-            authorized = alert.tenant_id == str(current_user.id)
-        elif current_user.wazuh_agent_name:
+        user_id = str(current_user.id)
+        authorized = alert.tenant_id == user_id
+        if not authorized and current_user.wazuh_agent_name:
             authorized = alert.agent_name == current_user.wazuh_agent_name
-        else:
-            authorized = alert.tenant_id == str(current_user.id)
+        if not authorized:
+            try:
+                from domains.soc.project_models import SocProject
+                user_projects = await SocProject.find(
+                    SocProject.owner_id == user_id
+                ).limit(100).to_list()
+                agent_names = {p.wazuh_agent_name or p.slug for p in user_projects}
+                authorized = bool(alert.agent_name and alert.agent_name in agent_names)
+            except Exception:
+                pass
         if not authorized:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Alert not found")
     return alert
@@ -259,23 +267,27 @@ async def list_alerts(
     query: dict = {}
 
     if current_user and current_user.role != "admin":
-        if current_user.wazuh_token:
-            # Per-user token: scope by tenant_id (professor's recommendation)
-            query["tenant_id"] = str(current_user.id)
-        elif current_user.wazuh_agent_name:
-            # Legacy: agent name binding (no token configured yet)
-            query["agent_name"] = current_user.wazuh_agent_name
-        else:
-            # No Wazuh config linked yet — scope to this user's tenant bucket.
-            # Returns empty until alerts arrive tagged with their ID, but never
-            # leaks another student's alerts.
-            query["tenant_id"] = str(current_user.id)
+        user_id = str(current_user.id)
+        conditions: list[dict] = [{"tenant_id": user_id}]
+        if current_user.wazuh_agent_name:
+            conditions.append({"agent_name": current_user.wazuh_agent_name})
+        try:
+            from domains.soc.project_models import SocProject
+            user_projects = await SocProject.find(
+                SocProject.owner_id == user_id
+            ).limit(100).to_list()
+            proj_agent_names = [p.wazuh_agent_name or p.slug for p in user_projects]
+            if proj_agent_names:
+                conditions.append({"agent_name": {"$in": proj_agent_names}})
+        except Exception as exc:
+            log.debug("Failed to fetch user projects for alert scoping: %s", exc)
+        query = {"$or": conditions} if len(conditions) > 1 else conditions[0]
 
     if rule_level_min is not None:
         query["rule_level"] = {"$gte": rule_level_min}
     if ai_verdict:
         query["ai_verdict"] = ai_verdict
-    if agent_name and "agent_name" not in query:
+    if agent_name:
         query["agent_name"] = {"$regex": re.escape(agent_name), "$options": "i"}
     if agent_group:
         query["agent_group"] = {"$regex": re.escape(agent_group), "$options": "i"}
@@ -375,12 +387,21 @@ async def get_alert_stats(
     """
     base: dict = {}
     if current_user and current_user.role != "admin":
-        if current_user.wazuh_token:
-            base["tenant_id"] = str(current_user.id)
-        elif current_user.wazuh_agent_name:
-            base["agent_name"] = current_user.wazuh_agent_name
-        else:
-            base["tenant_id"] = str(current_user.id)
+        user_id = str(current_user.id)
+        conditions: list[dict] = [{"tenant_id": user_id}]
+        if current_user.wazuh_agent_name:
+            conditions.append({"agent_name": current_user.wazuh_agent_name})
+        try:
+            from domains.soc.project_models import SocProject
+            user_projects = await SocProject.find(
+                SocProject.owner_id == user_id
+            ).limit(100).to_list()
+            proj_agent_names = [p.wazuh_agent_name or p.slug for p in user_projects]
+            if proj_agent_names:
+                conditions.append({"agent_name": {"$in": proj_agent_names}})
+        except Exception as exc:
+            log.debug("Failed to fetch user projects for stats scoping: %s", exc)
+        base = {"$or": conditions} if len(conditions) > 1 else conditions[0]
     if project_id:
         base["project_id"] = project_id
 
