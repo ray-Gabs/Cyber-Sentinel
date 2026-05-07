@@ -309,8 +309,25 @@ async def get_analytics(
     scans_over_time = [{"date": k, "count": v} for k, v in sorted(scans_by_day.items())]
 
     # ── SOC analytics ────────────────────────────────────────
+    # Scope alerts to this user: tenant_id bucket OR project agent names.
+    # Admin sees all alerts (they use /admin-stats); regular users see only their own.
     try:
-        alerts = await Alert.find(Alert.timestamp >= since).limit(1000).to_list()
+        from domains.soc.project_models import SocProject
+        is_admin = current_user.role == "admin"
+        if is_admin:
+            alert_filter: dict = {"timestamp": {"$gte": since}}
+        else:
+            user_projects = await SocProject.find(
+                SocProject.owner_id == user_id
+            ).limit(500).to_list()
+            agent_names = [p.wazuh_agent_name or p.slug for p in user_projects]
+            conditions: list[dict] = [{"tenant_id": user_id}]
+            if agent_names:
+                conditions.append({"agent_name": {"$in": agent_names}})
+            tenant_filter = {"$or": conditions} if len(conditions) > 1 else conditions[0]
+            alert_filter = {**tenant_filter, "timestamp": {"$gte": since}}
+
+        alerts = await Alert.find(alert_filter).limit(1000).to_list()
     except Exception as exc:
         log.warning("alert fetch failed for analytics: %s", exc)
         alerts = []
