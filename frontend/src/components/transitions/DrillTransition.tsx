@@ -11,9 +11,7 @@ export type DrillDirection = "forward" | "back";
 
 const SLIDE_DISTANCE = "24px";
 const DURATION_ENTER = 0.25;
-const DURATION_EXIT = 0.18;
 const EASE_ENTER = [0.16, 1, 0.3, 1] as const;
-const EASE_EXIT  = [0.4, 0, 1, 1] as const;
 
 export function getDrillVariants(direction: DrillDirection) {
   const enterFrom = direction === "forward"  ? SLIDE_DISTANCE : `-${SLIDE_DISTANCE}`;
