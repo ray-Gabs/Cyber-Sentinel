@@ -27,6 +27,10 @@ Optional env vars:
     TENANT_GROUP            Wazuh agent group name for this tenant, e.g.
                             "tenant_juiceshop". Injected as _cs_group so the
                             backend can tag and filter alerts by group.
+    FILTER_AGENTS           Comma-separated list of Wazuh agent names to forward.
+                            If set, only alerts from these agents are sent.
+                            Leave unset (or empty) to forward all agents.
+                            Example: FILTER_AGENTS=juice-shop,dvwa
     LOG_LEVEL               DEBUG / INFO / WARNING (default: INFO)
     MAX_RETRIES             Retry attempts per batch before dropping (default: 5)
     RETRY_BACKOFF           Base seconds for exponential backoff (default: 2)
@@ -52,6 +56,7 @@ POLL_INTERVAL = float(os.environ.get("POLL_INTERVAL", "5"))
 STATE_FILE = Path(os.environ.get("STATE_FILE", "/var/ossec/wazuh_forwarder.state"))
 MIN_LEVEL = int(os.environ.get("MIN_LEVEL", "3"))
 TENANT_GROUP = os.environ.get("TENANT_GROUP", "")   # e.g. "tenant_juiceshop"
+FILTER_AGENTS = {a.strip() for a in os.environ.get("FILTER_AGENTS", "").split(",") if a.strip()}
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "5"))
 RETRY_BACKOFF = float(os.environ.get("RETRY_BACKOFF", "2"))
@@ -162,6 +167,12 @@ def _tail_alerts(offset: int):
                 log.debug("Skipping low-level alert (level=%d < %d)", level, MIN_LEVEL)
                 continue
 
+            if FILTER_AGENTS:
+                agent_name = alert.get("agent", {}).get("name", "")
+                if agent_name not in FILTER_AGENTS:
+                    log.debug("Skipping alert from agent '%s' (not in FILTER_AGENTS)", agent_name)
+                    continue
+
             yield alert, offset
 
 
@@ -178,6 +189,7 @@ def main() -> None:
     log.info("  Token  : %s", "set" if WEBHOOK_TOKEN else "NOT SET (insecure!)")
     log.info("  MinLvl : %d", MIN_LEVEL)
     log.info("  Group  : %s", TENANT_GROUP or "(none — set TENANT_GROUP)")
+    log.info("  Filter : %s", ", ".join(sorted(FILTER_AGENTS)) if FILTER_AGENTS else "(all agents)")
     log.info("  Batch  : %d alerts per request", BATCH_SIZE)
 
     offset = _load_offset()

@@ -116,10 +116,44 @@ async def lifespan(app: FastAPI):
     await seed_admin()
     await seed_demo_user()
 
-    # Demo projects were previously auto-seeded here with fake Wazuh agent IDs.
-    # Removed: fake wazuh_agent_registered=True caused "View Alerts" to appear on
-    # projects where no real Wazuh agent was ever deployed, leading to empty alert pages.
-    # Users (including demo) should create projects and deploy actual agents themselves.
+    # Seed Juice Shop + DVWA projects for the demo user — idempotent.
+    # wazuh_agent_registered=False so the UI shows "Deploy Agent" (not fake "View Alerts").
+    # Also auto-generates a wazuh_token for the demo user if not already set, which lab
+    # staff can copy into the demo forwarder .env as WAZUH_WEBHOOK_TOKEN.
+    import os as _os
+    import secrets as _secrets
+    _demo_email = _os.getenv("DEMO_USER_EMAIL", "").strip()
+    if _demo_email:
+        from domains.auth.models import User as _User
+        from domains.soc.project_models import SocProject as _SocProject
+        _demo = await _User.find_one({"email": _demo_email})
+        if _demo:
+            if not _demo.wazuh_token:
+                _demo.wazuh_token = _secrets.token_urlsafe(32)
+                await _demo.save()
+                log.info(
+                    "Generated wazuh_token for demo user — configure demo forwarder: WAZUH_WEBHOOK_TOKEN=%s",
+                    _demo.wazuh_token,
+                )
+            _proj_count = await _SocProject.find({"owner_id": str(_demo.id)}).count()
+            if _proj_count == 0:
+                _js_url = _os.getenv("DEMO_JUICESHOP_URL", "http://localhost:3000")
+                _dvwa_url = _os.getenv("DEMO_DVWA_URL", "http://localhost:8080")
+                await _SocProject(
+                    owner_id=str(_demo.id),
+                    name="Juice Shop",
+                    slug="juice-shop",
+                    target_url=_js_url,
+                    description="OWASP Juice Shop — intentionally vulnerable Node.js e-commerce app",
+                ).insert()
+                await _SocProject(
+                    owner_id=str(_demo.id),
+                    name="DVWA",
+                    slug="dvwa",
+                    target_url=_dvwa_url,
+                    description="Damn Vulnerable Web Application — PHP/MySQL training target",
+                ).insert()
+                log.info("Seeded Juice Shop + DVWA projects for demo user (wazuh_agent_registered=False)")
 
     _relay_task = asyncio.create_task(_redis_ws_relay())
 

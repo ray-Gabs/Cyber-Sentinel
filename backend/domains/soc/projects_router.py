@@ -36,6 +36,15 @@ class ProjectCreate(BaseModel):
     description: Optional[str] = None
 
 
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    target_url: Optional[str] = None
+    description: Optional[str] = None
+    wazuh_agent_registered: Optional[bool] = None
+    wazuh_agent_id: Optional[str] = None
+    wazuh_agent_name: Optional[str] = None
+
+
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -216,6 +225,27 @@ async def create_project(data: ProjectCreate, user: User = Depends(get_current_u
         description=data.description,
     )
     await project.insert()
+    return _project_to_response(project)
+
+
+@router.patch("/{project_id}", status_code=200)
+async def update_project(project_id: str, data: ProjectUpdate, user: User = Depends(get_current_user)):
+    """Update a SOC project (owner only). Used to confirm agent registration or edit metadata."""
+    project = await _get_owned(project_id, user)
+    if data.name is not None:
+        project.name = data.name.strip()
+        project.slug = _slugify(project.name)
+    if data.target_url is not None:
+        project.target_url = data.target_url.strip()
+    if data.description is not None:
+        project.description = data.description
+    if data.wazuh_agent_registered is not None:
+        project.wazuh_agent_registered = data.wazuh_agent_registered
+    if data.wazuh_agent_id is not None:
+        project.wazuh_agent_id = data.wazuh_agent_id
+    if data.wazuh_agent_name is not None:
+        project.wazuh_agent_name = data.wazuh_agent_name
+    await project.save()
     return _project_to_response(project)
 
 
