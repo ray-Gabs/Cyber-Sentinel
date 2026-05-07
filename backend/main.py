@@ -135,25 +135,34 @@ async def lifespan(app: FastAPI):
                     "Generated wazuh_token for demo user — configure demo forwarder: WAZUH_WEBHOOK_TOKEN=%s",
                     _demo.wazuh_token,
                 )
-            _proj_count = await _SocProject.find({"owner_id": str(_demo.id)}).count()
-            if _proj_count == 0:
-                _js_url = _os.getenv("DEMO_JUICESHOP_URL", "http://localhost:3000")
-                _dvwa_url = _os.getenv("DEMO_DVWA_URL", "http://localhost:8080")
-                await _SocProject(
-                    owner_id=str(_demo.id),
-                    name="Juice Shop",
-                    slug="juice-shop",
-                    target_url=_js_url,
-                    description="OWASP Juice Shop — intentionally vulnerable Node.js e-commerce app",
-                ).insert()
-                await _SocProject(
-                    owner_id=str(_demo.id),
-                    name="DVWA",
-                    slug="dvwa",
-                    target_url=_dvwa_url,
-                    description="Damn Vulnerable Web Application — PHP/MySQL training target",
-                ).insert()
-                log.info("Seeded Juice Shop + DVWA projects for demo user (wazuh_agent_registered=False)")
+            # Upsert each project atomically — safe across multiple uvicorn workers
+            _js_url = _os.getenv("DEMO_JUICESHOP_URL", "http://localhost:3000")
+            _dvwa_url = _os.getenv("DEMO_DVWA_URL", "http://localhost:8080")
+            from datetime import datetime, timezone as _tz
+            _col = _SocProject.get_motor_collection()
+            for _slug, _name, _url, _desc in [
+                ("juice-shop", "Juice Shop", _js_url,
+                 "OWASP Juice Shop — intentionally vulnerable Node.js e-commerce app"),
+                ("dvwa", "DVWA", _dvwa_url,
+                 "Damn Vulnerable Web Application — PHP/MySQL training target"),
+            ]:
+                _result = await _col.update_one(
+                    {"owner_id": str(_demo.id), "slug": _slug},
+                    {"$setOnInsert": {
+                        "owner_id": str(_demo.id),
+                        "name": _name,
+                        "slug": _slug,
+                        "target_url": _url,
+                        "description": _desc,
+                        "wazuh_agent_registered": False,
+                        "wazuh_agent_id": None,
+                        "wazuh_agent_name": None,
+                        "created_at": datetime.now(_tz.utc),
+                    }},
+                    upsert=True,
+                )
+                if _result.upserted_id:
+                    log.info("Seeded demo project: %s", _slug)
 
     _relay_task = asyncio.create_task(_redis_ws_relay())
 
