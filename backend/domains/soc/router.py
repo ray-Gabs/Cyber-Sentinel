@@ -313,7 +313,11 @@ async def wazuh_webhook(
     elif settings.wazuh_webhook_token and hmac.compare_digest(
         provided_token, settings.wazuh_webhook_token
     ):
-        pass  # global shared token — no tenant assignment (admin ingest)
+        # Global shared token — auto-assign to the first active admin so alerts
+        # are immediately visible in the admin SOC dashboard without a manual claim step.
+        admin_user = await User.find_one({"role": "admin", "is_active": True})
+        if admin_user:
+            tenant_id = str(admin_user.id)
     else:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

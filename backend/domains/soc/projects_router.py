@@ -280,12 +280,30 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
         projects = await SocProject.find(SocProject.owner_id == str(user.id)).limit(500).to_list()
         owner_map = {}
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    is_admin = user.role == "admin"
+    project_slugs = [p.slug for p in projects]
+
+    # Build the base alert query for this user.
+    # Admin sees all alerts. Non-admin: tenant_id bucket (from per-user webhook token)
+    # combined with any project agent names — so alerts show up even when the Wazuh
+    # agent name doesn't match the project slug exactly.
+    def _base_query() -> dict:
+        if is_admin:
+            return {}
+        conditions: list[dict] = [{"tenant_id": str(user.id)}]
+        if project_slugs:
+            conditions.append({"agent_name": {"$in": project_slugs}})
+        return {"$or": conditions} if len(conditions) > 1 else conditions[0]
+
+    base_q = _base_query()
+
+    # Summary stats from tenant-scoped query (not per-project slug matching)
+    alerts_today_total = await Alert.find({**base_q, "timestamp": {"$gte": today}}).count()
+    critical_unread = await Alert.find({**base_q, "rule_level": {"$gte": 12}}).count()
+    high_unread = await Alert.find({**base_q, "rule_level": {"$gte": 9, "$lt": 12}}).count()
 
     active_agents = 0
     disconnected_agents = 0
-    alerts_today_total = 0
-    critical_unread = 0
-    high_unread = 0
     per_project: list[dict] = []
 
     for project in projects:
@@ -308,22 +326,12 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
             Alert.agent_name == project.slug,
             Alert.timestamp >= today,
         ).count()
-        alerts_today_total += proj_alerts_today
 
         proj_critical = await Alert.find(
             Alert.agent_name == project.slug,
             Alert.rule_level >= 12,
             Alert.timestamp >= today,
         ).count()
-        critical_unread += proj_critical
-
-        proj_high = await Alert.find(
-            Alert.agent_name == project.slug,
-            Alert.rule_level >= 9,
-            Alert.rule_level < 12,
-            Alert.timestamp >= today,
-        ).count()
-        high_unread += proj_high
 
         last_alert = await Alert.find(
             Alert.agent_name == project.slug,
@@ -347,45 +355,37 @@ async def soc_dashboard(user: User = Depends(get_current_user)):
             entry["owner_username"] = owner_map.get(project.owner_id, project.owner_id)
         per_project.append(entry)
 
-    # Severity breakdown across all user's projects
-    agent_names = [p.slug for p in projects]
-    if agent_names:
-        severity_ranges = [
-            ("critical", 12, 15),
-            ("high", 9, 11),
-            ("medium", 6, 8),
-            ("low", 3, 5),
-            ("informational", 0, 2),
-        ]
-        alerts_by_severity = {
-            label: await Alert.find(
-                {"agent_name": {"$in": agent_names}, "rule_level": {"$gte": mn, "$lte": mx}}
-            ).count()
-            for label, mn, mx in severity_ranges
-        }
-    else:
-        alerts_by_severity = {k: 0 for k in ["critical", "high", "medium", "low", "informational"]}
+    # Severity breakdown from tenant-scoped query (catches alerts not matched by project slug)
+    severity_ranges = [
+        ("critical", 12, 15),
+        ("high", 9, 11),
+        ("medium", 6, 8),
+        ("low", 3, 5),
+        ("informational", 0, 2),
+    ]
+    alerts_by_severity = {
+        label: await Alert.find({**base_q, "rule_level": {"$gte": mn, "$lte": mx}}).count()
+        for label, mn, mx in severity_ranges
+    }
 
-    # Recent alerts (last 10) across all user projects
-    recent_alerts: list[dict] = []
-    if agent_names:
-        recent = await Alert.find(
-            {"agent_name": {"$in": agent_names}}
-        ).sort(-Alert.timestamp).limit(10).to_list()
-        slug_to_name = {p.slug: p.name for p in projects}
-        for a in recent:
-            recent_alerts.append({
-                "id": str(a.id),
-                "wazuh_id": a.wazuh_id,
-                "agent_name": a.agent_name,
-                "project_name": slug_to_name.get(a.agent_name, "Unknown"),
-                "rule_description": a.rule_description,
-                "rule_level": a.rule_level,
-                "severity": _severity_from_level(a.rule_level),
-                "timestamp": a.timestamp.isoformat(),
-                "ai_verdict": a.ai_verdict,
-                "ai_action": a.ai_action,
-            })
+    # Recent alerts from tenant-scoped query (not just project slugs)
+    slug_to_name = {p.slug: p.name for p in projects}
+    recent = await Alert.find(base_q).sort(-Alert.timestamp).limit(10).to_list()
+    recent_alerts: list[dict] = [
+        {
+            "id": str(a.id),
+            "wazuh_id": a.wazuh_id,
+            "agent_name": a.agent_name,
+            "project_name": slug_to_name.get(a.agent_name, a.agent_name or "—"),
+            "rule_description": a.rule_description,
+            "rule_level": a.rule_level,
+            "severity": _severity_from_level(a.rule_level),
+            "timestamp": a.timestamp.isoformat(),
+            "ai_verdict": a.ai_verdict,
+            "ai_action": a.ai_action,
+        }
+        for a in recent
+    ]
 
     # Admin sees per-project health in the cards; skip the user-scoped global check
     if user.role == "admin":
