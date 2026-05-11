@@ -42,7 +42,7 @@ python-dotenv==1.0.*              # .env file loading
 beautifulsoup4==4.12.*            # HTML parsing (fallback crawler + fingerprinting)
 
 # --- Reports ---
-xhtml2pdf==0.2.*                  # HTML → PDF report generation (pure Python)
+weasyprint==61.*                  # HTML → PDF via Cairo/Pango (replaces xhtml2pdf — better CSS support)
 jinja2==3.1.*                     # HTML templates for reports
 
 # --- Rate Limiting ---

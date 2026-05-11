@@ -59,7 +59,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Runtime system deps only — no build toolchain
 # libssl3 + libffi8: runtime .so files needed by sslyze/nassl
-# libcairo2: WeasyPrint PDF generation
+# libcairo2 + libpango* + libharfbuzz0b: WeasyPrint PDF generation
+# fonts-liberation: substitutes Arial/Times in reports on headless Linux
 # nmap + whatweb: security scanners
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -68,6 +69,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3 \
     libffi8 \
     libcairo2 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libpangoft2-1.0-0 \
+    libharfbuzz0b \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # Python packages compiled in builder
