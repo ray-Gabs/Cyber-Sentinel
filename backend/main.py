@@ -166,12 +166,17 @@ async def lifespan(app: FastAPI):
 
     # Reset scans stuck in "running" from a previously crashed Celery worker.
     # Without this, the per-user concurrent limit blocks all new scans forever.
+    # Also catches scans with null started_at (broken records that would never age out).
     try:
         from datetime import datetime, timezone as _tz, timedelta as _td
         from domains.pentesting.models import Scan as _Scan
         _stale_cutoff = datetime.now(_tz.utc) - _td(hours=2)
         _stale_result = await _Scan.get_motor_collection().update_many(
-            {"status": "running", "started_at": {"$lt": _stale_cutoff}},
+            {"status": "running", "$or": [
+                {"started_at": {"$lt": _stale_cutoff}},
+                {"started_at": None},
+                {"started_at": {"$exists": False}},
+            ]},
             {"$set": {
                 "status": "failed",
                 "error_message": "Worker crashed — scan reset on startup",
@@ -188,12 +193,17 @@ async def lifespan(app: FastAPI):
 
     # Also reset "pending" scans older than 1 h — Celery dropped the task (worker wasn't running).
     # These block the per-user concurrent limit just as badly as stale "running" scans.
+    # Also catches scans with null created_at (broken records that would never age out).
     try:
         from datetime import datetime, timezone as _tz, timedelta as _td
         from domains.pentesting.models import Scan as _Scan
         _pending_cutoff = datetime.now(_tz.utc) - _td(hours=1)
         _pending_result = await _Scan.get_motor_collection().update_many(
-            {"status": "pending", "created_at": {"$lt": _pending_cutoff}},
+            {"status": "pending", "$or": [
+                {"created_at": {"$lt": _pending_cutoff}},
+                {"created_at": None},
+                {"created_at": {"$exists": False}},
+            ]},
             {"$set": {
                 "status": "failed",
                 "error_message": "Task never picked up — Celery worker was not running",
@@ -207,6 +217,38 @@ async def lifespan(app: FastAPI):
             )
     except Exception as _exc:
         log.warning("Stale pending-scan cleanup failed (non-fatal): %s", _exc)
+
+    # Sync Redis scan:active:* counters with actual MongoDB state.
+    # If the worker crashed mid-task, the counter may have been left incremented
+    # without a matching decrement. This reset ensures new scan creation isn't
+    # permanently blocked by a stale count.
+    try:
+        import redis.asyncio as _aioredis
+        from core.config import settings as _cfg
+        from domains.pentesting.models import Scan as _Scan
+        _redis_sync = _aioredis.from_url(_cfg.app_redis_url, socket_connect_timeout=5)
+        try:
+            _active_keys = await _redis_sync.keys("scan:active:*")
+            if _active_keys:
+                await _redis_sync.delete(*_active_keys)
+            _agg = [
+                {"$match": {"status": {"$in": ["running", "pending"]}}},
+                {"$group": {"_id": "$user_id", "count": {"$sum": 1}}},
+            ]
+            _active_rows = await _Scan.get_motor_collection().aggregate(_agg).to_list(None)
+            _total_active = 0
+            for _row in _active_rows:
+                _uid, _cnt = _row["_id"], _row["count"]
+                await _redis_sync.set(f"scan:active:{_uid}", _cnt)
+                await _redis_sync.expire(f"scan:active:{_uid}", 5 * 3600)
+                _total_active += _cnt
+            await _redis_sync.set("scan:active:total", _total_active)
+            await _redis_sync.expire("scan:active:total", 5 * 3600)
+            log.info("Synced Redis scan:active counters — total active: %d", _total_active)
+        finally:
+            await _redis_sync.aclose()
+    except Exception as _exc:
+        log.warning("Redis scan:active counter sync failed (non-fatal): %s", _exc)
 
     _relay_task = asyncio.create_task(_redis_ws_relay())
 
