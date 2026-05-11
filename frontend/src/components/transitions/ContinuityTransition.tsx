@@ -21,7 +21,8 @@ export const continuityVariants = {
   exit: {
     opacity: 0,
     transition: {
-      duration: 0,
+      duration: 0.12,
+      ease: [0.4, 0, 1, 1] as const,
     },
   },
 };

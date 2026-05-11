@@ -4,6 +4,7 @@
  * TypeScript tip: "interface" defines the shape of an object.
  * When you see `ScanCreateRequest`, it means "an object with target and scan_type fields."
  */
+import axios from "axios";
 import api from "./api";
 import type { Scan, ScanSummary, ScanCreateRequest, ScanDiff } from "@/types";
 
@@ -54,12 +55,25 @@ export async function exportHtmlReport(id: string): Promise<string> {
   return res.data;
 }
 
-/** GET /api/scans/:id/report/pdf → download PDF report as blob */
+/** GET /api/scans/:id/report/pdf → download PDF report as blob.
+ * axios responseType:"blob" wraps error bodies as Blobs too — we read them
+ * back to text so extractErrorMessage can surface the actual server error. */
 export async function exportPdfReport(id: string): Promise<Blob> {
-  const res = await api.get(`/scans/${id}/report/pdf`, {
-    responseType: "blob",
-  });
-  return res.data as Blob;
+  try {
+    const res = await api.get(`/scans/${id}/report/pdf`, { responseType: "blob" });
+    return res.data as Blob;
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.data instanceof Blob) {
+      try {
+        const text = await (err.response.data as Blob).text();
+        const json = JSON.parse(text) as { detail?: string; message?: string };
+        throw new Error(json.detail ?? json.message ?? "PDF export failed");
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message !== "PDF export failed") throw parseErr;
+      }
+    }
+    throw err;
+  }
 }
 
 /** GET /api/scans/:id/diff/:baselineId → compare two completed scans */

@@ -91,6 +91,10 @@ RUN mkdir -p /home/sentinel/nuclei-templates \
 
 USER sentinel
 
+# Pre-download Nuclei templates at build time so the first scan doesn't need
+# internet access. Non-fatal: || true lets builds succeed in air-gapped envs.
+RUN nuclei -update-templates || true
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
