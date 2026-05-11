@@ -54,7 +54,7 @@ export default function AppLayout() {
   const sidebarWidth = sidebarOpen ? 240 : 64;
 
   return (
-    <div className="min-h-screen relative" style={{ backgroundColor: "var(--bg-base)" }}>
+    <div className="min-h-screen relative overflow-x-hidden" style={{ backgroundColor: "var(--bg-base)" }}>
 
       {/* ── Sidebar (desktop fixed + mobile overlay drawer) ───────── */}
       <Sidebar
