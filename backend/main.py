@@ -301,43 +301,85 @@ app.include_router(search_router)
 @app.get("/api/health", tags=["System"])
 async def health():
     """
-    Dependency-aware health check.
-    Returns 200 only when MongoDB and Redis are reachable.
-    Returns 503 if any critical dependency is down (used by UptimeRobot / load balancers).
+    Component-aware health check. All checks run concurrently (max ~3s total latency).
+
+    Status rules:
+      - mongodb or redis down → status="error", HTTP 503 (critical — app cannot function)
+      - celery_* or wazuh down → status="degraded", HTTP 200 (reads still work)
+      - all ok → status="ok", HTTP 200
     """
     from core.database import get_database
 
-    dep_status: dict[str, str] = {}
-    all_ok = True
+    async def _check_mongodb() -> str:
+        try:
+            db = get_database()
+            await asyncio.wait_for(db.command("ping"), timeout=2.0)
+            return "ok"
+        except Exception:
+            return "down"
 
-    # Check MongoDB
-    try:
-        db = get_database()
-        await asyncio.wait_for(db.command("ping"), timeout=2.0)
-        dep_status["mongodb"] = "ok"
-    except Exception:
-        dep_status["mongodb"] = "down"
-        all_ok = False
+    async def _check_redis() -> str:
+        try:
+            import redis.asyncio as aioredis
+            r = aioredis.from_url(settings.redis_url, socket_connect_timeout=1)
+            await asyncio.wait_for(r.ping(), timeout=1.0)
+            await r.aclose()
+            return "ok"
+        except Exception:
+            return "down"
 
-    # Check Redis
-    try:
-        import redis.asyncio as aioredis
-        r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2)
-        await asyncio.wait_for(r.ping(), timeout=2.0)
-        await r.aclose()
-        dep_status["redis"] = "ok"
-    except Exception:
-        dep_status["redis"] = "down"
-        all_ok = False
+    async def _check_celery() -> str:
+        try:
+            from core.celery_app import celery as _celery
+            loop = asyncio.get_event_loop()
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, lambda: _celery.control.inspect(timeout=3).ping() or {}),
+                timeout=4.0,
+            )
+            return "ok" if result else "down"
+        except Exception:
+            return "down"
+
+    async def _check_wazuh() -> str:
+        if not settings.wazuh_api_password:
+            return "not_configured"
+        try:
+            from domains.soc.wazuh_client import wazuh_client
+            reachable = await asyncio.wait_for(wazuh_client.check_reachable(), timeout=2.0)
+            return "reachable" if reachable else "unreachable"
+        except Exception:
+            return "unreachable"
+
+    mongo_s, redis_s, celery_s, wazuh_s = await asyncio.gather(
+        _check_mongodb(), _check_redis(), _check_celery(), _check_wazuh(),
+    )
+
+    checks = {
+        "mongodb": mongo_s,
+        "redis": redis_s,
+        "celery_pentest": celery_s,
+        "celery_soc": celery_s,
+        "wazuh": wazuh_s,
+    }
+
+    critical_down = mongo_s == "down" or redis_s == "down"
+    degraded = celery_s == "down" or wazuh_s == "unreachable"
+
+    if critical_down:
+        overall, http_code = "error", 503
+    elif degraded:
+        overall, http_code = "degraded", 200
+    else:
+        overall, http_code = "ok", 200
 
     return JSONResponse(
-        status_code=200 if all_ok else 503,
+        status_code=http_code,
         content={
-            "status": "ok" if all_ok else "degraded",
+            "status": overall,
             "service": "Cyber Sentinel",
             "version": "1.0.1",
             "uptime_seconds": int(_time.time() - _start_time),
-            **dep_status,
+            "checks": checks,
         },
     )
 

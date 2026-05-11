@@ -36,9 +36,12 @@ class Settings(BaseSettings):
     # ---- MongoDB ----
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_db_name: str = "cyber_sentinel"
+    mongo_username: str = ""
+    mongo_password: str = ""
 
     # ---- Redis ----
     redis_url: str = "redis://localhost:6379/0"
+    redis_password: str = ""
     # Celery result backend — DB 1 (separate from broker DB 0 to allow independent flush)
     celery_result_url: str = "redis://localhost:6379/1"
     # App-level Redis: locks, WS pub/sub, rate limiting, triage sorted set — DB 2
@@ -171,6 +174,11 @@ class Settings(BaseSettings):
     # Prevents one user from flooding the Celery queue and starving others.
     # Increase if the deployment has a high-concurrency Celery worker pool.
     max_concurrent_scans_per_user: int = 3
+
+    # System-wide concurrent scan cap — must not exceed Celery pentest worker concurrency.
+    # With --concurrency=2 on the pentest worker, 2 scans can actually run in parallel.
+    # Set to match the celery worker --concurrency value.
+    max_concurrent_scans: int = 2
 
     @property
     def cors_origins(self) -> list[str]:

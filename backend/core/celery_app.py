@@ -54,7 +54,11 @@ celery.conf.update(
     result_expires=3600,
     # Ack tasks only after completion so they can be redelivered on worker crash
     task_acks_late=True,
-    # Visibility timeout must exceed longest possible task (80 min)
+    # Re-queue task if the worker process dies mid-execution (pairs with task_acks_late)
+    task_reject_on_worker_lost=True,
+    # Give in-flight tasks time to finish gracefully on SIGTERM before the process exits
+    worker_shutdown_timeout=120,
+    # Visibility timeout must exceed longest possible task (pentest: ~4500s soft limit)
     broker_transport_options={"visibility_timeout": 4800},
 )
 

@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: cyber-sentinel
-  labels:
-    app.kubernetes.io/name: cyber-sentinel
-    app.kubernetes.io/managed-by: kustomize
