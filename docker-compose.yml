@@ -60,9 +60,7 @@ services:
       - "27017:27017"       # exposed for Compass / direct dev access
     volumes:
       - mongo_data:/data/db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-cyber_sentinel}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-changeme}
+    environment: {}
     restart: unless-stopped
     logging:
       driver: json-file
@@ -123,8 +121,8 @@ services:
     env_file:
       - .env
     environment:
-      # Override .env localhost defaults with Docker service hostnames + auth
-      - MONGODB_URI=mongodb://${MONGO_USERNAME:-cyber_sentinel}:${MONGO_PASSWORD:-changeme}@mongo:27017
+      # Override .env localhost defaults with Docker service hostnames
+      - MONGODB_URI=mongodb://mongo:27017
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
       - CELERY_RESULT_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
       - APP_REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/2
@@ -184,7 +182,7 @@ services:
       - sentinel-net
     command: celery -A core.celery_app worker --loglevel=info --pool=prefork --concurrency=2 -Q celery
     environment:
-      - MONGODB_URI=mongodb://${MONGO_USERNAME:-cyber_sentinel}:${MONGO_PASSWORD:-changeme}@mongo:27017
+      - MONGODB_URI=mongodb://mongo:27017
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
       # ROOT CAUSE FIX: without these two, all per-user/per-alert safety mechanisms are disabled
       - CELERY_RESULT_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
@@ -248,7 +246,7 @@ services:
       - sentinel-net
     command: celery -A core.celery_app beat --loglevel=info --scheduler celery.beat.PersistentScheduler --pidfile /tmp/celerybeat.pid
     environment:
-      - MONGODB_URI=mongodb://${MONGO_USERNAME:-cyber_sentinel}:${MONGO_PASSWORD:-changeme}@mongo:27017
+      - MONGODB_URI=mongodb://mongo:27017
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
       # ROOT CAUSE FIX: beat must connect to the correct broker/backend
       - CELERY_RESULT_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
@@ -290,7 +288,7 @@ services:
       - sentinel-net
     command: celery -A core.celery_app worker --loglevel=info --pool=prefork --concurrency=3 -Q soc
     environment:
-      - MONGODB_URI=mongodb://${MONGO_USERNAME:-cyber_sentinel}:${MONGO_PASSWORD:-changeme}@mongo:27017
+      - MONGODB_URI=mongodb://mongo:27017
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
       # ROOT CAUSE FIX: without these two, dedup lock + triage queue + poll lock are all broken
       - CELERY_RESULT_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
