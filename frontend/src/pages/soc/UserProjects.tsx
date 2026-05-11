@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Trash2, Download, ExternalLink, Server, RefreshCw, X,
-  ShieldAlert, Calendar, ChevronRight,
+  ShieldAlert, Calendar, ChevronRight, Copy, Check,
 } from "lucide-react";
 import api from "@/services/api";
 
@@ -20,6 +20,7 @@ interface SocProject {
   wazuh_agent_registered: boolean;
   wazuh_agent_id?: string;
   wazuh_agent_name?: string;
+  install_cmd?: string;
   created_at: string;
 }
 
@@ -40,6 +41,7 @@ export default function UserProjects() {
   const [formError, setFormError] = useState<string | null>(null);
   const [deleting, setDeleting]   = useState<string | null>(null);
   const [checking, setChecking]   = useState<string | null>(null);
+  const [copied, setCopied]       = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -106,6 +108,27 @@ export default function UserProjects() {
     a.download = `wazuh-agent-${slug}.yml`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function handleCopy(id: string, cmd: string) {
+    try {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(cmd);
+      } else {
+        const el = document.createElement("textarea");
+        el.value = cmd;
+        el.style.position = "fixed";
+        el.style.opacity = "0";
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+      }
+    } catch {
+      prompt("Copy this command:", cmd);
+    }
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
   }
 
   async function handleCheckStatus(id: string) {
@@ -336,35 +359,39 @@ export default function UserProjects() {
                       <ChevronRight size={10} />
                     </Link>
                   ) : (
-                    <>
-                      <button
-                        onClick={() => handleDownloadCompose(project.id, project.slug)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-1 justify-center transition-colors"
-                        style={{
-                          backgroundColor: "rgba(59,130,246,0.08)",
-                          color: "#60a5fa",
-                          border: "1px solid rgba(59,130,246,0.2)",
-                        }}
-                      >
-                        <Download size={11} />
-                        Deploy Agent
-                      </button>
+                    <div className="flex gap-2 flex-1">
+                      {project.install_cmd && (
+                        <button
+                          onClick={() => handleCopy(project.id, project.install_cmd!)}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-1 justify-center transition-colors"
+                          style={{
+                            backgroundColor: copied === project.id ? "rgba(34,197,94,0.08)" : "rgba(59,130,246,0.08)",
+                            color: copied === project.id ? "#4ade80" : "#60a5fa",
+                            border: `1px solid ${copied === project.id ? "rgba(34,197,94,0.2)" : "rgba(59,130,246,0.2)"}`,
+                          }}
+                        >
+                          {copied === project.id ? <Check size={11} /> : <Copy size={11} />}
+                          {copied === project.id ? "Copied!" : "Copy Install Command"}
+                        </button>
+                      )}
                       <button
                         onClick={() => handleCheckStatus(project.id)}
                         disabled={checking === project.id}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-1 justify-center transition-colors"
-                        style={{
-                          backgroundColor: "rgba(34,197,94,0.08)",
-                          color: "#4ade80",
-                          border: "1px solid rgba(34,197,94,0.2)",
-                        }}
+                        className="p-1.5 rounded-lg transition-colors hover:bg-[var(--bg-muted)]"
+                        style={{ color: "var(--text-subtle)" }}
+                        title="Check if agent is connected"
                       >
-                        {checking === project.id
-                          ? <RefreshCw size={11} className="animate-spin" />
-                          : <RefreshCw size={11} />}
-                        Check
+                        <RefreshCw size={13} className={checking === project.id ? "animate-spin" : ""} />
                       </button>
-                    </>
+                      <button
+                        onClick={() => handleDownloadCompose(project.id, project.slug)}
+                        className="p-1.5 rounded-lg transition-colors hover:bg-[var(--bg-muted)]"
+                        style={{ color: "var(--text-subtle)" }}
+                        title="Download agent compose file"
+                      >
+                        <Download size={13} />
+                      </button>
+                    </div>
                   )}
                   <button
                     onClick={() => handleDownloadCompose(project.id, project.slug)}

@@ -50,6 +50,12 @@ class ProjectUpdate(BaseModel):
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _project_to_response(p: SocProject) -> dict:
+    agent_name = p.wazuh_agent_name or p.slug
+    install_cmd = (
+        f"curl -so wazuh-agent.deb https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.14.5-1_amd64.deb && "
+        f"WAZUH_MANAGER=\"{settings.wazuh_host_public}\" WAZUH_AGENT_NAME=\"{agent_name}\" "
+        f"dpkg -i wazuh-agent.deb && systemctl start wazuh-agent"
+    )
     return {
         "id": str(p.id),
         "name": p.name,
@@ -59,6 +65,7 @@ def _project_to_response(p: SocProject) -> dict:
         "wazuh_agent_registered": p.wazuh_agent_registered,
         "wazuh_agent_id": p.wazuh_agent_id,
         "wazuh_agent_name": p.wazuh_agent_name,
+        "install_cmd": install_cmd,
         "created_at": p.created_at,
     }
 
@@ -468,6 +475,19 @@ async def agent_status(project_id: str, user: User = Depends(get_current_user)):
         }
 
     agent = await wazuh_client.get_agent_by_name(proj_agent_name)
+    log.info("[agent-status] project=%s agent_name=%s wazuh_result=%s", project_id, proj_agent_name, agent)
+    if not agent:
+        # Fallback: search all active agents for a name match (case-insensitive)
+        try:
+            all_agents = await wazuh_client.get_active_agents()
+            agent = next(
+                (a for a in all_agents if a.get("name", "").lower() == proj_agent_name.lower()),
+                None,
+            )
+            if agent:
+                log.info("[agent-status] Found agent via fallback search: %s", agent)
+        except Exception as exc:
+            log.warning("[agent-status] Fallback agent search failed: %s", exc)
     if not agent:
         return {
             "agent_name": proj_agent_name,
@@ -488,10 +508,16 @@ async def agent_status(project_id: str, user: User = Depends(get_current_user)):
 
     health_issues = await _get_project_health_issues(project)
 
+    is_active = agent.get("status", "").lower() == "active"
+    if is_active and not project.wazuh_agent_registered:
+        project.wazuh_agent_registered = True
+        project.wazuh_agent_id = agent.get("id")
+        await project.save()
+
     return {
         "agent_name": proj_agent_name,
         "wazuh_agent_id": agent.get("id"),
-        "status": "connected" if agent.get("status") == "active" else "disconnected",
+        "status": "connected" if is_active else "disconnected",
         "last_seen": agent.get("lastKeepAlive"),
         "os": (agent.get("os") or {}).get("name"),
         "os_version": (agent.get("os") or {}).get("version"),
