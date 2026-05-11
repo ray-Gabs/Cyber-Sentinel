@@ -38,7 +38,7 @@ sslyze==6.*                       # SSL/TLS analyser
 
 # --- HTTP ---
 httpx==0.28.*                     # Async HTTP client (for Wazuh + ZAP APIs)
-python-dotenv==1.0.*              # .env file loading
+python-dotenv==1.2.*              # .env file loading
 beautifulsoup4==4.12.*            # HTML parsing (fallback crawler + fingerprinting)
 
 # --- Reports ---
