@@ -164,6 +164,28 @@ async def lifespan(app: FastAPI):
                 if _result.upserted_id:
                     log.info("Seeded demo project: %s", _slug)
 
+    # Reset scans stuck in "running" from a previously crashed Celery worker.
+    # Without this, the per-user concurrent limit blocks all new scans forever.
+    try:
+        from datetime import datetime, timezone as _tz, timedelta as _td
+        from domains.pentesting.models import Scan as _Scan
+        _stale_cutoff = datetime.now(_tz.utc) - _td(hours=2)
+        _stale_result = await _Scan.get_motor_collection().update_many(
+            {"status": "running", "started_at": {"$lt": _stale_cutoff}},
+            {"$set": {
+                "status": "failed",
+                "error_message": "Worker crashed — scan reset on startup",
+                "completed_at": datetime.now(_tz.utc),
+            }},
+        )
+        if _stale_result.modified_count:
+            log.warning(
+                "Reset %d stale 'running' scan(s) to 'failed' — Celery worker likely crashed",
+                _stale_result.modified_count,
+            )
+    except Exception as _exc:
+        log.warning("Stale scan cleanup failed (non-fatal): %s", _exc)
+
     _relay_task = asyncio.create_task(_redis_ws_relay())
 
     yield
