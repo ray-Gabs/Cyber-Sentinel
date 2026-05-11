@@ -14,9 +14,9 @@ motor==3.6.*               # Async MongoDB driver
 beanie==1.27.*             # MongoDB ODM (built on Motor + Pydantic)
 
 # --- Auth ---
-PyJWT[crypto]>=2.8.0,<3.0.0        # JWT encoding/decoding (replaces python-jose — CVE-2024-33664)
+PyJWT[crypto]>=2.12.1,<3.0.0        # JWT encoding/decoding (replaces python-jose — CVE-2024-33664)
 passlib[bcrypt]>=1.7.4,<2.0.0     # Password hashing
-bcrypt==4.0.1                      # passlib 1.7.x needs __about__; removed in bcrypt 4.1+
+bcrypt==5.0.0                      # passlib 1.7.x needs __about__; removed in bcrypt 4.1+
 pydantic[email]==2.10.*            # Includes EmailStr
 pydantic-settings==2.7.*          # Settings from .env
 
@@ -47,7 +47,7 @@ jinja2==3.1.*                     # HTML templates for reports
 
 # --- Rate Limiting ---
 slowapi==0.1.*                    # FastAPI rate limiting (backed by Redis)
-limits==3.*                       # Storage backends for slowapi
+limits==5.*                       # Storage backends for slowapi
 
 # --- Async Email ---
 aiosmtplib==3.*                   # Async SMTP (non-blocking email sending)
