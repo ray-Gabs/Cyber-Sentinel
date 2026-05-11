@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-scan
+  namespace: cyber-sentinel
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: celery-scan
+  template:
+    metadata:
+      labels:
+        app: celery-scan
+    spec:
+      containers:
+      - name: celery-scan
+        image: cyber-sentinel/backend:latest
+        imagePullPolicy: Never
+        command:
+        - celery
+        - -A
+        - core.celery_app
+        - worker
+        - --loglevel=info
+        - --pool=prefork
+        - --concurrency=2
+        - -Q
+        - celery
+        - -n
+        - scan@%h
+        envFrom:
+        - configMapRef:
+            name: cyber-sentinel-config
+        - secretRef:
+            name: cyber-sentinel-secrets
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "125m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"

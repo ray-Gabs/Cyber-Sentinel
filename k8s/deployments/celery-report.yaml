@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-report
+  namespace: cyber-sentinel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-report
+  template:
+    metadata:
+      labels:
+        app: celery-report
+    spec:
+      containers:
+      - name: celery-report
+        image: cyber-sentinel/backend:latest
+        imagePullPolicy: Never
+        command:
+        - celery
+        - -A
+        - core.celery_app
+        - worker
+        - --loglevel=info
+        - --pool=solo
+        - -Q
+        - report
+        - -n
+        - report@%h
+        envFrom:
+        - configMapRef:
+            name: cyber-sentinel-config
+        - secretRef:
+            name: cyber-sentinel-secrets
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "250m"

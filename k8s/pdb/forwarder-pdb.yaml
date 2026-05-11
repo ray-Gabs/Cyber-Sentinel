@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: forwarder-pdb
+  namespace: cyber-sentinel
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: forwarder

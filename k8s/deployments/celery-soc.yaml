@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-soc
+  namespace: cyber-sentinel
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: celery-soc
+  template:
+    metadata:
+      labels:
+        app: celery-soc
+    spec:
+      containers:
+      - name: celery-soc
+        image: cyber-sentinel/backend:latest
+        imagePullPolicy: Never
+        command:
+        - celery
+        - -A
+        - core.celery_app
+        - worker
+        - --loglevel=info
+        - --pool=prefork
+        - --concurrency=1
+        - -Q
+        - soc
+        - -n
+        - soc@%h
+        envFrom:
+        - configMapRef:
+            name: cyber-sentinel-config
+        - secretRef:
+            name: cyber-sentinel-secrets
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "125m"
+          limits:
+            memory: "128Mi"
+            cpu: "250m"
