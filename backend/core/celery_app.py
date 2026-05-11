@@ -33,8 +33,8 @@ from core.config import settings
 
 celery = Celery(
     "cyber_sentinel",
-    broker=settings.redis_url,
-    backend=settings.redis_url,
+    broker=settings.redis_url,          # DB 0 — broker
+    backend=settings.celery_result_url, # DB 1 — result backend (separated)
 )
 
 celery.conf.update(
@@ -63,19 +63,22 @@ celery.conf.update(
 # SOC tasks (poll + triage) go to the dedicated 'soc' queue (celery-soc worker).
 # This prevents poll/triage tasks from starving run_scan in the same queue.
 celery.conf.task_routes = {
-    "domains.soc.tasks.poll_wazuh_alerts": {"queue": "soc"},
-    "domains.soc.tasks.triage_single_alert": {"queue": "soc"},
+    "domains.soc.tasks.poll_wazuh_alerts":     {"queue": "soc"},
+    "domains.soc.tasks.triage_single_alert":   {"queue": "soc"},
+    "domains.soc.tasks.drain_triage_queue":    {"queue": "soc"},
 }
 
 # --------------- Beat Schedule (Periodic Tasks) ---------------
 celery.conf.beat_schedule = {
-    # Poll Wazuh for new alerts every 30 seconds.
-    # expires=25: if the worker is busy when beat fires, discard the stale copy
-    # rather than letting them pile up and block the queue.
     "poll-wazuh-alerts": {
         "task": "domains.soc.tasks.poll_wazuh_alerts",
-        "schedule": 30.0,  # seconds
+        "schedule": 30.0,
         "options": {"expires": 25},
+    },
+    "drain-triage-queue": {
+        "task": "domains.soc.tasks.drain_triage_queue",
+        "schedule": 10.0,          # every 10 seconds
+        "options": {"expires": 8}, # discard if worker is busy
     },
 }
 

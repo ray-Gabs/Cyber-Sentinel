@@ -39,6 +39,10 @@ class Settings(BaseSettings):
 
     # ---- Redis ----
     redis_url: str = "redis://localhost:6379/0"
+    # Celery result backend — DB 1 (separate from broker DB 0 to allow independent flush)
+    celery_result_url: str = "redis://localhost:6379/1"
+    # App-level Redis: locks, WS pub/sub, rate limiting, triage sorted set — DB 2
+    app_redis_url: str = "redis://localhost:6379/2"
 
     # ---- JWT ----
     jwt_secret: str = ""

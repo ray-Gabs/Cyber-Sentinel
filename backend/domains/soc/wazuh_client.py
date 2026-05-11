@@ -140,6 +140,30 @@ class WazuhClient:
         items = self._items(data)
         return items[0] if items else None
 
+    async def get_alerts_paginated(
+        self,
+        max_alerts: int = 500,
+        batch_size: int = 100,
+        **kwargs,
+    ) -> list[dict]:
+        """
+        Fetch up to max_alerts from Wazuh using offset-based pagination.
+        Stops early when a page returns fewer items than batch_size.
+        Accepts the same keyword args as get_alerts (level_min, level_max, q).
+        """
+        results: list[dict] = []
+        offset = 0
+        while len(results) < max_alerts:
+            fetch = min(batch_size, max_alerts - len(results))
+            chunk = await self.get_alerts(limit=fetch, offset=offset, **kwargs)
+            if not chunk:
+                break
+            results.extend(chunk)
+            if len(chunk) < fetch:
+                break  # last page — no more data
+            offset += len(chunk)
+        return results
+
     async def get_alerts_since(
         self,
         since: datetime,
