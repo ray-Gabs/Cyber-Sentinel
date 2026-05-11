@@ -162,13 +162,13 @@ async def delete_correlation(correlation_id: str, user_id: str) -> None:
 
 async def delete_all_correlations(user_id: str) -> int:
     """Delete all correlations for a user's scans. Returns count deleted."""
-    user_scans = await Scan.find({"user_id": user_id}).limit(1000).to_list()
-    scan_ids = [str(s.id) for s in user_scans]
-    correlations = await Correlation.find({"scan_id": {"$in": scan_ids}}).limit(1000).to_list()
-    count = len(correlations)
-    for c in correlations:
-        await c.delete()
-    return count
+    col = Scan.get_motor_collection()
+    cursor = col.find({"user_id": user_id}, {"_id": 1})
+    scan_ids = [str(doc["_id"]) async for doc in cursor]
+    if not scan_ids:
+        return 0
+    result = await Correlation.get_motor_collection().delete_many({"scan_id": {"$in": scan_ids}})
+    return result.deleted_count
 
 
 def _extract_host(target: str) -> str:

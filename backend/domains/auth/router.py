@@ -272,8 +272,8 @@ async def suspend_user(user_id: str, user: User = Depends(get_current_user)):
             title="Account suspended",
             body="Your account has been suspended. Contact an administrator.",
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        log.warning("suspension notification failed for user %s: %s", str(target.id), exc)
     return _user_response(target)
 
 

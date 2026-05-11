@@ -44,13 +44,14 @@ class Settings(BaseSettings):
     redis_password: str = ""
     # Celery result backend — DB 1 (separate from broker DB 0 to allow independent flush)
     celery_result_url: str = "redis://localhost:6379/1"
-    # App-level Redis: locks, WS pub/sub, rate limiting, triage sorted set — DB 2
+    # App-level Redis: locks, rate limiting, triage sorted set — DB 2
+    # Note: WS pub/sub uses redis_url (DB 0), not this DB
     app_redis_url: str = "redis://localhost:6379/2"
 
     # ---- JWT ----
     jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 480  # 8 hours
+    jwt_expire_minutes: int = 60  # 1 hour — use refresh tokens for longer sessions
 
     # ---- AI Provider ----
     # Set AI_PROVIDER to one of: claude | groq | openai | gemini
@@ -97,7 +98,7 @@ class Settings(BaseSettings):
     wazuh_webhook_token: str = ""
     # Public-facing IP for Wazuh agent docker-compose files (what students put in WAZUH_MANAGER)
     # May differ from wazuh_api_url if behind NAT (e.g. wazuh_api_url uses https:// + port)
-    wazuh_host_public: str = "10.4.89.178"
+    wazuh_host_public: str = ""
     # Agent registration password — find with: cat /var/ossec/etc/authd.pass on Wazuh VM
     wazuh_reg_password: str = ""
 
