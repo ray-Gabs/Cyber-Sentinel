@@ -186,6 +186,28 @@ async def lifespan(app: FastAPI):
     except Exception as _exc:
         log.warning("Stale scan cleanup failed (non-fatal): %s", _exc)
 
+    # Also reset "pending" scans older than 1 h — Celery dropped the task (worker wasn't running).
+    # These block the per-user concurrent limit just as badly as stale "running" scans.
+    try:
+        from datetime import datetime, timezone as _tz, timedelta as _td
+        from domains.pentesting.models import Scan as _Scan
+        _pending_cutoff = datetime.now(_tz.utc) - _td(hours=1)
+        _pending_result = await _Scan.get_motor_collection().update_many(
+            {"status": "pending", "created_at": {"$lt": _pending_cutoff}},
+            {"$set": {
+                "status": "failed",
+                "error_message": "Task never picked up — Celery worker was not running",
+                "completed_at": datetime.now(_tz.utc),
+            }},
+        )
+        if _pending_result.modified_count:
+            log.warning(
+                "Reset %d stale 'pending' scan(s) to 'failed' — Celery worker was not running",
+                _pending_result.modified_count,
+            )
+    except Exception as _exc:
+        log.warning("Stale pending-scan cleanup failed (non-fatal): %s", _exc)
+
     _relay_task = asyncio.create_task(_redis_ws_relay())
 
     yield

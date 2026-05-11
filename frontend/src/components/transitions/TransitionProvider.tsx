@@ -73,7 +73,7 @@ export function TransitionProvider({ children }: TransitionProviderProps) {
     transition === "drill-back" ? "back" : "forward";
 
   return (
-    <AnimatePresence mode="wait">
+    <AnimatePresence>
       {(transition === "drill-forward" || transition === "drill-back") ? (
         <DrillTransition key={key} layoutKey={key} direction={drillDirection}>
           {children}
