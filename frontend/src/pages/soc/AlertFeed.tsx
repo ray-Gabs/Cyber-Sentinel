@@ -30,9 +30,10 @@ function getSeverityLabel(level: number): string {
 
 // ── Verdict / action badge configs ────────────────────────────────────────
 const VERDICT_STYLE: Record<string, { bg: string; color: string; border: string }> = {
-  TRUE_POSITIVE:  { bg: "rgba(239,68,68,0.12)",          color: "var(--sev-critical-text)", border: "rgba(239,68,68,0.25)"          },
-  FALSE_POSITIVE: { bg: "var(--color-success-dim)",       color: "var(--sev-low-text)",      border: "var(--color-success-border)"   },
-  UNKNOWN:        { bg: "rgba(234,179,8,0.12)",           color: "var(--sev-medium-text)",   border: "rgba(234,179,8,0.25)"          },
+  TRUE_POSITIVE:  { bg: "rgba(239,68,68,0.12)",   color: "var(--sev-critical-text)", border: "rgba(239,68,68,0.25)"   },
+  FALSE_POSITIVE: { bg: "var(--color-success-dim)", color: "var(--sev-low-text)",    border: "var(--color-success-border)" },
+  UNKNOWN:        { bg: "rgba(234,179,8,0.12)",   color: "var(--sev-medium-text)",   border: "rgba(234,179,8,0.25)"   },
+  TRIAGE_FAILED:  { bg: "rgba(100,116,139,0.12)", color: "var(--text-muted)",        border: "rgba(100,116,139,0.25)" },
 };
 
 const ACTION_STYLE: Record<string, { bg: string; color: string; border: string }> = {
@@ -47,6 +48,7 @@ const VERDICT_FILTERS = [
   { value: "TRUE_POSITIVE",  label: "True Positive"  },
   { value: "FALSE_POSITIVE", label: "False Positive" },
   { value: "UNKNOWN",        label: "Unknown"        },
+  { value: "TRIAGE_FAILED",  label: "Triage Failed"  },
 ];
 
 const LEVEL_FILTERS = [

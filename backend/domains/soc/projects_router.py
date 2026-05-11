@@ -34,6 +34,7 @@ class ProjectCreate(BaseModel):
     name: str
     target_url: str
     description: Optional[str] = None
+    wazuh_agent_name: Optional[str] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -224,6 +225,7 @@ async def create_project(data: ProjectCreate, user: User = Depends(get_current_u
         slug=_slugify(name),
         target_url=data.target_url.strip(),
         description=data.description,
+        wazuh_agent_name=data.wazuh_agent_name.strip() if data.wazuh_agent_name else None,
     )
     await project.insert()
     return _project_to_response(project)
@@ -537,8 +539,8 @@ async def agent_compose(project_id: str, user: User = Depends(get_current_user))
         f"        echo 'deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main' \\\n"
         f"          | tee /etc/apt/sources.list.d/wazuh.list\n"
         f"        apt-get update -qq\n"
-        f"        WAZUH_MANAGER=\"$WAZUH_MANAGER\" WAZUH_AGENT_NAME=\"$WAZUH_AGENT_NAME\" \\\n"
-        f"          WAZUH_REGISTRATION_PASSWORD=\"$WAZUH_REGISTRATION_PASSWORD\" \\\n"
+        f"        WAZUH_MANAGER=\"$$WAZUH_MANAGER\" WAZUH_AGENT_NAME=\"$$WAZUH_AGENT_NAME\" \\\n"
+        f"          WAZUH_REGISTRATION_PASSWORD=\"$$WAZUH_REGISTRATION_PASSWORD\" \\\n"
         f"          apt-get install -y wazuh-agent\n"
         f"        /var/ossec/bin/wazuh-agentd -f\n"
         f"    restart: unless-stopped\n"

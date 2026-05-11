@@ -27,6 +27,7 @@ interface CreateForm {
   name: string;
   target_url: string;
   description: string;
+  wazuh_agent_name: string;
 }
 
 export default function UserProjects() {
@@ -34,10 +35,11 @@ export default function UserProjects() {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm]           = useState<CreateForm>({ name: "", target_url: "", description: "" });
+  const [form, setForm]           = useState<CreateForm>({ name: "", target_url: "", description: "", wazuh_agent_name: "" });
   const [creating, setCreating]   = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [deleting, setDeleting]   = useState<string | null>(null);
+  const [checking, setChecking]   = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,7 +57,7 @@ export default function UserProjects() {
   useEffect(() => { load(); }, [load]);
 
   function openModal() {
-    setForm({ name: "", target_url: "", description: "" });
+    setForm({ name: "", target_url: "", description: "", wazuh_agent_name: "" });
     setFormError(null);
     setShowModal(true);
   }
@@ -72,6 +74,7 @@ export default function UserProjects() {
         name: form.name.trim(),
         target_url: form.target_url.trim(),
         description: form.description.trim() || undefined,
+        wazuh_agent_name: form.wazuh_agent_name.trim() || undefined,
       });
       setProjects(prev => [...prev, res.data]);
       setShowModal(false);
@@ -103,6 +106,26 @@ export default function UserProjects() {
     a.download = `wazuh-agent-${slug}.yml`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function handleCheckStatus(id: string) {
+    setChecking(id);
+    try {
+      const res = await api.get<{ status: string; wazuh_agent_id?: string }>(`/soc/${id}/agent-status`);
+      if (res.data.status === "connected") {
+        await api.patch(`/soc/${id}`, {
+          wazuh_agent_registered: true,
+          wazuh_agent_id: res.data.wazuh_agent_id || undefined,
+        });
+        setProjects(prev => prev.map(p => p.id === id ? { ...p, wazuh_agent_registered: true } : p));
+      } else {
+        alert(`Agent status: ${res.data.status}. Make sure the agent container is running.`);
+      }
+    } catch {
+      alert("Could not reach the agent-status endpoint.");
+    } finally {
+      setChecking(null);
+    }
   }
 
   const connected = projects.filter(p => p.wazuh_agent_registered).length;
@@ -313,18 +336,35 @@ export default function UserProjects() {
                       <ChevronRight size={10} />
                     </Link>
                   ) : (
-                    <button
-                      onClick={() => handleDownloadCompose(project.id, project.slug)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-1 justify-center transition-colors"
-                      style={{
-                        backgroundColor: "rgba(59,130,246,0.08)",
-                        color: "#60a5fa",
-                        border: "1px solid rgba(59,130,246,0.2)",
-                      }}
-                    >
-                      <Download size={11} />
-                      Deploy Agent
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleDownloadCompose(project.id, project.slug)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-1 justify-center transition-colors"
+                        style={{
+                          backgroundColor: "rgba(59,130,246,0.08)",
+                          color: "#60a5fa",
+                          border: "1px solid rgba(59,130,246,0.2)",
+                        }}
+                      >
+                        <Download size={11} />
+                        Deploy Agent
+                      </button>
+                      <button
+                        onClick={() => handleCheckStatus(project.id)}
+                        disabled={checking === project.id}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-1 justify-center transition-colors"
+                        style={{
+                          backgroundColor: "rgba(34,197,94,0.08)",
+                          color: "#4ade80",
+                          border: "1px solid rgba(34,197,94,0.2)",
+                        }}
+                      >
+                        {checking === project.id
+                          ? <RefreshCw size={11} className="animate-spin" />
+                          : <RefreshCw size={11} />}
+                        Check
+                      </button>
+                    </>
                   )}
                   <button
                     onClick={() => handleDownloadCompose(project.id, project.slug)}
@@ -429,6 +469,20 @@ export default function UserProjects() {
                       className="w-full px-3 py-2 rounded-lg text-sm outline-none"
                       style={inputStyle}
                     />
+                  </Field>
+
+                  <Field label="Agent Name" optional>
+                    <input
+                      type="text"
+                      value={form.wazuh_agent_name}
+                      onChange={e => setForm(f => ({ ...f, wazuh_agent_name: e.target.value }))}
+                      placeholder={form.name ? form.name.toLowerCase().replace(/\s+/g, "-") : "e.g. dvwa or juice-shop"}
+                      className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                      style={inputStyle}
+                    />
+                    <p className="text-[11px] mt-1" style={{ color: "var(--text-subtle)" }}>
+                      Hostname of an existing Wazuh agent. Leave blank to use the project name.
+                    </p>
                   </Field>
 
                   {formError && (

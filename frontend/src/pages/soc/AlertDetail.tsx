@@ -249,9 +249,10 @@ function CreateRuleFromAlertModal({ alert, onClose }: CreateRuleFromAlertModalPr
 }
 
 const VERDICT_STYLES: Record<string, { icon: typeof CheckCircle; color: string; bg: string }> = {
-  TRUE_POSITIVE: { icon: XCircle, color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
-  FALSE_POSITIVE: { icon: CheckCircle, color: "text-green-400", bg: "bg-green-500/10 border-green-500/20" },
-  UNKNOWN: { icon: AlertTriangle, color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20" },
+  TRUE_POSITIVE:  { icon: XCircle,       color: "text-red-400",    bg: "bg-red-500/10 border-red-500/20"    },
+  FALSE_POSITIVE: { icon: CheckCircle,   color: "text-green-400",  bg: "bg-green-500/10 border-green-500/20" },
+  UNKNOWN:        { icon: AlertTriangle, color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20" },
+  TRIAGE_FAILED:  { icon: AlertTriangle, color: "text-slate-400",  bg: "bg-slate-500/10 border-slate-500/20" },
 };
 
 export default function AlertDetail() {
