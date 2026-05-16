@@ -8,7 +8,7 @@ import { getAuditLogs } from "@/services/authService";
 import type { AuditLogEntry } from "@/types";
 import { Icon, PageHead, Tabs } from "@/components/ui";
 import { useAuth } from "@/hooks/useAuth";
-import { exportToPDFOptions } from "@/lib/pdfExport";
+import { exportAuditLogPDF } from "@/lib/exportAuditLog";
 
 const ACTION_TONE: Record<string, string> = {
   "user":    "accent",
@@ -167,39 +167,7 @@ export default function AuditLog() {
               <Icon name="download" size={13} /> Export CSV
             </button>
             <button
-              onClick={() => {
-                const cats = ["user", "scan", "role", "account", "alert"] as const;
-                const catCounts = Object.fromEntries(
-                  cats.map(c => [c, logs.filter(l => catFromAction(l.action) === c).length])
-                );
-                exportToPDFOptions({
-                  title: "Platform Audit Log",
-                  subtitle: `Activity trail · ${filter !== "all" ? filter.toUpperCase() + " events · " : ""}${filteredLogs.length} records · ${new Date().toLocaleDateString()}`,
-                  filename: `audit-log-${new Date().toISOString().slice(0, 10)}`,
-                  summaryStats: [
-                    { label: "Total",    value: logs.length,          color: "#2563eb" },
-                    { label: "Auth",     value: catCounts["user"],     color: "#3B82F6" },
-                    { label: "Scans",    value: catCounts["scan"],     color: "#f59e0b" },
-                    { label: "Roles",    value: catCounts["role"],     color: "#f97316" },
-                    { label: "Accounts", value: catCounts["account"],  color: "#94a3b8" },
-                    { label: "Alerts",   value: catCounts["alert"],    color: "#ef4444" },
-                  ],
-                  columns: [
-                    { key: "timestamp", label: "Timestamp", mono: true,  width: "150px" },
-                    { key: "user",      label: "User",      mono: true,  width: "110px" },
-                    { key: "action",    label: "Action",    mono: true,  width: "200px" },
-                    { key: "details",   label: "Details"                               },
-                    { key: "ip",        label: "IP Address", mono: true, width: "120px" },
-                  ],
-                  rows: filteredLogs.map((l) => ({
-                    timestamp: formatTime(l.timestamp),
-                    user:      l.username,
-                    action:    l.action,
-                    details:   getActionDetail(l),
-                    ip:        l.ip_address ?? "—",
-                  })),
-                });
-              }}
+              onClick={() => exportAuditLogPDF({ logs: filteredLogs, filter })}
               className="btn btn-sm flex items-center gap-1.5"
             >
               <Icon name="file" size={13} /> Export PDF

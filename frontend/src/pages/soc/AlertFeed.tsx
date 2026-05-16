@@ -5,7 +5,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useAuth } from "@/hooks/useAuth";
 import { timeAgo } from "@/lib/utils";
 import { Icon, Badge, KPI, PageHead, VerdictPill } from "@/components/ui";
-import { exportToPDFOptions } from "@/lib/pdfExport";
+import { exportSocAlertsPDF } from "@/lib/exportSocAlerts";
 import type { AlertSummary, AlertStats } from "@/types";
 
 function getSeverityColor(level: number): string {
@@ -239,38 +239,7 @@ export default function AlertFeed() {
           <button
             className="btn btn-sm"
             style={{ display: "flex", alignItems: "center", gap: 6 }}
-            onClick={() => {
-              const sev = alertStats?.by_severity ?? {};
-              exportToPDFOptions({
-                title: "SOC Alert Feed",
-                subtitle: `Wazuh alert export · ${filteredAlerts.length} records · ${new Date().toLocaleDateString()}`,
-                landscape: true,
-                filename: `soc-alerts-${new Date().toISOString().slice(0, 10)}`,
-                summaryStats: [
-                  { label: "Total",    value: alertStats?.total ?? filteredAlerts.length, color: "#2563eb" },
-                  { label: "Critical", value: sev["critical"] ?? 0, color: "#dc2626" },
-                  { label: "High",     value: sev["high"]     ?? 0, color: "#c2410c" },
-                  { label: "Medium",   value: sev["medium"]   ?? 0, color: "#a16207" },
-                  { label: "Low",      value: sev["low"]      ?? 0, color: "#15803d" },
-                ],
-                columns: [
-                  { key: "timestamp",        label: "Time",        mono: true,          width: "140px" },
-                  { key: "agent_name",       label: "Agent",       mono: true,          width: "110px" },
-                  { key: "rule_level_label", label: "Severity",    isSeverity: true,    width: "80px"  },
-                  { key: "rule_description", label: "Description"                                      },
-                  { key: "rule_id",          label: "Rule ID",     mono: true,          width: "80px"  },
-                  { key: "ai_verdict",       label: "Verdict",     isVerdict: true,     width: "120px" },
-                ],
-                rows: filteredAlerts.map(a => ({
-                  timestamp:        a.timestamp ? new Date(a.timestamp).toLocaleString() : "—",
-                  agent_name:       a.agent_name       ?? "—",
-                  rule_level_label: getSeverityLabel(a.rule_level),
-                  rule_description: a.rule_description ?? "—",
-                  rule_id:          a.rule_id           ?? "—",
-                  ai_verdict:       a.ai_verdict        ?? "UNANALYZED",
-                })),
-              });
-            }}
+            onClick={() => exportSocAlertsPDF({ alerts: filteredAlerts, stats: alertStats })}
           >
             <Icon name="download" size={12} /> Export
           </button>
