@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 log = logging.getLogger(__name__)
 
 from core.dependencies import get_current_user
-from core.rate_limit import limiter
+from core.rate_limit import limiter, get_user_or_ip_key
 from core.config import settings
 from core.security import create_access_token
 from domains.auth.models import User
