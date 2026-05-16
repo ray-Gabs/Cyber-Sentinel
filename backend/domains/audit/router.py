@@ -2,12 +2,13 @@
 # backend/domains/audit/router.py — Audit Log Endpoints
 # ============================================================
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, HTTPException, Request, status
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
 from core.dependencies import get_current_user
+from core.rate_limit import limiter, get_user_or_ip_key
 from domains.auth.models import User
 from domains.audit.models import AuditLog
 
@@ -32,7 +33,9 @@ def _require_admin(user: User) -> None:
 
 
 @router.get("/", response_model=list[AuditLogResponse])
+@limiter.limit("60/minute", key_func=get_user_or_ip_key)
 async def list_audit_logs(
+    request: Request,
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=200),
     user_id: Optional[str] = Query(None, description="Filter by user ID"),
@@ -78,7 +81,8 @@ async def list_audit_logs(
 
 
 @router.get("/stats")
-async def audit_stats(current_user: User = Depends(get_current_user)):
+@limiter.limit("30/minute", key_func=get_user_or_ip_key)
+async def audit_stats(request: Request, current_user: User = Depends(get_current_user)):
     """[Admin] Quick stats: total logs, unique users, top actions."""
     _require_admin(current_user)
     total = await AuditLog.count()

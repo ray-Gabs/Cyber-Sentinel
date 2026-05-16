@@ -5,7 +5,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useAuth } from "@/hooks/useAuth";
 import { timeAgo } from "@/lib/utils";
 import { Icon, Badge, KPI, PageHead, VerdictPill } from "@/components/ui";
-import { exportToPDF } from "@/lib/pdfExport";
+import { exportToPDFOptions } from "@/lib/pdfExport";
 import type { AlertSummary, AlertStats } from "@/types";
 
 function getSeverityColor(level: number): string {
@@ -74,6 +74,8 @@ export default function AlertFeed() {
   const [filterSev,    setFilterSev]    = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterDays,   setFilterDays]   = useState<number>(7);
+  const [displayPage,  setDisplayPage]  = useState(1);
+  const DISPLAY_SIZE = 10;
 
   const { messages } = useWebSocket<{ type: string; alert_id?: string }>({ channel: "alerts" });
 
@@ -172,6 +174,12 @@ export default function AlertFeed() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alerts, showFP, filterSev, filterStatus, filterDays]);
 
+  // Reset display page when filters change
+  useEffect(() => { setDisplayPage(1); }, [filterVerdict, filterLevel, filterAgent, filterGroup, filterMitre, filterSev, filterStatus, filterDays, showFP]);
+
+  const totalDisplayPages = Math.max(1, Math.ceil(filteredAlerts.length / DISPLAY_SIZE));
+  const pagedAlerts       = filteredAlerts.slice((displayPage - 1) * DISPLAY_SIZE, displayPage * DISPLAY_SIZE);
+
   const socTotal     = alertStats?.total ?? 0;
   const socTP        = alertStats?.by_verdict?.["TRUE_POSITIVE"] ?? 0;
   const socFP        = alertStats?.by_verdict?.["FALSE_POSITIVE"] ?? 0;
@@ -231,27 +239,38 @@ export default function AlertFeed() {
           <button
             className="btn btn-sm"
             style={{ display: "flex", alignItems: "center", gap: 6 }}
-            onClick={() => exportToPDF(
-              "SOC Alerts",
-              `Filtered alerts · ${filteredAlerts.length} records`,
-              [
-                { key: "timestamp",        label: "Time"        },
-                { key: "agent_name",       label: "Agent"       },
-                { key: "rule_level_label", label: "Severity",   isSeverity: true },
-                { key: "rule_description", label: "Description" },
-                { key: "rule_id",          label: "Rule ID"     },
-                { key: "ai_verdict",       label: "Verdict"     },
-              ],
-              filteredAlerts.map(a => ({
-                timestamp:        a.timestamp ? new Date(a.timestamp).toLocaleString() : "—",
-                agent_name:       a.agent_name       ?? "—",
-                rule_level_label: getSeverityLabel(a.rule_level),
-                rule_description: a.rule_description ?? "—",
-                rule_id:          a.rule_id           ?? "—",
-                ai_verdict:       a.ai_verdict        ?? "UNANALYZED",
-              })),
-              "soc-alerts"
-            )}
+            onClick={() => {
+              const sev = alertStats?.by_severity ?? {};
+              exportToPDFOptions({
+                title: "SOC Alert Feed",
+                subtitle: `Wazuh alert export · ${filteredAlerts.length} records · ${new Date().toLocaleDateString()}`,
+                landscape: true,
+                filename: `soc-alerts-${new Date().toISOString().slice(0, 10)}`,
+                summaryStats: [
+                  { label: "Total",    value: alertStats?.total ?? filteredAlerts.length, color: "#2563eb" },
+                  { label: "Critical", value: sev["critical"] ?? 0, color: "#dc2626" },
+                  { label: "High",     value: sev["high"]     ?? 0, color: "#c2410c" },
+                  { label: "Medium",   value: sev["medium"]   ?? 0, color: "#a16207" },
+                  { label: "Low",      value: sev["low"]      ?? 0, color: "#15803d" },
+                ],
+                columns: [
+                  { key: "timestamp",        label: "Time",        mono: true,          width: "140px" },
+                  { key: "agent_name",       label: "Agent",       mono: true,          width: "110px" },
+                  { key: "rule_level_label", label: "Severity",    isSeverity: true,    width: "80px"  },
+                  { key: "rule_description", label: "Description"                                      },
+                  { key: "rule_id",          label: "Rule ID",     mono: true,          width: "80px"  },
+                  { key: "ai_verdict",       label: "Verdict",     isVerdict: true,     width: "120px" },
+                ],
+                rows: filteredAlerts.map(a => ({
+                  timestamp:        a.timestamp ? new Date(a.timestamp).toLocaleString() : "—",
+                  agent_name:       a.agent_name       ?? "—",
+                  rule_level_label: getSeverityLabel(a.rule_level),
+                  rule_description: a.rule_description ?? "—",
+                  rule_id:          a.rule_id           ?? "—",
+                  ai_verdict:       a.ai_verdict        ?? "UNANALYZED",
+                })),
+              });
+            }}
           >
             <Icon name="download" size={12} /> Export
           </button>
@@ -408,9 +427,9 @@ export default function AlertFeed() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAlerts.map((alert, idx) => {
+                  {pagedAlerts.map((alert, idx) => {
                     const sevColor  = getSeverityColor(alert.rule_level);
-                    const isFocused = idx === kbFocus;
+                    const isFocused = (displayPage - 1) * DISPLAY_SIZE + idx === kbFocus;
                     const isFP      = alert.ai_verdict === "FALSE_POSITIVE";
                     return (
                       <tr key={alert.id}
@@ -448,7 +467,7 @@ export default function AlertFeed() {
             )}
           </div>
 
-          {/* FP toggle + pagination */}
+          {/* FP toggle */}
           {fpAlerts.length > 0 && (
             <div style={{ padding: "10px 18px", borderTop: "1px solid var(--border)" }}>
               <button onClick={() => setShowFP((v) => !v)}
@@ -457,11 +476,32 @@ export default function AlertFeed() {
               </button>
             </div>
           )}
-          {alerts.length >= 50 && (
+          {/* Display pagination (10 per page) */}
+          {filteredAlerts.length > DISPLAY_SIZE && (
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, padding: "12px 18px", borderTop: "1px solid var(--border)" }}>
-              <button className="btn btn-sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</button>
-              <span className="mono" style={{ fontSize: 12, color: "var(--text-3)" }}>Page {page}</span>
-              <button className="btn btn-sm" onClick={() => setPage((p) => p + 1)}>Next</button>
+              <button className="btn btn-sm" disabled={displayPage <= 1} onClick={() => setDisplayPage((p) => p - 1)}>Previous</button>
+              <span className="mono" style={{ fontSize: 12, color: "var(--text-3)" }}>
+                {displayPage} / {totalDisplayPages} · {filteredAlerts.length} alerts
+              </span>
+              <button
+                className="btn btn-sm"
+                disabled={displayPage >= totalDisplayPages && alerts.length < 50}
+                onClick={() => {
+                  if (displayPage < totalDisplayPages) {
+                    setDisplayPage(p => p + 1);
+                  } else {
+                    // Exhausted current fetch — load next backend page
+                    setPage(p => p + 1);
+                    setDisplayPage(1);
+                  }
+                }}
+              >Next</button>
+            </div>
+          )}
+          {/* Backend page prev (when past first backend page and display page = 1) */}
+          {page > 1 && displayPage === 1 && (
+            <div style={{ padding: "6px 18px", borderTop: "1px solid var(--border)", textAlign: "center" }}>
+              <button className="btn btn-sm" onClick={() => { setPage(p => p - 1); setDisplayPage(1); }}>← Previous batch</button>
             </div>
           )}
         </div>

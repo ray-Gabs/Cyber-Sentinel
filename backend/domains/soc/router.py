@@ -9,6 +9,8 @@ import logging
 from fastapi import APIRouter, Depends, Header, Query, HTTPException, Request, status
 from typing import Any, Optional
 
+from core.rate_limit import limiter, get_user_or_ip_key
+
 log = logging.getLogger(__name__)
 
 from core.config import settings
@@ -91,7 +93,9 @@ def _to_detail(a: Alert) -> AlertDetailResponse:
 
 
 @router.get("/", response_model=list[AlertSummaryResponse])
+@limiter.limit("120/minute", key_func=get_user_or_ip_key)
 async def list_alerts(
+    request: Request,
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=200),
     rule_level_min: Optional[int] = Query(None, ge=0, le=15),
@@ -113,7 +117,9 @@ async def list_alerts(
 
 # Static paths must be registered BEFORE /{alert_id} — FastAPI matches in order.
 @router.get("/stats/summary")
+@limiter.limit("60/minute", key_func=get_user_or_ip_key)
 async def alert_stats(
+    request: Request,
     project_id: Optional[str] = Query(None, description="Scope stats to a specific project"),
     user: User = Depends(get_current_user),
 ):
@@ -142,7 +148,8 @@ async def wazuh_health(user: User = Depends(get_current_user)):
 
 
 @router.get("/agents")
-async def list_agents(user: User = Depends(get_current_user)):
+@limiter.limit("30/minute", key_func=get_user_or_ip_key)
+async def list_agents(request: Request, user: User = Depends(get_current_user)):
     """List all registered Wazuh agents with their status and metadata."""
     from domains.soc.wazuh_client import wazuh_client
     try:
@@ -158,7 +165,8 @@ async def list_agents(user: User = Depends(get_current_user)):
 # ── Custom Detection Rules CRUD ──────────────────────────────────────────────
 
 @router.get("/detection-rules", response_model=list[CustomRuleResponse])
-async def list_detection_rules(user: User = Depends(get_current_user)):
+@limiter.limit("60/minute", key_func=get_user_or_ip_key)
+async def list_detection_rules(request: Request, user: User = Depends(get_current_user)):
     """
     List detection rules visible to the current user.
 
@@ -189,7 +197,8 @@ async def list_detection_rules(user: User = Depends(get_current_user)):
 
 
 @router.post("/detection-rules", response_model=CustomRuleResponse, status_code=201)
-async def create_detection_rule(data: CustomRuleCreate, user: User = Depends(get_current_user)):
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
+async def create_detection_rule(request: Request, data: CustomRuleCreate, user: User = Depends(get_current_user)):
     """Create a new custom detection rule (optionally scoped to a project the user owns)."""
     try:
         rule = await service.create_rule(str(user.id), data)
@@ -211,7 +220,8 @@ async def create_detection_rule(data: CustomRuleCreate, user: User = Depends(get
 
 
 @router.put("/detection-rules/{rule_id}", response_model=CustomRuleResponse)
-async def update_detection_rule(rule_id: str, data: CustomRuleUpdate, user: User = Depends(get_current_user)):
+@limiter.limit("30/minute", key_func=get_user_or_ip_key)
+async def update_detection_rule(request: Request, rule_id: str, data: CustomRuleUpdate, user: User = Depends(get_current_user)):
     """Update an existing detection rule."""
     is_admin = getattr(user, "role", "") == "admin"
     try:
@@ -235,14 +245,16 @@ async def update_detection_rule(rule_id: str, data: CustomRuleUpdate, user: User
 
 
 @router.delete("/detection-rules", status_code=200)
-async def delete_all_detection_rules(user: User = Depends(get_current_user)):
+@limiter.limit("10/minute", key_func=get_user_or_ip_key)
+async def delete_all_detection_rules(request: Request, user: User = Depends(get_current_user)):
     """Delete all user-owned detection rules (system defaults are preserved)."""
     count = await service.delete_all_rules(str(user.id))
     return {"deleted": count, "message": f"Deleted {count} rule(s)"}
 
 
 @router.delete("/detection-rules/{rule_id}", status_code=200)
-async def delete_detection_rule(rule_id: str, user: User = Depends(get_current_user)):
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
+async def delete_detection_rule(request: Request, rule_id: str, user: User = Depends(get_current_user)):
     """Delete a single detection rule by ID."""
     is_admin = getattr(user, "role", "") == "admin"
     await service.delete_rule(rule_id, str(user.id), is_admin=is_admin)
@@ -271,6 +283,7 @@ _MAX_WEBHOOK_BYTES = 10 * 1024 * 1024  # 10 MB — prevents memory DoS from huge
 
 
 @router.post("/webhook")
+@limiter.limit("300/minute")
 async def wazuh_webhook(
     request: Request,
     x_wazuh_token: Optional[str] = Header(None, alias="X-Wazuh-Token"),
@@ -592,7 +605,8 @@ async def admin_claim_alerts(user: User = Depends(get_current_user)):
 
 
 @router.post("/admin/retriage-all")
-async def admin_retriage_all(user: User = Depends(get_current_user)):
+@limiter.limit("5/hour", key_func=get_user_or_ip_key)
+async def admin_retriage_all(request: Request, user: User = Depends(get_current_user)):
     """
     Admin only: queue Celery triage tasks for all untriaged/failed alerts in this tenant.
 
@@ -605,7 +619,7 @@ async def admin_retriage_all(user: User = Depends(get_current_user)):
     alerts = await Alert.find({
         "tenant_id": str(user.id),
         "$or": [{"ai_verdict": None}, {"ai_verdict": "TRIAGE_FAILED"}],
-    }).to_list()
+    }).limit(500).to_list()
 
     from domains.soc.tasks import triage_single_alert
     queued = 0
@@ -628,7 +642,8 @@ async def admin_retriage_all(user: User = Depends(get_current_user)):
 
 
 @router.post("/retriage-mine")
-async def retriage_my_alerts(user: User = Depends(get_current_user)):
+@limiter.limit("10/hour", key_func=get_user_or_ip_key)
+async def retriage_my_alerts(request: Request, user: User = Depends(get_current_user)):
     """
     Queue AI triage for all untriaged/failed alerts visible to the current user.
 
@@ -656,7 +671,7 @@ async def retriage_my_alerts(user: User = Depends(get_current_user)):
     verdict_filter: dict = {"$or": [{"ai_verdict": None}, {"ai_verdict": "TRIAGE_FAILED"}]}
     alerts = await Alert.find(
         {"$and": [scope, verdict_filter]}
-    ).to_list()
+    ).limit(500).to_list()
 
     from domains.soc.tasks import triage_single_alert
     queued = 0
@@ -754,7 +769,9 @@ async def trigger_playbook(
 # ── v2 Triage pipeline endpoints ─────────────────────────────────────────────
 
 @router.post("/{alert_id}/retriage", response_model=TriageResultResponse)
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
 async def retriage_alert(
+    request: Request,
     alert_id: str,
     user: User = Depends(get_current_user),
 ):
@@ -765,7 +782,9 @@ async def retriage_alert(
 
 
 @router.post("/triage/batch", response_model=list[TriageResultResponse])
+@limiter.limit("10/minute", key_func=get_user_or_ip_key)
 async def batch_retriage_alerts(
+    request: Request,
     body: BatchRetriangeRequest,
     user: User = Depends(get_current_user),
 ):
@@ -776,7 +795,9 @@ async def batch_retriage_alerts(
 
 
 @router.post("/{alert_id}/remediation")
+@limiter.limit("15/minute", key_func=get_user_or_ip_key)
 async def get_alert_remediation(
+    request: Request,
     alert_id: str,
     user: User = Depends(get_current_user),
 ):
@@ -890,7 +911,9 @@ async def update_tuning_recommendation(
 
 
 @router.post("/tuning/analyze")
+@limiter.limit("3/hour", key_func=get_user_or_ip_key)
 async def trigger_tuning_analysis(
+    request: Request,
     days: int = Query(7, ge=1, le=90, description="Analysis window in days"),
     user: User = Depends(get_current_user),
 ):

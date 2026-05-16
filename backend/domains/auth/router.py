@@ -5,7 +5,7 @@
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 log = logging.getLogger(__name__)
 
@@ -15,6 +15,8 @@ from core.config import settings
 from core.security import create_access_token
 from domains.auth.models import User
 from domains.soc.project_models import SocProject
+from pydantic import BaseModel, Field
+
 from domains.auth.schemas import (
     RegisterRequest,
     LoginRequest,
@@ -25,6 +27,15 @@ from domains.auth.schemas import (
     TokenResponse,
     UserResponse,
 )
+
+
+class NotificationPrefsUpdate(BaseModel):
+    """Typed schema for notification preference updates — prevents raw dict injection."""
+    email_alerts: bool | None = None
+    email_digest: bool | None = None
+    push_alerts: bool | None = None
+    alert_severity_threshold: str | None = Field(None, pattern="^(critical|high|medium|low|all)$")
+    digest_frequency: str | None = Field(None, pattern="^(realtime|hourly|daily|weekly)$")
 from domains.auth import service
 from domains.audit import service as audit_service
 from domains.notifications import service as notif_service
@@ -126,12 +137,12 @@ async def get_prefs(user: User = Depends(get_current_user)):
 
 @router.patch("/me/prefs")
 async def update_prefs(
-    prefs: dict,
+    prefs: NotificationPrefsUpdate,
     user: User = Depends(get_current_user),
 ):
     """Update the current user's notification preferences (partial update)."""
     existing = dict(getattr(user, "notification_prefs", {}))
-    existing.update(prefs)
+    existing.update({k: v for k, v in prefs.model_dump(exclude_none=True).items()})
     user.notification_prefs = existing
     await user.save()
     return user.notification_prefs
@@ -145,15 +156,21 @@ def _require_admin(user: User) -> None:
 # ── Admin: user management ────────────────────────────────────────────────────
 
 @router.get("/users", response_model=list[UserResponse])
-async def list_users(user: User = Depends(get_current_user)):
-    """[Admin] List all registered users."""
+async def list_users(
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=200),
+    user: User = Depends(get_current_user),
+):
+    """[Admin] List all registered users, paginated."""
     _require_admin(user)
-    users = await User.find().sort("+created_at").limit(500).to_list()
+    users = await User.find().sort("+created_at").skip((page - 1) * size).limit(size).to_list()
     return [_user_response(u) for u in users]
 
 
 @router.patch("/users/{user_id}/role", response_model=UserResponse)
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
 async def update_user_role(
+    request: Request,
     user_id: str,
     data: UpdateRoleRequest,
     user: User = Depends(get_current_user),
@@ -186,7 +203,9 @@ async def update_user_role(
 
 
 @router.patch("/users/{user_id}/status", response_model=UserResponse)
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
 async def toggle_user_status(
+    request: Request,
     user_id: str,
     user: User = Depends(get_current_user),
 ):
@@ -213,7 +232,8 @@ async def toggle_user_status(
 
 
 @router.patch("/users/{user_id}/approve", response_model=UserResponse)
-async def approve_user(user_id: str, user: User = Depends(get_current_user)):
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
+async def approve_user(request: Request, user_id: str, user: User = Depends(get_current_user)):
     """[Admin] Approve a pending user account so they can log in."""
     _require_admin(user)
     from bson import ObjectId
@@ -246,7 +266,8 @@ async def approve_user(user_id: str, user: User = Depends(get_current_user)):
 
 
 @router.patch("/users/{user_id}/suspend", response_model=UserResponse)
-async def suspend_user(user_id: str, user: User = Depends(get_current_user)):
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
+async def suspend_user(request: Request, user_id: str, user: User = Depends(get_current_user)):
     """[Admin] Suspend an active user account."""
     _require_admin(user)
     from bson import ObjectId

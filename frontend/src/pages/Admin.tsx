@@ -64,12 +64,15 @@ export default function Admin() {
   const { user: me } = useAuth();
   const navigate      = useNavigate();
 
+  const PAGE_SIZE = 20;
   const [users,      setUsers]      = useState<UserResponse[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState<string | null>(null);
   const [filter,     setFilter]     = useState<FilterTab>("all");
   const [search,     setSearch]     = useState("");
   const [busy,       setBusy]       = useState<Record<string, boolean>>({});
+  const [page,       setPage]       = useState(1);
+  const [hasMore,    setHasMore]    = useState(true);
   const [toast,      setToast]      = useState<{ msg: string; ok: boolean } | null>(null);
   const [adminStats, setAdminStats] = useState<{
     scans:  { total: number; today: number; period: number; trend_pct: number; by_day: {date:string;count:number}[] };
@@ -89,11 +92,14 @@ export default function Admin() {
     if (me && me.role !== "admin") navigate(ROUTES.DASHBOARD, { replace: true });
   }, [me, navigate]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (p = 1) => {
     setLoading(true);
     setError(null);
     try {
-      setUsers(await listUsers());
+      const batch = await listUsers(p, PAGE_SIZE);
+      setUsers(batch);
+      setHasMore(batch.length === PAGE_SIZE);
+      setPage(p);
     } catch {
       setError("Could not load users. Check your connection.");
     } finally {
@@ -138,7 +144,7 @@ export default function Admin() {
     loadStats(r);
   }
 
-  useEffect(() => { load(); loadStats("7d"); }, [load, loadStats]);
+  useEffect(() => { load(1); loadStats("7d"); }, [load, loadStats]);
 
   function showToast(msg: string, ok: boolean) {
     setToast({ msg, ok });
@@ -277,7 +283,7 @@ export default function Admin() {
         sub="Manage users · review platform analytics · export reports"
         actions={
           <button
-            onClick={load}
+            onClick={() => load(page)}
             disabled={loading}
             className="btn btn-sm flex items-center gap-2"
           >
@@ -684,6 +690,29 @@ export default function Admin() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && (page > 1 || hasMore) && (
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => load(page - 1)}
+            disabled={page === 1 || loading}
+            className="btn btn-sm disabled:opacity-40"
+          >
+            ← Prev
+          </button>
+          <span className="text-xs mono" style={{ color: "var(--text-2)" }}>
+            Page {page}
+          </span>
+          <button
+            onClick={() => load(page + 1)}
+            disabled={!hasMore || loading}
+            className="btn btn-sm disabled:opacity-40"
+          >
+            Next →
+          </button>
         </div>
       )}
 

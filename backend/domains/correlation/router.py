@@ -2,10 +2,11 @@
 # backend/domains/correlation/router.py — Correlation REST Endpoints
 # ============================================================
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from beanie import PydanticObjectId
 
 from core.dependencies import get_current_user
+from core.rate_limit import limiter, get_user_or_ip_key
 from domains.auth.models import User
 from domains.pentesting.models import Scan
 from domains.correlation import service
@@ -44,7 +45,9 @@ async def _get_owned_scan(scan_id: str, user: User) -> Scan:
 
 
 @router.post("/run", response_model=CorrelationResponse, status_code=201)
+@limiter.limit("10/minute", key_func=get_user_or_ip_key)
 async def run_correlation(
+    request: Request,
     data: CorrelationRunRequest,
     user: User = Depends(get_current_user),
 ):
@@ -58,7 +61,9 @@ async def run_correlation(
 
 
 @router.get("/scan/{scan_id}", response_model=CorrelationResponse)
+@limiter.limit("60/minute", key_func=get_user_or_ip_key)
 async def get_correlation(
+    request: Request,
     scan_id: str,
     user: User = Depends(get_current_user),
 ):
@@ -71,7 +76,9 @@ async def get_correlation(
 
 
 @router.get("/")
+@limiter.limit("60/minute", key_func=get_user_or_ip_key)
 async def list_correlations(
+    request: Request,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     user: User = Depends(get_current_user),
@@ -97,14 +104,17 @@ async def list_correlations(
 
 
 @router.delete("/", status_code=200)
-async def delete_all_user_correlations(user: User = Depends(get_current_user)):
+@limiter.limit("5/minute", key_func=get_user_or_ip_key)
+async def delete_all_user_correlations(request: Request, user: User = Depends(get_current_user)):
     """Delete all correlations for the current user."""
     count = await service.delete_all_correlations(str(user.id))
     return {"deleted": count, "message": f"Deleted {count} correlation(s)"}
 
 
 @router.delete("/{correlation_id}", status_code=200)
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
 async def delete_single_correlation(
+    request: Request,
     correlation_id: str,
     user: User = Depends(get_current_user),
 ):

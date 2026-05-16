@@ -88,12 +88,15 @@ function AgentRow({ agent, onClick }: { agent: WazuhAgent; onClick: () => void }
   );
 }
 
+const AGENTS_PER_PAGE = 10;
+
 export default function AgentsMonitor() {
   const navigate = useNavigate();
   const [agents, setAgents] = useState<WazuhAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
 
   const load = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -119,6 +122,8 @@ export default function AgentsMonitor() {
   const active       = agents.filter((a) => a.status === "active").length;
   const disconnected = agents.filter((a) => a.status === "disconnected").length;
   const pending      = agents.filter((a) => a.status === "pending" || a.status === "never_connected").length;
+  const totalPages   = Math.max(1, Math.ceil(agents.length / AGENTS_PER_PAGE));
+  const pagedAgents  = agents.slice((page - 1) * AGENTS_PER_PAGE, page * AGENTS_PER_PAGE);
 
   const handleAgentClick = (agent: WazuhAgent) => {
     navigate(`${ROUTES.ALERTS}?agent_name=${encodeURIComponent(agent.name)}`);
@@ -191,17 +196,36 @@ export default function AgentsMonitor() {
             </p>
           </div>
         ) : (
-          agents.map((agent) => (
+          pagedAgents.map((agent) => (
             <AgentRow key={agent.id} agent={agent} onClick={() => handleAgentClick(agent)} />
           ))
         )}
 
         {!loading && !error && agents.length > 0 && (
           <div
-            className="px-4 py-2.5 text-xs border-t"
+            className="px-4 py-2.5 text-xs border-t flex items-center justify-between"
             style={{ color: "var(--text-3)", borderColor: "var(--border)", background: "var(--bg-2)" }}
           >
-            {agents.length} agent{agents.length !== 1 ? "s" : ""} total · click a row to filter alerts by agent
+            <span>{agents.length} agent{agents.length !== 1 ? "s" : ""} total · click a row to filter alerts by agent</span>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => p - 1)}
+                  disabled={page === 1}
+                  className="btn btn-sm disabled:opacity-40"
+                  style={{ fontSize: 11, padding: "2px 8px" }}
+                >← Prev</button>
+                <span className="mono" style={{ fontSize: 11 }}>
+                  {page}/{totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={page >= totalPages}
+                  className="btn btn-sm disabled:opacity-40"
+                  style={{ fontSize: 11, padding: "2px 8px" }}
+                >Next →</button>
+              </div>
+            )}
           </div>
         )}
       </div>

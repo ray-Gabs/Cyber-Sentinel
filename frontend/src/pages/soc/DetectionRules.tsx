@@ -72,6 +72,7 @@ function RuleFormModal({ initial, onSave, onClose, saving, title, projects }: Ru
   );
   const [patternError, setPatternError] = useState("");
   const [testInput, setTestInput]       = useState("");
+  const [saveError, setSaveError]       = useState("");
 
   const set = <K extends keyof DetectionRuleCreate>(field: K, value: DetectionRuleCreate[K]) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -88,7 +89,12 @@ function RuleFormModal({ initial, onSave, onClose, saving, title, projects }: Ru
     if (!isValidRegex(form.pattern)) { setPatternError("Invalid regular expression."); return; }
     if (scope === "project" && !form.project_id) { return; }
     setPatternError("");
-    await onSave(form);
+    setSaveError("");
+    try {
+      await onSave(form);
+    } catch {
+      setSaveError("Failed to save rule — the server returned an error. Check your connection and try again.");
+    }
   };
 
   const testStatus = (() => {
@@ -255,6 +261,15 @@ function RuleFormModal({ initial, onSave, onClose, saving, title, projects }: Ru
             </div>
           </div>
 
+          {saveError && (
+            <div
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs"
+              style={{ backgroundColor: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "var(--sev-critical)" }}
+            >
+              <Icon name="alertCircle" size={13} />
+              {saveError}
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn btn-sm" disabled={saving}>Cancel</button>
             <button
@@ -417,6 +432,8 @@ export default function DetectionRules() {
   const [confirmDeleteRule, setConfirmDeleteRule] = useState<DetectionRule | null>(null);
   const [saving, setSaving]                     = useState(false);
   const [search, setSearch]                     = useState("");
+  const [myRulesPage, setMyRulesPage]           = useState(1);
+  const RULES_PER_PAGE = 10;
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -454,6 +471,12 @@ export default function DetectionRules() {
       )
     : myRules;
 
+  const myRulesTotalPages = Math.max(1, Math.ceil(filteredMyRules.length / RULES_PER_PAGE));
+  const pagedMyRules = filteredMyRules.slice(
+    (myRulesPage - 1) * RULES_PER_PAGE,
+    myRulesPage * RULES_PER_PAGE
+  );
+
   const personalCount = myRules.filter((r) => !r.project_id).length;
   const projectCount  = myRules.filter((r) => !!r.project_id).length;
   const activeCount   = rules.filter((r) => r.enabled).length;
@@ -470,8 +493,9 @@ export default function DetectionRules() {
       }
       setModalMode(null);
       setEditTarget(null);
-    } catch {
+    } catch (err) {
       setError("Failed to save rule.");
+      throw err;
     } finally {
       setSaving(false);
     }
@@ -631,7 +655,7 @@ export default function DetectionRules() {
                       style={{ color: "var(--text)", width: "140px" }}
                       placeholder="Filter rules…"
                       value={search}
-                      onChange={(e) => setSearch(e.target.value)}
+                      onChange={(e) => { setSearch(e.target.value); setMyRulesPage(1); }}
                     />
                   </div>
                 )}
@@ -658,18 +682,39 @@ export default function DetectionRules() {
                   No rules match "{search}"
                 </p>
               ) : (
-                <div className="space-y-2">
-                  {filteredMyRules.map((rule) => (
-                    <UserRuleRow
-                      key={rule.id}
-                      rule={rule}
-                      projectName={rule.project_id ? projectById[rule.project_id] : undefined}
-                      onToggle={handleToggle}
-                      onEdit={openEdit}
-                      onDelete={handleDelete}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="space-y-2">
+                    {pagedMyRules.map((rule) => (
+                      <UserRuleRow
+                        key={rule.id}
+                        rule={rule}
+                        projectName={rule.project_id ? projectById[rule.project_id] : undefined}
+                        onToggle={handleToggle}
+                        onEdit={openEdit}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </div>
+                  {myRulesTotalPages > 1 && (
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-xs mono" style={{ color: "var(--text-3)" }}>
+                        {(myRulesPage - 1) * RULES_PER_PAGE + 1}–{Math.min(myRulesPage * RULES_PER_PAGE, filteredMyRules.length)} of {filteredMyRules.length} rules
+                      </span>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setMyRulesPage((p) => p - 1)}
+                          disabled={myRulesPage === 1}
+                          className="btn btn-sm disabled:opacity-40"
+                        >← Prev</button>
+                        <button
+                          onClick={() => setMyRulesPage((p) => p + 1)}
+                          disabled={myRulesPage >= myRulesTotalPages}
+                          className="btn btn-sm disabled:opacity-40"
+                        >Next →</button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </section>
 

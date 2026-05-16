@@ -63,9 +63,9 @@ export async function updateProfile(data: UpdateProfileRequest): Promise<UserRes
 
 // ── Admin ──────────────────────────────────────────────────────────────────
 
-/** GET /api/auth/users → list all users (admin only) */
-export async function listUsers(): Promise<UserResponse[]> {
-  const res = await api.get<UserResponse[]>("/auth/users");
+/** GET /api/auth/users → list all users (admin only), paginated */
+export async function listUsers(page = 1, size = 50): Promise<UserResponse[]> {
+  const res = await api.get<UserResponse[]>(`/auth/users?page=${page}&size=${size}`);
   return res.data;
 }
 
