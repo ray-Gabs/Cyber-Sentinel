@@ -90,6 +90,14 @@ async def ingest_wazuh_alert(
     from domains.soc.mitre_attack import extract_wazuh_mitre
     wazuh_mitre = extract_wazuh_mitre(raw)
 
+    rule_level = rule.get("level", 0)
+
+    # Pre-classify low-level alerts at ingestion — no LLM needed.
+    # rule_level < 4 alerts are routine events (heartbeats, inventory, syscheck noise)
+    # that the triage pipeline intentionally skips. Marking them immediately keeps
+    # UNANALYSED count meaningful (only high-priority alerts waiting for LLM).
+    pre_verdict = "LOW_PRIORITY" if rule_level < 4 else None
+
     alert = Alert(
         wazuh_id=str(wazuh_id),
         timestamp=raw.get("timestamp", datetime.now(timezone.utc)),
@@ -98,7 +106,7 @@ async def ingest_wazuh_alert(
         agent_ip=agent.get("ip", ""),
         rule_id=str(rule.get("id", "")),
         rule_description=rule.get("description", ""),
-        rule_level=rule.get("level", 0),
+        rule_level=rule_level,
         rule_groups=rule.get("groups", []),
         full_log=full_log,
         data=raw.get("data"),
@@ -107,6 +115,8 @@ async def ingest_wazuh_alert(
         agent_group=raw.get("_cs_group", ""),
         mitre_techniques=wazuh_mitre,
         mitre_tactics=list({t["tactic"] for t in wazuh_mitre}) if wazuh_mitre else [],
+        ai_verdict=pre_verdict,
+        ai_action="DISMISS" if pre_verdict else None,
     )
     await alert.insert()
 

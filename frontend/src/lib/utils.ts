@@ -17,23 +17,42 @@ export function formatDate(iso: string): string {
   });
 }
 
-/** Format relative time (e.g., "5 minutes ago") */
-export function timeAgo(iso: string): string {
-  const seconds = Math.floor(
-    (Date.now() - new Date(iso).getTime()) / 1000
-  );
-  const intervals: [number, string][] = [
-    [31536000, "year"],
-    [2592000, "month"],
-    [86400, "day"],
-    [3600, "hour"],
-    [60, "minute"],
-  ];
-  for (const [secs, label] of intervals) {
-    const count = Math.floor(seconds / secs);
-    if (count >= 1) return `${count} ${label}${count > 1 ? "s" : ""} ago`;
+/**
+ * Compact timestamp for SIEM alert lists.
+ * Today  → "HH:MM:SS"
+ * Other  → "Mon DD  HH:MM"
+ */
+export function formatAlertTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  if (isToday) {
+    return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   }
-  return "just now";
+  const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return `${date}  ${time}`;
+}
+
+/** Format relative time with sub-hour precision for SIEM use cases */
+export function timeAgo(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (isNaN(ms)) return "—";
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60)  return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60)  return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  const mins  = minutes % 60;
+  if (hours < 24)    return mins > 0 ? `${hours}h ${mins}m ago` : `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30)     return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12)   return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
 }
 
 /** Truncate long strings */

@@ -47,7 +47,7 @@ except Exception:
 try:
     _VERSION: str = (_pathlib.Path(__file__).parent.parent / "VERSION").read_text().strip()
 except FileNotFoundError:
-    _VERSION = "1.0.1"
+    _VERSION = "1.0.2"
 
 
 # --------------- WebSocket Redis Relay ---------------
@@ -269,7 +269,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Cyber Sentinel API",
     description="Unified Pentesting & SOC Platform",
-    version="1.0.1",
+    version="1.0.2",
     lifespan=lifespan,
 )
 
@@ -465,7 +465,7 @@ async def health():
         content={
             "status": overall,
             "service": "Cyber Sentinel",
-            "version": "1.0.1",
+            "version": "1.0.2",
             "uptime_seconds": int(_time.time() - _start_time),
             "checks": checks,
         },

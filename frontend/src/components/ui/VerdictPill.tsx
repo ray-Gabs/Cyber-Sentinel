@@ -10,6 +10,7 @@ const VERDICT_MAP: Record<string, { tone: "critical" | "high" | "medium" | "info
   unknown:        { tone: "info",     label: "UNKNOWN"        },
   unanalyzed:     { tone: "low",      label: "UNANALYZED"     },
   triage_failed:  { tone: "high",     label: "TRIAGE FAILED"  },
+  low_priority:   { tone: "low",      label: "LOW PRIORITY"   },
 };
 
 export function VerdictPill({ verdict }: VerdictPillProps) {

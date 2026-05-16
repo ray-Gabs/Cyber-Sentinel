@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { getAlerts, getAlertStats } from "@/services/alertService";
+import { getAlerts, getAlertStats, retriageAllUntriaged, classifyLowPriorityAlerts } from "@/services/alertService";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useAuth } from "@/hooks/useAuth";
-import { timeAgo, showToast } from "@/lib/utils";
+import { timeAgo, showToast, formatAlertTime } from "@/lib/utils";
 import { Icon, Badge, KPI, PageHead, VerdictPill } from "@/components/ui";
 import { exportSocAlertsPDF } from "@/lib/exportSocAlerts";
 import type { AlertSummary, AlertStats } from "@/types";
@@ -60,6 +60,8 @@ export default function AlertFeed() {
   const [page,          setPage]          = useState(1);
   const [liveCount,     setLiveCount]     = useState(0);
   const [showFP,        setShowFP]        = useState(false);
+  const [triaging,      setTriaging]      = useState(false);
+  const [classifying,   setClassifying]   = useState(false);
   const [kbFocus,       setKbFocus]       = useState(-1);
   const kbFocusRef                        = useRef(-1);
   const displayedAlertsRef                = useRef<AlertSummary[]>([]);
@@ -77,6 +79,8 @@ export default function AlertFeed() {
   const [displayPage,  setDisplayPage]  = useState(1);
   const [exportingPdf, setExportingPdf] = useState(false);
   const DISPLAY_SIZE = 10;
+  const knownAgentsSet                  = useRef<Set<string>>(new Set());
+  const [knownAgents,  setKnownAgents]  = useState<string[]>([]);
 
   const { messages } = useWebSocket<{ type: string; alert_id?: string }>({ channel: "alerts" });
 
@@ -95,9 +99,23 @@ export default function AlertFeed() {
         }),
         getAlertStats(),
       ]);
-      if (data.status === "fulfilled")  setAlerts(data.value);
-      else setFetchError("Failed to load alerts. Check that the backend is running.");
-      if (stats.status === "fulfilled") setAlertStats(stats.value);
+      if (data.status === "fulfilled") {
+        setAlerts(data.value);
+        const fresh = (data.value as AlertSummary[])
+          .map((a) => a.agent_name)
+          .filter((n): n is string => Boolean(n));
+        fresh.forEach((a) => knownAgentsSet.current.add(a));
+      } else setFetchError("Failed to load alerts. Check that the backend is running.");
+      if (stats.status === "fulfilled") {
+        setAlertStats(stats.value);
+        // Seed agent list from top_agents aggregation — covers ALL agents in the
+        // DB, not just those that appear in the current 50-alert page.
+        (stats.value.top_agents ?? [])
+          .map((a: { _id: string }) => a._id)
+          .filter(Boolean)
+          .forEach((a: string) => knownAgentsSet.current.add(a));
+      }
+      setKnownAgents([...knownAgentsSet.current]);
     } finally {
       setLoading(false);
       setIsFetching(false);
@@ -152,10 +170,9 @@ export default function AlertFeed() {
     return () => window.removeEventListener("keydown", handler);
   }, [navigate]);
 
-  const uniqueAgents = [...new Set(alerts.map((a) => a.agent_name).filter(Boolean))];
   const realAlerts   = alerts.filter((a) => a.ai_verdict !== "FALSE_POSITIVE");
   const fpAlerts     = alerts.filter((a) => a.ai_verdict === "FALSE_POSITIVE");
-  const displayedAlerts = [...realAlerts, ...(showFP ? fpAlerts : [])];
+  const displayedAlerts = [...realAlerts, ...(showFP || filterVerdict === "FALSE_POSITIVE" ? fpAlerts : [])];
   kbFocusRef.current          = kbFocus;
   displayedAlertsRef.current  = displayedAlerts;
 
@@ -169,11 +186,16 @@ export default function AlertFeed() {
     }
     if (filterStatus === "triaged")   list = list.filter(a => a.ai_verdict && a.ai_verdict !== "UNANALYZED");
     if (filterStatus === "untriaged") list = list.filter(a => !a.ai_verdict || a.ai_verdict === "UNANALYZED");
-    const cutoff = Date.now() - filterDays * 86400000;
-    list = list.filter(a => new Date(a.timestamp ?? 0).getTime() >= cutoff);
+    // Skip the date cutoff when a verdict tab is active — verdict filters are
+    // all-time (matching the tab counts from alertStats), so hiding old results
+    // would show 0 alerts even though the tab count says otherwise.
+    if (!filterVerdict) {
+      const cutoff = Date.now() - filterDays * 86400000;
+      list = list.filter(a => new Date(a.timestamp ?? 0).getTime() >= cutoff);
+    }
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alerts, showFP, filterSev, filterStatus, filterDays]);
+  }, [alerts, showFP, filterSev, filterStatus, filterDays, filterVerdict]);
 
   // Reset display page when filters change
   useEffect(() => { setDisplayPage(1); }, [filterVerdict, filterLevel, filterAgent, filterGroup, filterMitre, filterSev, filterStatus, filterDays, showFP]);
@@ -185,7 +207,7 @@ export default function AlertFeed() {
   const socTP        = alertStats?.by_verdict?.["TRUE_POSITIVE"] ?? 0;
   const socFP        = alertStats?.by_verdict?.["FALSE_POSITIVE"] ?? 0;
   const socUnknown   = alertStats?.by_verdict?.["UNKNOWN"] ?? 0;
-  const untriaged    = alertStats?.by_verdict?.["UNANALYZED"] ?? 0;
+  const untriaged    = alertStats?.by_verdict?.["UNANALYSED"] ?? 0;
 
   const tabItems = VERDICT_FILTERS.map((f) => ({
     id: f.value || "all",
@@ -254,6 +276,43 @@ export default function AlertFeed() {
           >
             <Icon name="download" size={12} /> {exportingPdf ? "Exporting…" : "Export"}
           </button>
+          {user?.role?.toLowerCase() === "admin" && (<>
+            <button
+              className="btn btn-sm"
+              disabled={classifying}
+              title="One-time fix: mark all rule_level < 4 alerts as LOW PRIORITY (instant DB update)"
+              onClick={async () => {
+                setClassifying(true);
+                try {
+                  const r = await classifyLowPriorityAlerts();
+                  alert(`Marked ${r.updated.toLocaleString()} low-level alerts as LOW PRIORITY. Refresh to see updated counts.`);
+                  fetchAlerts();
+                } catch { alert("Failed — check backend logs."); }
+                finally { setClassifying(false); }
+              }}
+              style={{ display: "flex", alignItems: "center", gap: 6 }}
+            >
+              <Icon name="filter" size={12} style={{ animation: classifying ? "spin 1s linear infinite" : undefined }} />
+              {classifying ? "Classifying…" : "Fix Historical"}
+            </button>
+            <button
+              className="btn btn-sm"
+              disabled={triaging}
+              title="Queue all unanalysed rule_level ≥ 4 alerts for AI triage"
+              onClick={async () => {
+                setTriaging(true);
+                try {
+                  const r = await retriageAllUntriaged();
+                  alert(`Queued ${r.queued.toLocaleString()} alerts for triage. Results will appear as the worker processes them.`);
+                } catch { alert("Failed to queue triage — check backend logs."); }
+                finally { setTriaging(false); }
+              }}
+              style={{ display: "flex", alignItems: "center", gap: 6 }}
+            >
+              <Icon name="zap" size={12} style={{ animation: triaging ? "spin 1s linear infinite" : undefined }} />
+              {triaging ? "Queuing…" : "Triage Pending"}
+            </button>
+          </>)}
           <button className="btn btn-sm btn-primary" onClick={() => { setLoading(true); fetchAlerts(); }} disabled={isFetching}
             style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <Icon name="refresh" size={12} style={{ animation: isFetching ? "spin 1s linear infinite" : undefined }} />
@@ -356,12 +415,12 @@ export default function AlertFeed() {
                 </button>
               ))}
 
-              {(uniqueAgents.length > 0 || filterAgent) && (
+              {(knownAgents.length > 0 || filterAgent) && (
                 <select className="input" style={{ fontSize: 11, height: 26, padding: "0 8px", maxWidth: 160 }}
                   value={filterAgent} onChange={(e) => { setFilterAgent(e.target.value); setPage(1); }}>
                   <option value="">All Agents</option>
-                  {filterAgent && !uniqueAgents.includes(filterAgent) && <option value={filterAgent}>{filterAgent}</option>}
-                  {uniqueAgents.map((a) => <option key={a} value={a}>{a}</option>)}
+                  {filterAgent && !knownAgents.includes(filterAgent) && <option value={filterAgent}>{filterAgent}</option>}
+                  {knownAgents.map((a) => <option key={a} value={a}>{a}</option>)}
                 </select>
               )}
 
@@ -437,7 +496,15 @@ export default function AlertFeed() {
                           ) : <span className="dim">—</span>}
                         </td>
                         <td><VerdictPill verdict={alert.ai_verdict || "unanalyzed"} /></td>
-                        <td><span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>{timeAgo(alert.timestamp)}</span></td>
+                        <td>
+                          <span
+                            className="mono"
+                            style={{ fontSize: 11, color: "var(--text-3)", whiteSpace: "nowrap" }}
+                            title={alert.timestamp ? `${new Date(alert.timestamp).toUTCString()}  ·  ${timeAgo(alert.timestamp)}` : "—"}
+                          >
+                            {formatAlertTime(alert.timestamp)}
+                          </span>
+                        </td>
                         <td><Icon name="chevR" size={13} style={{ color: "var(--text-4)" }} /></td>
                       </tr>
                     );
