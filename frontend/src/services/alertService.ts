@@ -218,6 +218,12 @@ export async function retriageAllUntriaged(): Promise<AdminRetriangeResult> {
   return res.data;
 }
 
+/** POST /api/alerts/admin/classify-low-priority → bulk-mark rule_level < 4 as LOW_PRIORITY (admin) */
+export async function classifyLowPriorityAlerts(): Promise<{ updated: number }> {
+  const res = await api.post<{ updated: number }>("/alerts/admin/classify-low-priority");
+  return res.data;
+}
+
 /** POST /api/alerts/retriage-mine → queue triage for current user's untriaged alerts (any role) */
 export async function retriageMyAlerts(): Promise<AdminRetriangeResult> {
   const res = await api.post<AdminRetriangeResult>("/alerts/retriage-mine");

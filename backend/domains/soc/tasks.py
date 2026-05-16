@@ -165,17 +165,31 @@ async def _drain_async():
     import redis.asyncio as aioredis
     r = aioredis.from_url(settings.app_redis_url, socket_connect_timeout=2)
     try:
-        items = await r.zpopmin("soc:triage_pending", count=5)
-        if not items:
-            return
+        items = await r.zpopmin("soc:triage_pending", count=15)
         alert_ids = [
             item[0].decode() if isinstance(item[0], bytes) else item[0]
             for item in items
         ]
+
+        # Fallback: Redis queue empty → pull unanalyzed alerts directly from MongoDB.
+        # This handles alerts ingested without being queued (old data, Wazuh poll
+        # failures, restarts, or webhook bypass of the Redis push path).
+        # Only fetch rule_level >= 4: lower-level alerts are intentionally skipped
+        # by the LLM stage and would loop forever if included here.
+        if not alert_ids:
+            from domains.soc.models import Alert
+            pending = await (
+                Alert.find({"ai_verdict": None, "rule_level": {"$gte": 4}})
+                .sort("timestamp")
+                .limit(5)
+                .to_list()
+            )
+            alert_ids = [str(a.id) for a in pending]
+
+        if not alert_ids:
+            return
+
         log.info("SOC drain processing batch", count=len(alert_ids), service="celery-soc")
-        # Use run_triage_pipeline directly — not batch_retriage, which resets
-        # existing verdicts. Freshly ingested alerts should be triaged for the
-        # first time, not have their state wiped before pipeline runs.
         from domains.soc.triage_pipeline import run_triage_pipeline
         for i in range(0, len(alert_ids), 2):
             batch = alert_ids[i : i + 2]

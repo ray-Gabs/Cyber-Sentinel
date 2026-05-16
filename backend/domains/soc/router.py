@@ -591,30 +591,75 @@ async def admin_claim_alerts(user: User = Depends(get_current_user)):
     return {"claimed": count, "tenant_id": str(user.id)}
 
 
+@router.post("/admin/classify-low-priority")
+async def admin_classify_low_priority(user: User = Depends(get_current_user)):
+    """
+    Admin only: bulk-mark all existing rule_level < 4 alerts as LOW_PRIORITY.
+    Single MongoDB updateMany — runs in milliseconds regardless of count.
+    Call once after deployment to clean up historical UNANALYSED noise.
+    """
+    if (user.role or "").lower() != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+
+    col = Alert.get_motor_collection()
+    result = await col.update_many(
+        {"rule_level": {"$lt": 4}, "ai_verdict": None},
+        {"$set": {"ai_verdict": "LOW_PRIORITY", "ai_action": "DISMISS"}},
+    )
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="alerts.bulk_classify_low_priority",
+        resource_type="alert",
+        resource_id="*",
+        details=f"marked {result.modified_count} low-level alerts as LOW_PRIORITY",
+    )
+    return {"updated": result.modified_count}
+
+
 @router.post("/admin/retriage-all")
 async def admin_retriage_all(user: User = Depends(get_current_user)):
     """
-    Admin only: queue Celery triage tasks for all untriaged/failed alerts in this tenant.
+    Admin only: push all unanalysed/failed alerts (rule_level >= 4) into the
+    Redis triage queue so the drain task processes them at a controlled rate.
 
-    Returns immediately — processing happens asynchronously in the Celery worker.
-    Covers alerts where ai_verdict is None or TRIAGE_FAILED (previous attempt errored).
+    Returns immediately — processing happens in the background celery-soc worker.
     """
-    if user.role != "admin":
+    if (user.role or "").lower() != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
-    alerts = await Alert.find({
-        "tenant_id": str(user.id),
-        "$or": [{"ai_verdict": None}, {"ai_verdict": "TRIAGE_FAILED"}],
-    }).to_list()
+    # Find all alerts that need triage — no tenant filter for admins so that
+    # alerts ingested via the forwarder (no tenant_id) are included.
+    # Use motor directly to fetch only _id, avoiding full document deserialization.
+    col = Alert.get_motor_collection()
+    cursor = col.find(
+        {"rule_level": {"$gte": 4},
+         "$or": [{"ai_verdict": None}, {"ai_verdict": "TRIAGE_FAILED"}]},
+        {"_id": 1},
+    )
+    alert_ids = [str(doc["_id"]) async for doc in cursor]
 
-    from domains.soc.tasks import triage_single_alert
+    if not alert_ids:
+        return {"queued": 0, "total_untriaged": 0}
+
+    import time
+    import redis.asyncio as aioredis
+    from core.config import settings
+
+    r = aioredis.from_url(settings.app_redis_url, socket_connect_timeout=3)
     queued = 0
-    for alert in alerts:
-        try:
-            triage_single_alert.delay(str(alert.id))
-            queued += 1
-        except Exception as exc:
-            log.warning("[admin] Failed to queue triage for %s: %s", alert.id, exc)
+    try:
+        now = time.time()
+        # Pipeline all zadd calls to avoid N round-trips
+        pipe = r.pipeline()
+        for i, aid in enumerate(alert_ids):
+            pipe.zadd("soc:triage_pending", {aid: now + i * 0.001}, nx=True)
+        results = await pipe.execute()
+        queued = sum(1 for v in results if v)
+    except Exception as exc:
+        log.warning("[admin] Failed to push triage queue: %s", exc)
+    finally:
+        await r.aclose()
 
     await audit_service.log_event(
         user_id=str(user.id),
@@ -622,9 +667,9 @@ async def admin_retriage_all(user: User = Depends(get_current_user)):
         action="alerts.bulk_retriage_queued",
         resource_type="alert",
         resource_id="*",
-        details=f"queued triage for {queued}/{len(alerts)} alerts",
+        details=f"queued {queued}/{len(alert_ids)} alerts into soc:triage_pending",
     )
-    return {"queued": queued, "total_untriaged": len(alerts)}
+    return {"queued": queued, "total_untriaged": len(alert_ids)}
 
 
 @router.post("/retriage-mine")
