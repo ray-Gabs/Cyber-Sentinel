@@ -7,25 +7,35 @@ export interface ScanReportData {
 
 /* ── Constants ───────────────────────────────────────────────────────────── */
 
-const SEVERITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+const SEV_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 
 const SEV_COLOR: Record<string, string> = {
   critical: "#dc2626", high: "#ea580c", medium: "#ca8a04", low: "#16a34a", info: "#475569",
 };
-const SEV_BG: Record<string, string> = {
-  critical: "#fef2f2", high: "#fff7ed", medium: "#fefce8", low: "#f0fdf4", info: "#f1f5f9",
+const SEV_SOFT: Record<string, string> = {
+  critical: "rgba(220,38,38,0.10)", high: "rgba(234,88,12,0.10)",
+  medium: "rgba(202,138,4,0.12)", low: "rgba(22,163,74,0.10)", info: "rgba(71,85,105,0.10)",
 };
 const SLA_LABEL: Record<string, string> = {
-  critical: "≤ 24 h", high: "≤ 7 days", medium: "≤ 30 days", low: "Next sprint", info: "Informational",
+  critical: "≤ 24h", high: "≤ 7 days", medium: "≤ 30 days", low: "Next sprint", info: "Informational",
 };
 const SCAN_TYPE_LABELS: Record<string, string> = {
-  quick: "Quick Scan", full: "Full Scan", passive: "Passive Scan",
-  network: "Network Scan", api: "API Scan",
+  quick: "Quick", full: "Full", passive: "Passive", network: "Network", api: "API",
 };
 const TOOL_LABELS: Record<string, string> = {
-  nmap: "Nmap", nuclei: "Nuclei", sslyze: "SSLyze",
-  whatweb: "WhatWeb", zap: "OWASP ZAP",
+  nmap: "Nmap Port Scan", nuclei: "Nuclei Scanner", sslyze: "SSL/TLS Analyzer",
+  whatweb: "WhatWeb", zap: "ZAP DAST", fingerprinter: "Fingerprinter",
+  subdomain_enum: "Subdomain Enum", crawler: "Web Crawler", dir_brute: "Dir Bruter",
+  sqli: "SQLi Check", xss: "XSS Check", idor: "IDOR Check",
+  redirect: "Redirect Check", auth: "Auth Check", ssrf: "SSRF Check",
+  misconfig: "Misconfig Check", supply_chain: "Supply Chain",
+  insecure_design: "Design Check", integrity: "Integrity Check", error_handling: "Error Handling",
 };
+
+/* Pagination constants */
+const FINDINGS_PER_PAGE = 22;
+const AI_PER_PAGE = 2;
+const FIX_PER_PAGE = 3;
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -42,504 +52,687 @@ function formatDate(ts: string | undefined): string {
 
 function formatDateTime(ts: string | undefined): string {
   if (!ts) return "—";
-  return new Date(ts).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(ts).toLocaleString("en-US", {
+    year: "numeric", month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
 }
 
-function durationMin(start: string | undefined, end: string | undefined): string {
+function durationLabel(start: string | undefined, end: string | undefined): string {
   if (!start || !end) return "—";
   const ms = new Date(end).getTime() - new Date(start).getTime();
-  const min = Math.round(ms / 60000);
-  return min < 1 ? "< 1 min" : `${min} min`;
+  const s  = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m  = Math.floor(s / 60);
+  const rs = s % 60;
+  return rs > 0 ? `${m}m ${rs}s` : `${m}m`;
 }
 
 function riskColor(score: number): string {
-  if (score >= 7) return "#dc2626";
-  if (score >= 4) return "#ca8a04";
-  return "#16a34a";
+  return score >= 7 ? "#dc2626" : score >= 4 ? "#ca8a04" : "#16a34a";
 }
-
 function riskLabel(score: number): string {
-  if (score >= 7) return "High Risk";
-  if (score >= 4) return "Medium Risk";
-  return "Low Risk";
+  return score >= 7 ? "HIGH RISK" : score >= 4 ? "MEDIUM RISK" : "LOW RISK";
+}
+function riskSoftBg(score: number): string {
+  return score >= 7 ? "rgba(220,38,38,0.10)" : score >= 4 ? "rgba(202,138,4,0.12)" : "rgba(22,163,74,0.10)";
 }
 
-function sevBadge(sev: string): string {
-  const c  = SEV_COLOR[sev.toLowerCase()] ?? "#475569";
-  const bg = SEV_BG[sev.toLowerCase()]   ?? "#f1f5f9";
-  return `<span class="sev-badge" style="background:${bg};color:${c};border-color:${c}">${esc(sev.toUpperCase())}</span>`;
+function badge(sev: string): string {
+  const k  = sev.toLowerCase();
+  const c  = SEV_COLOR[k] ?? "#475569";
+  const bg = SEV_SOFT[k]  ?? "rgba(71,85,105,0.10)";
+  return `<span class="badge dot" style="background:${bg};color:${c}">${esc(sev.toUpperCase())}</span>`;
+}
+
+function toolBadge(status: string): string {
+  const map: Record<string, [string, string]> = {
+    completed: ["rgba(22,163,74,0.10)", "#16a34a"],
+    success:   ["rgba(22,163,74,0.10)", "#16a34a"],
+    timeout:   ["rgba(202,138,4,0.12)", "#ca8a04"],
+    failed:    ["rgba(220,38,38,0.10)", "#dc2626"],
+    error:     ["rgba(220,38,38,0.10)", "#dc2626"],
+    skipped:   ["#f4f4f5", "#71717a"],
+  };
+  const [bg, c] = map[status?.toLowerCase()] ?? ["#f4f4f5", "#71717a"];
+  return `<span class="badge dot" style="background:${bg};color:${c}">${esc(status?.toUpperCase() ?? "—")}</span>`;
 }
 
 function countBySev(findings: Finding[]): Record<string, number> {
-  const counts: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
-  for (const f of findings) { const k = f.severity?.toLowerCase() ?? "info"; if (k in counts) counts[k]++; }
-  return counts;
+  const out: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+  for (const f of findings) {
+    const k = f.severity?.toLowerCase() ?? "info";
+    if (k in out) out[k]++;
+  }
+  return out;
 }
 
 function parseAiSections(text: string | undefined): { title: string; body: string }[] {
-  if (!text) return [];
+  if (!text?.trim()) return [];
   const parts = text.split(/^---\s+(.+?)\s+---$/m);
-  if (parts.length < 3) return [{ title: "Analysis", body: text }];
-  const sections: { title: string; body: string }[] = [];
+  if (parts.length < 3) return [{ title: "Analysis", body: text.trim() }];
+  const out: { title: string; body: string }[] = [];
   for (let i = 1; i < parts.length; i += 2) {
-    sections.push({ title: parts[i].trim(), body: (parts[i + 1] ?? "").trim() });
+    out.push({ title: parts[i].trim(), body: (parts[i + 1] ?? "").trim() });
   }
-  return sections;
+  return out;
 }
 
 function nl2p(text: string): string {
-  return text.split(/\n\n+/).filter(Boolean).map(p =>
-    `<p>${esc(p.trim()).replace(/\n/g, "<br>")}</p>`
-  ).join("");
+  return text.split(/\n\n+/).filter(Boolean)
+    .map(p => `<p>${esc(p.trim()).replace(/\n/g, "<br>")}</p>`)
+    .join("");
 }
 
-function owaspRows(findings: Finding[]): string {
-  const owaspMap: Record<string, { count: number; sevs: string[] }> = {};
-  for (const f of findings) {
-    const cat = f.owasp_category || "Uncategorized";
-    if (!owaspMap[cat]) owaspMap[cat] = { count: 0, sevs: [] };
-    owaspMap[cat].count++;
-    if (!owaspMap[cat].sevs.includes(f.severity)) owaspMap[cat].sevs.push(f.severity);
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/* ── Page component helpers ──────────────────────────────────────────────── */
+
+function pgHeader(dateStr: string): string {
+  return `<div class="pg-header">
+    <div class="brand"><div class="mark"></div><b>Cyber Sentinel</b></div>
+    <div class="pg-meta">
+      <span>${esc(dateStr)}</span>
+      <span class="dot"></span>
+      <span>CONFIDENTIAL</span>
+    </div>
+  </div>`;
+}
+
+function pgFooter(left: string, pageLabel: string): string {
+  return `<div class="pg-footer">
+    <span>${esc(left)}</span>
+    <span class="conf">CONFIDENTIAL</span>
+    <span>${esc(pageLabel)}</span>
+  </div>`;
+}
+
+function eyebrow(text: string): string {
+  return `<div class="eyebrow">${esc(text)}</div>`;
+}
+
+/* ── Finders register rows (shared between pages) ───────────────────────── */
+
+function findingRows(findings: Finding[], offset: number): string {
+  return findings.map((f, i) => `<tr>
+    <td class="num-cell">${offset + i + 1}</td>
+    <td>${badge(f.severity ?? "info")}</td>
+    <td>${esc(f.name)}</td>
+    <td class="mono-cell">${esc(TOOL_LABELS[f.tool ?? ""] ?? f.tool ?? "—")}</td>
+    <td class="dim-cell">${esc(f.owasp_category ?? "—")}</td>
+    <td class="dim-cell">${esc(f.confidence ?? "—")}</td>
+  </tr>`).join("");
+}
+
+/* ── Tool coverage ───────────────────────────────────────────────────────── */
+
+function toolRows(toolEvents: Scan["tool_events"]): string {
+  if (!toolEvents?.length) {
+    return `<tr><td colspan="4" style="color:var(--ink-3);font-style:italic">No tool data recorded</td></tr>`;
   }
-  const entries = Object.entries(owaspMap).sort(([, a], [, b]) => b.count - a.count);
-  const maxCount = Math.max(...entries.map(([, v]) => v.count), 1);
-  return entries.map(([cat, { count, sevs }]) => {
-    const worstSev = sevs.sort((a, b) => (SEVERITY_ORDER[a] ?? 5) - (SEVERITY_ORDER[b] ?? 5))[0];
-    const c = SEV_COLOR[worstSev] ?? "#475569";
-    const pct = (count / maxCount * 100).toFixed(1);
-    return `<div class="owasp-row">
-      <span class="owasp-cat">${esc(cat)}</span>
-      <div class="owasp-bar-wrap"><div class="owasp-bar" style="width:${pct}%;background:${c}"></div></div>
-      <span class="owasp-count">${count}</span>
-      <span>${sevBadge(worstSev ?? "info")}</span>
-    </div>`;
-  }).join("");
-}
-
-function toolCoverageRows(toolEvents: Scan["tool_events"]): string {
-  if (!toolEvents?.length) return `<tr><td colspan="4" style="color:var(--ink3);font-size:9px">No tool data</td></tr>`;
   return toolEvents.map(e => {
-    const status = e.status;
-    const statusColor = status === "completed" ? "#16a34a" : status === "failed" ? "#dc2626" : "#ca8a04";
-    const elapsed = e.elapsed_seconds != null ? `${e.elapsed_seconds.toFixed(1)} s` : "—";
+    const elapsed = e.elapsed_seconds != null ? `${e.elapsed_seconds.toFixed(1)}s` : "—";
     return `<tr>
       <td>${esc(TOOL_LABELS[e.tool] ?? e.tool)}</td>
-      <td><span class="tool-status" style="color:${statusColor}">${esc(status.toUpperCase())}</span></td>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:9px">${e.findings_count ?? 0}</td>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink3)">${elapsed}</td>
+      <td>${toolBadge(e.status)}</td>
+      <td class="num-cell">${e.findings_count ?? 0}</td>
+      <td class="mono-cell">${elapsed}</td>
     </tr>`;
   }).join("");
 }
 
-function fixCards(findings: Finding[]): string {
-  const sorted = [...findings].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 5) - (SEVERITY_ORDER[b.severity] ?? 5));
-  return sorted.map((f, i) => {
-    const c = SEV_COLOR[f.severity?.toLowerCase()] ?? "#475569";
-    const steps = (f.remediation_steps ?? []).filter(Boolean);
-    const stepsHtml = steps.length
-      ? `<ol class="fix-steps">${steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol>`
-      : "";
-    return `<div class="fix-card" style="border-left-color:${c}">
-      <div class="fix-head">
-        <span class="fix-num">${i + 1}</span>
-        <span class="fix-title">${esc(f.name)}</span>
-        ${sevBadge(f.severity ?? "info")}
-      </div>
-      ${f.plain_english ? `<p class="fix-body">${esc(f.plain_english)}</p>` : ""}
-      ${f.affected_url || f.matched_at ? `<div class="fix-loc">${esc(f.affected_url || f.matched_at)}</div>` : ""}
-      ${stepsHtml}
-      ${f.business_impact ? `<p class="fix-impact">${esc(f.business_impact)}</p>` : ""}
+/* ── OWASP distribution ──────────────────────────────────────────────────── */
+
+function owaspList(findings: Finding[]): string {
+  const map: Record<string, { count: number; sevs: string[] }> = {};
+  for (const f of findings) {
+    const cat = f.owasp_category || "Uncategorized";
+    if (!map[cat]) map[cat] = { count: 0, sevs: [] };
+    map[cat].count++;
+    if (f.severity && !map[cat].sevs.includes(f.severity)) map[cat].sevs.push(f.severity);
+  }
+  const entries = Object.entries(map).sort(([, a], [, b]) => b.count - a.count);
+  const maxCount = Math.max(...entries.map(([, v]) => v.count), 1);
+  return entries.map(([cat, { count, sevs }]) => {
+    const worst = sevs.sort((a, b) => (SEV_ORDER[a] ?? 5) - (SEV_ORDER[b] ?? 5))[0] ?? "info";
+    const pct = (count / maxCount * 100).toFixed(1);
+    return `<div class="owasp-row">
+      <span class="code">${esc(cat)}</span>
+      <span class="owasp-name">${esc(cat)}</span>
+      <span class="owasp-count">${count}<span class="small"> / ${findings.length}</span></span>
+      <span class="sev-col">${badge(worst)}</span>
     </div>`;
   }).join("");
 }
 
-/* ── HTML builder ────────────────────────────────────────────────────────── */
+/* ── CSS ─────────────────────────────────────────────────────────────────── */
 
-function buildHtml(data: ScanReportData): string {
-  const { scan } = data;
-  const now = new Date();
-  const generated = now.toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  const dateStr = now.toISOString().slice(0, 10);
+const CSS = `
+:root {
+  --bg: #ffffff; --paper: #fafaf7; --paper-2: #f4f4ef;
+  --ink: #18181b; --ink-2: #3f3f46; --ink-3: #71717a; --ink-4: #a1a1aa;
+  --rule: #e4e4e7; --rule-2: #d4d4d8;
+  --accent: #2563eb; --accent-2: #1e3a8a; --accent-soft: rgba(37,99,235,0.08);
+  --sev-critical: #dc2626; --sev-high: #ea580c; --sev-medium: #ca8a04;
+  --sev-low: #16a34a; --sev-info: #475569;
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-serif: 'Instrument Serif', serif;
+}
+* { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; padding: 0; background: #d4d4d8; font-family: var(--font-sans); font-size: 10pt; line-height: 1.55; color: var(--ink); }
 
-  const findings = (scan.findings ?? []).sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 5) - (SEVERITY_ORDER[b.severity] ?? 5));
-  const sevCounts = countBySev(findings);
-  const riskScore = scan.risk_score ?? 0;
-  const riskPct   = Math.min(100, (riskScore / 10) * 100);
-  const rc = riskColor(riskScore);
-  const rl = riskLabel(riskScore);
-  const duration = durationMin(scan.created_at, scan.completed_at);
-  const scanTypeLabel = SCAN_TYPE_LABELS[scan.scan_type] ?? scan.scan_type ?? "Scan";
+/* ── Page shell ── */
+.page {
+  width: 210mm; min-height: 297mm;
+  margin: 24px auto;
+  background: var(--bg);
+  padding: 16mm 16mm 22mm;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 10px 30px -10px rgba(0,0,0,0.18);
+  page-break-after: always;
+}
+.page:last-child { page-break-after: auto; }
 
-  const sevTotal = Object.values(sevCounts).reduce((a, b) => a + b, 0) || 1;
-  const sevStrip = (["critical", "high", "medium", "low", "info"] as const).map(sev => {
-    const pct = (sevCounts[sev] / sevTotal * 100).toFixed(1);
-    return `<div style="width:${pct}%;background:${SEV_COLOR[sev]};height:100%;min-width:${sevCounts[sev] > 0 ? 2 : 0}px"></div>`;
-  }).join("");
+/* ── Cover ── */
+.page.cover-page { padding: 0; }
+.cover {
+  min-height: calc(297mm - 48px);
+  display: flex; flex-direction: column;
+  padding: 18mm;
+  background: var(--bg);
+  color: var(--ink);
+  position: relative;
+  overflow: hidden;
+}
+.cover::before {
+  content: ''; position: absolute; inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(24,24,27,0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(24,24,27,0.045) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 80% 60% at top right, black 20%, transparent 75%);
+  pointer-events: none;
+}
+.cover::after {
+  content: ''; position: absolute; right: -120px; top: -120px;
+  width: 460px; height: 460px;
+  background: radial-gradient(circle, rgba(37,99,235,0.10), transparent 60%);
+  pointer-events: none;
+}
+.cover > * { position: relative; z-index: 1; }
+.cover-top { display: flex; align-items: center; justify-content: space-between; }
+.cover .confidential { font-family: var(--font-mono); font-size: 8pt; letter-spacing: 0.2em; color: var(--sev-critical); }
+.cover-rule { height: 1px; background: var(--rule); margin: 18mm 0 0; position: relative; }
+.cover-rule::before { content: ''; position: absolute; left: 0; top: -0.5px; width: 56px; height: 2px; background: var(--accent); border-radius: 1px; }
+.cover-body { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; }
+.cover-eyebrow {
+  font-family: var(--font-mono); font-size: 9pt; color: var(--accent);
+  letter-spacing: 0.18em; margin-bottom: 22px;
+  display: flex; align-items: center; gap: 10px;
+}
+.cover-eyebrow::before { content: ''; width: 22px; height: 2px; background: var(--accent); border-radius: 1px; }
+.cover h1 { font-family: var(--font-serif); font-size: 64pt; line-height: 0.92; color: var(--ink); margin-bottom: 20px; font-weight: 400; }
+.cover h1 .accent { color: var(--accent); font-style: italic; }
+.target-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; background: var(--paper);
+  border: 1px solid var(--rule); border-radius: 6px; margin-bottom: 28px;
+}
+.target-row .label { font-family: var(--font-mono); font-size: 8pt; color: var(--ink-3); letter-spacing: 0.14em; text-transform: uppercase; }
+.target-row .target { font-family: var(--font-mono); font-size: 13pt; color: var(--accent); word-break: break-all; flex: 1; }
+.cover-meta {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 18px 0;
+}
+.cover-meta > div { padding: 0 18px; border-right: 1px solid var(--rule); }
+.cover-meta > div:first-child { padding-left: 0; }
+.cover-meta > div:last-child { border-right: 0; padding-right: 0; }
+.cover-meta .label { font-family: var(--font-mono); font-size: 7.5pt; letter-spacing: 0.14em; color: var(--ink-3); text-transform: uppercase; margin-bottom: 8px; }
+.cover-meta .value { font-size: 15pt; font-weight: 500; color: var(--ink); letter-spacing: -0.01em; }
+.cover-meta .value.mono { font-family: var(--font-mono); font-size: 12pt; }
+.cover-foot {
+  margin-top: 24px; display: flex; align-items: center; justify-content: space-between;
+  font-family: var(--font-mono); font-size: 8.5pt; color: var(--ink-3); letter-spacing: 0.04em;
+}
 
-  const aiSections = parseAiSections(scan.ai_summary);
-  const aiHtml = aiSections.map(({ title, body }, ix) =>
-    `<div class="ai-section">
-      <div class="ai-head">
-        <span class="ai-ix">${String(ix + 1).padStart(2, "0")}</span>
-        <h3 class="ai-title">${esc(title)}</h3>
-      </div>
-      <div class="ai-body">${nl2p(body)}</div>
-    </div>`
-  ).join("");
+/* ── Running header ── */
+.pg-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 10px; border-bottom: 1px solid var(--rule); margin-bottom: 22px;
+}
+.brand { display: flex; align-items: center; gap: 9px; }
+.mark {
+  width: 18px; height: 18px; border-radius: 4px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  position: relative; flex-shrink: 0;
+}
+.mark::after {
+  content: ''; position: absolute; inset: 5px;
+  background: white; clip-path: polygon(50% 0, 100% 25%, 100% 65%, 50% 100%, 0 65%, 0 25%);
+}
+.brand b { font-size: 11pt; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.pg-meta { font-family: var(--font-mono); font-size: 8pt; color: var(--ink-3); display: flex; align-items: center; gap: 14px; }
+.pg-meta .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--ink-4); }
 
-  const remediationSections = parseAiSections(scan.ai_remediation);
-  const remHtml = remediationSections.length
-    ? remediationSections.map(({ title, body }, ix) =>
-        `<div class="ai-section">
-          <div class="ai-head">
-            <span class="ai-ix">${String(ix + 1).padStart(2, "0")}</span>
-            <h3 class="ai-title">${esc(title)}</h3>
-          </div>
-          <div class="ai-body">${nl2p(body)}</div>
-        </div>`
-      ).join("")
-    : (scan.ai_remediation ? `<div class="ai-body">${nl2p(scan.ai_remediation)}</div>` : "");
+/* ── Running footer ── */
+.pg-footer {
+  position: absolute; left: 16mm; right: 16mm; bottom: 12mm;
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 10px; border-top: 1px solid var(--rule);
+  font-family: var(--font-mono); font-size: 8pt; color: var(--ink-3);
+}
+.pg-footer .conf { color: var(--sev-critical); letter-spacing: 0.12em; }
 
-  const findingsTableRows = findings.map((f, i) => `<tr>
-    <td style="width:28px;text-align:center;color:var(--ink3);font-family:'JetBrains Mono',monospace;font-size:8.5px">${i + 1}</td>
-    <td style="width:75px">${sevBadge(f.severity ?? "info")}</td>
-    <td>${esc(f.name)}</td>
-    <td style="width:90px;font-family:'JetBrains Mono',monospace;font-size:8.5px">${esc(TOOL_LABELS[f.tool] ?? f.tool)}</td>
-    <td style="width:130px;font-size:9px;color:var(--ink3)">${esc(f.owasp_category ?? "—")}</td>
-    <td style="width:80px;font-size:9px">${esc(f.confidence ?? "—")}</td>
-  </tr>`).join("");
+/* ── Typography ── */
+.eyebrow {
+  font-family: var(--font-mono); font-size: 8pt; letter-spacing: 0.14em;
+  color: var(--ink-3); text-transform: uppercase;
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.eyebrow::before { content: ''; width: 16px; height: 2px; background: var(--accent); border-radius: 1px; }
+h2 { font-size: 18pt; font-weight: 600; letter-spacing: -0.022em; line-height: 1.15; margin: 0 0 14px; color: var(--ink); }
+h3 { font-size: 11pt; font-weight: 600; letter-spacing: -0.005em; margin: 0 0 6px; color: var(--ink); }
+p.lead { font-size: 10.5pt; color: var(--ink-2); max-width: 540px; margin: 0 0 18px; line-height: 1.6; }
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Security Assessment Report — ${esc(scan.target)}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
-<style>
-@page { size: A4 portrait; margin: 0; }
+/* ── Metadata grid ── */
+.meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; margin-bottom: 22px; }
+.meta-cell { background: white; padding: 12px 14px; }
+.meta-cell .label { font-family: var(--font-mono); font-size: 7.5pt; letter-spacing: 0.12em; color: var(--ink-3); text-transform: uppercase; margin-bottom: 5px; }
+.meta-cell .value { font-size: 10.5pt; color: var(--ink); font-weight: 500; word-break: break-all; }
+.meta-cell .value.mono { font-family: var(--font-mono); font-size: 9.5pt; }
+
+/* ── Risk block ── */
+.risk-block { background: linear-gradient(180deg,#fafaf7 0%,#fff 100%); border: 1px solid var(--rule); border-radius: 10px; padding: 20px 22px; margin-bottom: 22px; }
+.risk-row-inner { display: flex; align-items: flex-end; gap: 24px; margin-bottom: 16px; }
+.risk-num { font-family: var(--font-mono); font-size: 64pt; font-weight: 500; line-height: 0.88; letter-spacing: -0.04em; }
+.risk-num .denom { font-size: 22pt; color: var(--ink-3); font-weight: 400; }
+.risk-label-wrap { flex: 1; padding-bottom: 6px; }
+.risk-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 4px;
+  font-family: var(--font-mono); font-size: 9pt; font-weight: 600; letter-spacing: 0.1em;
+}
+.risk-tag::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.risk-desc { font-size: 9.5pt; color: var(--ink-2); margin-top: 10px; max-width: 360px; line-height: 1.55; }
+.risk-bar { height: 10px; border-radius: 5px; background: linear-gradient(90deg,#16a34a 0%,#16a34a 22%,#ca8a04 28%,#ca8a04 48%,#ea580c 54%,#ea580c 74%,#dc2626 80%,#dc2626 100%); position: relative; }
+.risk-bar::after {
+  content: ''; position: absolute; top: -4px; left: calc(var(--risk-pct,15%) - 9px);
+  width: 18px; height: 18px; background: white; border: 3px solid currentColor; border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+.risk-legend { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 7.5pt; color: var(--ink-3); margin-top: 10px; letter-spacing: 0.06em; }
+
+/* ── KPI row ── */
+.kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 20px; }
+.kpi { border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; background: white; position: relative; overflow: hidden; }
+.kpi::before { content: ''; position: absolute; top: 0; left: 0; bottom: 0; width: 3px; background: var(--bar, var(--ink-3)); }
+.kpi .label { font-family: var(--font-mono); font-size: 7.5pt; letter-spacing: 0.1em; color: var(--ink-3); text-transform: uppercase; padding-left: 8px; }
+.kpi .value { font-family: var(--font-mono); font-size: 24pt; font-weight: 500; margin-top: 4px; line-height: 1; letter-spacing: -0.02em; padding-left: 8px; color: var(--bar); }
+.kpi .action { font-size: 7.5pt; color: var(--ink-3); margin-top: 4px; padding-left: 8px; font-family: var(--font-mono); letter-spacing: 0.04em; }
+
+/* ── Severity strip ── */
+.sev-strip { display: flex; height: 28px; border-radius: 6px; overflow: hidden; margin-bottom: 6px; background: var(--paper); border: 1px solid var(--rule); }
+.sev-strip > span { display: flex; align-items: center; justify-content: center; height: 100%; font-family: var(--font-mono); font-size: 8.5pt; font-weight: 600; color: white; min-width: 1px; }
+.sev-strip > span.empty { background: var(--paper) !important; color: var(--ink-4); }
+.sev-legend { display: flex; gap: 16px; font-family: var(--font-mono); font-size: 8pt; color: var(--ink-3); margin-bottom: 18px; }
+.sev-legend .item { display: flex; align-items: center; gap: 5px; }
+.sev-legend .swatch { width: 8px; height: 8px; border-radius: 2px; }
+
+/* ── Tables ── */
+.tbl-card { border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; margin-bottom: 18px; background: white; }
+table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+table thead th {
+  text-align: left; font-family: var(--font-mono); font-size: 7.5pt; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3);
+  padding: 9px 12px; background: var(--paper); border-bottom: 1px solid var(--rule); white-space: nowrap;
+}
+table tbody td { padding: 8px 12px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+table tbody tr:last-child td { border-bottom: 0; }
+.num-cell { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-3); font-size: 8.5pt; }
+.mono-cell { font-family: var(--font-mono); font-size: 8.5pt; }
+.dim-cell { font-size: 9pt; color: var(--ink-3); }
+
+/* Badges */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 3px;
+  font-family: var(--font-mono); font-size: 7pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;
+}
+.badge.dot::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; display: inline-block; }
+
+/* ── OWASP ── */
+.owasp-list { display: grid; gap: 6px; }
+.owasp-row { display: grid; grid-template-columns: 100px 1fr 80px 100px; gap: 14px; align-items: center; padding: 11px 14px; background: white; border: 1px solid var(--rule); border-radius: 6px; }
+.owasp-row .code { font-family: var(--font-mono); font-size: 9pt; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 2px 7px; border-radius: 3px; text-align: center; }
+.owasp-name { font-size: 9.5pt; color: var(--ink); }
+.owasp-count { font-family: var(--font-mono); font-size: 11pt; font-weight: 600; text-align: right; color: var(--ink); }
+.owasp-count .small { font-size: 8pt; color: var(--ink-3); font-weight: 400; margin-left: 2px; }
+.sev-col { text-align: right; }
+
+/* ── AI sections ── */
+.ai-section { border: 1px solid var(--rule); border-radius: 10px; padding: 16px 20px; margin-bottom: 12px; background: white; page-break-inside: avoid; }
+.ai-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed var(--rule); }
+.ai-head .ix { width: 22px; height: 22px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-family: var(--font-mono); font-size: 9pt; font-weight: 700; }
+.ai-head h3 { font-size: 11pt; text-transform: capitalize; }
+.ai-head .pill { margin-left: auto; font-family: var(--font-mono); font-size: 7.5pt; color: var(--ink-3); letter-spacing: 0.1em; text-transform: uppercase; }
+.ai-body { font-size: 9.5pt; line-height: 1.65; color: var(--ink-2); }
+.ai-body p { margin: 0 0 8px; }
+.ai-body p:last-child { margin-bottom: 0; }
+
+/* ── Fix cards ── */
+.fix-card { border: 1px solid var(--rule); border-left: 3px solid var(--sev-medium); border-radius: 6px; padding: 14px 16px; margin-bottom: 10px; background: white; page-break-inside: avoid; }
+.fix-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.fix-title { font-size: 10pt; font-weight: 600; flex: 1; min-width: 200px; }
+.fix-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 10px; background: var(--paper); border-radius: 4px; font-size: 8.5pt; margin-bottom: 10px; }
+.fix-meta .k { font-family: var(--font-mono); font-size: 7pt; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.1em; }
+.fix-meta .v { color: var(--ink); font-weight: 500; margin-top: 2px; }
+.fix-steps { font-size: 9.3pt; color: var(--ink-2); line-height: 1.6; }
+.fix-steps ol { padding-left: 18px; margin: 0; }
+.fix-steps li { margin-bottom: 4px; }
+.fix-loc { font-family: var(--font-mono); font-size: 8.5pt; color: var(--ink-3); margin-bottom: 8px; word-break: break-all; }
+
+/* ── TOC ── */
+.toc { display: grid; gap: 2px; margin-bottom: 28px; }
+.toc-row { display: grid; grid-template-columns: 28px 1fr auto; align-items: baseline; gap: 14px; padding: 9px 0; border-bottom: 1px dashed var(--rule); font-size: 10.5pt; }
+.toc-row .ix { font-family: var(--font-mono); font-size: 9pt; color: var(--accent); font-weight: 600; }
+.toc-row .pg { font-family: var(--font-mono); font-size: 9pt; color: var(--ink-3); }
+
+/* ── Print overrides ── */
 @media print {
-  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { background: white; }
+  .page { margin: 0; box-shadow: none; }
   .no-print { display: none !important; }
-  .page-break { page-break-before: always; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; }
 }
-*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg: #fff; --paper: #fafaf7; --ink: #18181b; --ink2: #52525b; --ink3: #a1a1aa;
-  --border: #e4e4e7; --border2: #f4f4f5; --accent: #2563eb;
-  --font-serif: 'Instrument Serif', Georgia, serif;
-}
-body { background: var(--bg); color: var(--ink); font-family: 'Inter', system-ui, sans-serif; font-size: 10px; line-height: 1.6; }
+@page { size: A4; margin: 0; }
+`;
 
-/* ── Cover page ── */
-.cover-page {
-  width: 210mm; min-height: 297mm; padding: 0;
-  background: #0a0a14;
-  background-image:
-    linear-gradient(rgba(37,99,235,.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(37,99,235,.05) 1px, transparent 1px);
-  background-size: 32px 32px;
-  display: flex; flex-direction: column; justify-content: flex-end;
-  position: relative; overflow: hidden;
-  color: #fff;
-}
-.cover-glow {
-  position: absolute; top: -120px; right: -120px;
-  width: 480px; height: 480px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(37,99,235,.25) 0%, transparent 70%);
-  pointer-events: none;
-}
-.cover-glow2 {
-  position: absolute; bottom: 80px; left: -80px;
-  width: 300px; height: 300px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(99,102,241,.15) 0%, transparent 70%);
-  pointer-events: none;
-}
-.cover-inner { padding: 0 18mm 14mm; position: relative; z-index: 1; }
-.cover-eyebrow { font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,.45); margin-bottom: 18px; }
-.cover-h1 { font-family: var(--font-serif); font-size: 58pt; font-weight: 400; line-height: 1.0; margin-bottom: 6px; }
-.cover-h1 .accent { font-style: italic; color: #3b82f6; }
-.cover-target { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(255,255,255,.55); margin-bottom: 28px; }
-.cover-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-top: 1px solid rgba(255,255,255,.1); padding-top: 20px; }
-.cover-meta-item { padding: 0 16px 0 0; }
-.cover-meta-item:first-child { padding-left: 0; }
-.cmi-label { font-size: 7.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,.35); margin-bottom: 5px; }
-.cmi-val { font-size: 13px; font-weight: 700; color: #fff; font-family: 'JetBrains Mono', monospace; }
-.cover-brand { position: absolute; top: 14mm; left: 18mm; display: flex; align-items: center; gap: 8px; z-index: 1; }
-.cover-mark { width: 22px; height: 22px; border-radius: 5px; background: linear-gradient(135deg, #2563eb, #1e3a8a); position: relative; flex-shrink: 0; }
-.cover-mark::after { content: ''; position: absolute; inset: 6px; background: white; clip-path: polygon(50% 0, 100% 25%, 100% 65%, 50% 100%, 0 65%, 0 25%); }
-.cover-brand-name { font-size: 11px; font-weight: 700; color: rgba(255,255,255,.9); }
-.cover-brand-sub  { font-size: 8px; color: rgba(255,255,255,.4); letter-spacing: 0.08em; text-transform: uppercase; }
+/* ── Full HTML builder ────────────────────────────────────────────────────── */
 
-/* ── Content pages ── */
-.content-page { padding: 13mm 16mm 16mm; position: relative; }
-/* Header */
-.page-header { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 9px; border-bottom: 2px solid var(--accent); margin-bottom: 16px; }
-.mark { width: 18px; height: 18px; border-radius: 4px; background: linear-gradient(135deg, #2563eb, #1e3a8a); position: relative; flex-shrink: 0; }
-.mark::after { content: ''; position: absolute; inset: 4px; background: white; clip-path: polygon(50% 0, 100% 25%, 100% 65%, 50% 100%, 0 65%, 0 25%); }
-.page-title { font-size: 14px; font-weight: 800; letter-spacing: -0.02em; }
-.page-sub { font-size: 9px; color: var(--ink3); margin-top: 2px; }
-.page-meta { text-align: right; font-size: 7.5px; color: var(--ink3); line-height: 1.8; }
-/* Sections */
-.section { margin-bottom: 20px; }
-.sec-title { font-size: 8.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); border-bottom: 1px solid var(--border); padding-bottom: 5px; margin-bottom: 12px; }
-/* Risk gauge */
-.risk-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-.risk-box { border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; background: var(--paper); }
-.risk-score-display { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; }
-.risk-score-num { font-size: 38px; font-weight: 800; font-family: 'JetBrains Mono', monospace; letter-spacing: -0.04em; }
-.risk-score-denom { font-size: 14px; color: var(--ink3); }
-.risk-label { font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
-.risk-bar-wrap { position: relative; height: 8px; background: var(--border2); border-radius: 4px; overflow: hidden; }
-.risk-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
-/* KPI grid */
-.kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px; }
-.kpi-cell { border: 1px solid var(--border); border-radius: 6px; padding: 9px 10px 9px 13px; position: relative; overflow: hidden; background: var(--paper); }
-.kpi-cell::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--bar, var(--accent)); border-radius: 6px 0 0 6px; }
-.kpi-cell-label { display: block; font-size: 7.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); margin-bottom: 3px; }
-.kpi-cell-count { display: block; font-size: 22px; font-weight: 700; font-family: 'JetBrains Mono', monospace; letter-spacing: -0.04em; }
-.kpi-cell-sla { display: block; font-size: 7px; color: var(--ink3); margin-top: 2px; }
-/* Sev strip */
-.sev-strip { display: flex; height: 7px; border-radius: 4px; overflow: hidden; margin-bottom: 16px; }
-/* OWASP */
-.owasp-row { display: grid; grid-template-columns: 1fr 1fr 50px 80px; align-items: center; gap: 10px; margin-bottom: 6px; }
-.owasp-cat { font-size: 9px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.owasp-bar-wrap { height: 5px; background: var(--border2); border-radius: 3px; overflow: hidden; }
-.owasp-bar { height: 100%; border-radius: 3px; }
-.owasp-count { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--ink3); text-align: right; }
-/* Table */
-table.findings { width: 100%; border-collapse: collapse; }
-table.findings thead tr { background: var(--border2); }
-table.findings th { font-size: 7.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); padding: 6px 10px; text-align: left; border-bottom: 2px solid var(--border); white-space: nowrap; }
-table.findings td { padding: 5px 10px; border-bottom: 1px solid var(--border2); vertical-align: middle; font-size: 9.5px; color: var(--ink2); }
-.sev-badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 7.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid; }
-/* Tool coverage */
-table.tools { width: 100%; border-collapse: collapse; }
-table.tools th { font-size: 7.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); padding: 6px 10px; text-align: left; border-bottom: 2px solid var(--border); background: var(--border2); }
-table.tools td { padding: 5px 10px; border-bottom: 1px solid var(--border2); font-size: 9.5px; color: var(--ink2); }
-.tool-status { font-size: 8px; font-weight: 700; letter-spacing: 0.06em; }
-/* AI sections */
-.ai-section { border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; background: var(--paper); }
-.ai-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.ai-ix { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 4px; background: #eff6ff; color: #2563eb; font-size: 9px; font-weight: 700; font-family: 'JetBrains Mono', monospace; flex-shrink: 0; }
-.ai-title { font-size: 11px; font-weight: 700; color: var(--ink); }
-.ai-body p { font-size: 10px; color: var(--ink2); margin-bottom: 7px; line-height: 1.65; }
-.ai-body p:last-child { margin-bottom: 0; }
-/* Fix cards */
-.fix-card { border-left: 3px solid var(--border); padding: 10px 12px; margin-bottom: 10px; background: var(--paper); border-radius: 0 6px 6px 0; }
-.fix-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.fix-num { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 3px; background: var(--border2); color: var(--ink3); font-size: 8px; font-weight: 700; font-family: 'JetBrains Mono', monospace; flex-shrink: 0; }
-.fix-title { flex: 1; font-size: 10.5px; font-weight: 600; color: var(--ink); }
-.fix-body { font-size: 9.5px; color: var(--ink2); margin-bottom: 6px; line-height: 1.6; }
-.fix-loc { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: var(--ink3); margin-bottom: 6px; word-break: break-all; }
-.fix-steps { padding-left: 16px; margin-bottom: 6px; }
-.fix-steps li { font-size: 9.5px; color: var(--ink2); margin-bottom: 4px; }
-.fix-impact { font-size: 9px; color: var(--ink3); font-style: italic; }
-/* TOC */
-.toc-row { display: grid; grid-template-columns: 28px 1fr auto; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px dotted var(--border2); }
-.toc-num { font-size: 9px; font-family: 'JetBrains Mono', monospace; color: var(--ink3); }
-.toc-title { font-size: 10px; color: var(--ink); }
-.toc-pg { font-size: 9px; color: var(--ink3); font-family: 'JetBrains Mono', monospace; }
-/* Footer */
-.page-footer { margin-top: 14px; padding-top: 6px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 7.5px; color: var(--ink3); }
-/* Print button */
-.print-btn { position: fixed; bottom: 20px; right: 20px; background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; z-index: 9999; font-family: inherit; box-shadow: 0 4px 12px rgba(37,99,235,.3); }
-.print-btn:hover { background: #1d4ed8; }
-</style>
-</head>
-<body>
+function buildHtml(data: ScanReportData): string {
+  const { scan } = data;
+  const now       = new Date();
+  const generated = now.toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const dateStr   = now.toISOString().slice(0, 10);
+  const footLeft  = `Cyber Sentinel · Penetration Test Report`;
 
-<button class="print-btn no-print" onclick="window.print()">Print / Save PDF</button>
+  const findings   = [...(scan.findings ?? [])].sort((a, b) => (SEV_ORDER[a.severity ?? "info"] ?? 5) - (SEV_ORDER[b.severity ?? "info"] ?? 5));
+  const sevCounts  = countBySev(findings);
+  const riskScore  = scan.risk_score ?? 0;
+  const riskPct    = Math.min(100, (riskScore / 10) * 100);
+  const rc         = riskColor(riskScore);
+  const rl         = riskLabel(riskScore);
+  const riskBg     = riskSoftBg(riskScore);
+  const duration   = durationLabel(scan.created_at, scan.completed_at);
+  const scanLabel  = SCAN_TYPE_LABELS[scan.scan_type ?? ""] ?? scan.scan_type ?? "Scan";
 
-<!-- Cover page -->
-<div class="cover-page">
-  <div class="cover-glow"></div>
-  <div class="cover-glow2"></div>
-  <div class="cover-brand">
-    <div class="cover-mark"></div>
-    <div>
-      <div class="cover-brand-name">Cyber Sentinel</div>
-      <div class="cover-brand-sub">Security Platform</div>
+  const sevTotal = Math.max(Object.values(sevCounts).reduce((a, b) => a + b, 0), 1);
+  const sevStripHtml = (["critical", "high", "medium", "low", "info"] as const).map(sev => {
+    const cnt = sevCounts[sev];
+    const pct = (cnt / sevTotal * 100).toFixed(1);
+    return cnt > 0
+      ? `<span style="background:${SEV_COLOR[sev]};flex:${cnt}">${cnt} ${sev}</span>`
+      : `<span class="empty" style="flex:0"></span>`;
+  }).join("");
+
+  const aiSections  = parseAiSections(scan.ai_summary);
+  const remSections = parseAiSections(scan.ai_remediation);
+  const allAi       = [...aiSections, ...remSections];
+
+  const findingChunks  = chunk(findings, FINDINGS_PER_PAGE);
+  const aiGroups       = chunk(allAi, AI_PER_PAGE);
+  const actionFindings = findings.filter(f => f.remediation_steps?.length || f.plain_english);
+  const fixChunks      = chunk(actionFindings, FIX_PER_PAGE);
+
+  const hasOwasp = findings.some(f => f.owasp_category);
+
+  /* ── page counter ── */
+  let pn = 0;
+  const p = () => `${++pn}`;
+  const pages: string[] = [];
+
+  /* ─────────────────────────────────────────────
+     PAGE 1 · COVER
+  ───────────────────────────────────────────── */
+  pages.push(`<div class="page cover-page">
+  <div class="cover">
+    <div class="cover-top">
+      <div class="brand"><div class="mark"></div><b>Cyber Sentinel</b></div>
+      <div class="confidential">CONFIDENTIAL · RESTRICTED DISTRIBUTION</div>
     </div>
-  </div>
-  <div class="cover-inner">
-    <div class="cover-eyebrow">Smart City and Cybersecurity Lab &middot; ITS &middot; ${esc(formatDate(scan.created_at))}</div>
-    <div class="cover-h1">Security<br><span class="accent">assessment.</span></div>
-    <div class="cover-target">${esc(scan.target)}</div>
-    <div class="cover-meta">
-      <div class="cover-meta-item">
-        <div class="cmi-label">Scan Type</div>
-        <div class="cmi-val">${esc(scanTypeLabel)}</div>
+    <div class="cover-rule"></div>
+    <div class="cover-body">
+      <div class="cover-eyebrow">PENETRATION TEST REPORT · ${esc(formatDate(scan.created_at))}</div>
+      <h1>Security<br><span class="accent">assessment.</span></h1>
+      <div class="target-row">
+        <div class="label">Target</div>
+        <div class="target">${esc(scan.target)}</div>
       </div>
-      <div class="cover-meta-item">
-        <div class="cmi-label">Duration</div>
-        <div class="cmi-val">${esc(duration)}</div>
+      <div class="cover-meta">
+        <div><div class="label">Scan Type</div><div class="value">${esc(scanLabel)}</div></div>
+        <div><div class="label">Duration</div><div class="value mono">${esc(duration)}</div></div>
+        <div><div class="label">Risk Score</div><div class="value mono" style="color:${rc}">${riskScore.toFixed(1)} / 10</div></div>
+        <div><div class="label">Findings</div><div class="value mono">${findings.length}</div></div>
       </div>
-      <div class="cover-meta-item">
-        <div class="cmi-label">Risk Score</div>
-        <div class="cmi-val" style="color:${rc}">${riskScore.toFixed(1)}<span style="font-size:9px;color:rgba(255,255,255,.4)">/10</span></div>
-      </div>
-      <div class="cover-meta-item">
-        <div class="cmi-label">Findings</div>
-        <div class="cmi-val">${findings.length}</div>
+      <div class="cover-foot">
+        <span>SMART CITY &amp; CYBERSECURITY LAB · INSTITUT TEKNOLOGI SEPULUH NOPEMBER</span>
+        <span>sentinel-engine · v1.0.0</span>
       </div>
     </div>
   </div>
-</div>
+</div>`);
+  pn = 1;
 
-<!-- Executive Summary -->
-<div class="content-page page-break">
-  <div class="page-header">
-    <div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <div class="mark"></div>
-        <div style="font-size:9px;font-weight:700;color:var(--ink3)">Cyber Sentinel</div>
-      </div>
-      <div class="page-title">Executive Summary</div>
-      <div class="page-sub">${esc(scan.target)} &middot; ${esc(scanTypeLabel)}</div>
+  /* ─────────────────────────────────────────────
+     PAGE 2 · OVERVIEW — metadata + risk + TOC
+  ───────────────────────────────────────────── */
+  const pg2 = p();
+  pages.push(`<div class="page">
+  ${pgHeader(generated)}
+  ${eyebrow("01 — Overview")}
+  <h2>Scan metadata</h2>
+  <div class="meta-grid">
+    <div class="meta-cell" style="grid-column:span 3">
+      <div class="label">Target URL</div><div class="value mono">${esc(scan.target)}</div>
     </div>
-    <div class="page-meta">
-      <div>Generated ${esc(generated)}</div>
-      <div>${findings.length} findings</div>
-    </div>
+    <div class="meta-cell"><div class="label">Scan Type</div><div class="value">${esc(scanLabel)}</div></div>
+    <div class="meta-cell"><div class="label">Generated</div><div class="value mono">${esc(generated)}</div></div>
+    <div class="meta-cell"><div class="label">Duration</div><div class="value mono">${esc(duration)}</div></div>
+    <div class="meta-cell"><div class="label">Risk Score</div><div class="value mono" style="color:${rc}">${riskScore.toFixed(1)} / 10.0</div></div>
+    <div class="meta-cell"><div class="label">Status</div><div class="value"><span class="badge dot" style="background:rgba(22,163,74,0.10);color:#16a34a">${esc(scan.status?.toUpperCase() ?? "COMPLETED")}</span></div></div>
+    <div class="meta-cell"><div class="label">Methodology</div><div class="value">OWASP Top 10 · 2025</div></div>
   </div>
-
-  <!-- Risk + scan info -->
-  <div class="risk-row">
-    <div class="risk-box">
-      <div style="font-size:7.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px">Risk Score</div>
-      <div class="risk-score-display">
-        <span class="risk-score-num" style="color:${rc}">${riskScore.toFixed(1)}</span>
-        <span class="risk-score-denom">/10</span>
-      </div>
-      <div class="risk-label" style="color:${rc}">${esc(rl)}</div>
-      <div class="risk-bar-wrap">
-        <div class="risk-bar-fill" style="width:${riskPct.toFixed(1)}%;background:${rc}"></div>
+  ${eyebrow("Risk level")}
+  <h2>Overall risk · ${esc(rl.replace(" RISK", ""))}</h2>
+  <div class="risk-block">
+    <div class="risk-row-inner">
+      <div class="risk-num" style="color:${rc}">${riskScore.toFixed(1)}<span class="denom"> / 10</span></div>
+      <div class="risk-label-wrap">
+        <span class="risk-tag" style="background:${riskBg};color:${rc}">${esc(rl)}</span>
+        <div class="risk-desc">${findings.length} findings across ${Object.values(sevCounts).filter(Boolean).length} severity levels.</div>
       </div>
     </div>
-    <div class="risk-box">
-      <div style="font-size:7.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px">Scan Details</div>
-      <table style="width:100%;border-collapse:collapse">
-        <tr><td style="padding:4px 0;font-size:9px;color:var(--ink3);width:90px">Target</td><td style="font-size:9px;font-family:'JetBrains Mono',monospace;word-break:break-all">${esc(scan.target)}</td></tr>
-        <tr><td style="padding:4px 0;font-size:9px;color:var(--ink3)">Scan type</td><td style="font-size:9px">${esc(scanTypeLabel)}</td></tr>
-        <tr><td style="padding:4px 0;font-size:9px;color:var(--ink3)">Started</td><td style="font-size:9px">${esc(formatDateTime(scan.created_at))}</td></tr>
-        <tr><td style="padding:4px 0;font-size:9px;color:var(--ink3)">Completed</td><td style="font-size:9px">${esc(formatDateTime(scan.completed_at))}</td></tr>
-        <tr><td style="padding:4px 0;font-size:9px;color:var(--ink3)">Duration</td><td style="font-size:9px">${esc(duration)}</td></tr>
-      </table>
-    </div>
+    <div class="risk-bar" style="--risk-pct:${riskPct.toFixed(1)}%;color:${rc}"></div>
+    <div class="risk-legend"><span style="color:${SEV_COLOR.low};font-weight:600">LOW</span><span>MODERATE</span><span>HIGH</span><span>CRITICAL</span></div>
   </div>
+  ${eyebrow("Contents")}
+  <h2 style="margin-bottom:10px">In this report</h2>
+  <div class="toc">
+    <div class="toc-row"><span class="ix">01</span><span>Scan metadata &amp; risk overview</span><span class="pg">p. ${pg2}</span></div>
+    <div class="toc-row"><span class="ix">02</span><span>Finding summary &amp; severity distribution</span><span class="pg">p. ${pn + 1}</span></div>
+    ${hasOwasp ? `<div class="toc-row"><span class="ix">03</span><span>OWASP Top 10 · 2025 distribution</span><span class="pg">p. ${pn + 2}</span></div>` : ""}
+    <div class="toc-row"><span class="ix">${hasOwasp ? "04" : "03"}</span><span>Findings register (${findings.length} findings)</span><span class="pg">p. —</span></div>
+    ${allAi.length ? `<div class="toc-row"><span class="ix">—</span><span>AI analysis &amp; recommendations</span><span class="pg">p. —</span></div>` : ""}
+    ${actionFindings.length ? `<div class="toc-row"><span class="ix">—</span><span>Per-finding remediation guide</span><span class="pg">p. —</span></div>` : ""}
+  </div>
+  ${pgFooter(footLeft, pg2)}
+</div>`);
 
-  <!-- Severity KPI grid -->
-  <div class="sec-title">Findings by Severity</div>
-  <div class="kpi-grid">
+  /* ─────────────────────────────────────────────
+     PAGE 3 · FINDING SUMMARY + TOOL COVERAGE
+  ───────────────────────────────────────────── */
+  pages.push(`<div class="page">
+  ${pgHeader(generated)}
+  ${eyebrow("02 — Finding summary")}
+  <h2>Severity distribution</h2>
+  <p class="lead">${findings.length} findings across ${Object.values(sevCounts).filter(Boolean).length} severity levels.</p>
+  <div class="kpi-row">
     ${(["critical","high","medium","low","info"] as const).map(sev =>
-      `<div class="kpi-cell" style="--bar:${SEV_COLOR[sev]}">
-        <span class="kpi-cell-label">${sev}</span>
-        <span class="kpi-cell-count" style="color:${SEV_COLOR[sev]}">${sevCounts[sev]}</span>
-        <span class="kpi-cell-sla">${SLA_LABEL[sev]}</span>
+      `<div class="kpi" style="--bar:${SEV_COLOR[sev]}">
+        <div class="label">${sev.charAt(0).toUpperCase() + sev.slice(1)}</div>
+        <div class="value">${sevCounts[sev]}</div>
+        <div class="action">${SLA_LABEL[sev]}</div>
       </div>`
     ).join("")}
   </div>
-
-  <!-- Distribution strip -->
-  <div class="sev-strip">${sevStrip}</div>
-
-  <!-- OWASP distribution -->
-  ${findings.some(f => f.owasp_category) ? `
-  <div class="sec-title">OWASP Category Distribution</div>
-  <div style="margin-bottom:16px">${owaspRows(findings)}</div>` : ""}
-
-  <!-- Tool coverage -->
-  <div class="sec-title">Tool Coverage</div>
-  <table class="tools">
-    <thead><tr><th>Tool</th><th>Status</th><th>Findings</th><th>Elapsed</th></tr></thead>
-    <tbody>${toolCoverageRows(scan.tool_events)}</tbody>
-  </table>
-
-  <div class="page-footer">
-    <span>Cyber Sentinel &mdash; Security Assessment Report &mdash; ${esc(scan.target)}</span>
-    <span>${esc(dateStr)}</span>
+  <div class="sev-strip">${sevStripHtml}</div>
+  <div class="sev-legend">
+    ${(["critical","high","medium","low","info"] as const).map(sev =>
+      `<span class="item"><span class="swatch" style="background:${SEV_COLOR[sev]}"></span>${sev.charAt(0).toUpperCase() + sev.slice(1)}</span>`
+    ).join("")}
+    <span class="item" style="margin-left:auto">${findings.length} total</span>
   </div>
-</div>
-
-<!-- Findings table -->
-<div class="content-page page-break">
-  <div class="page-header">
-    <div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <div class="mark"></div>
-        <div style="font-size:9px;font-weight:700;color:var(--ink3)">Cyber Sentinel</div>
-      </div>
-      <div class="page-title">Findings Register</div>
-      <div class="page-sub">${findings.length} findings &middot; sorted by severity</div>
-    </div>
-    <div class="page-meta"><div>Generated ${esc(generated)}</div></div>
+  ${eyebrow("03 — Tool coverage")}
+  <h2>${scan.tool_events?.length ?? 0} scanner modules</h2>
+  <div class="tbl-card">
+    <table>
+      <thead><tr><th>Module</th><th>Status</th><th style="text-align:right">Findings</th><th>Elapsed</th></tr></thead>
+      <tbody>${toolRows(scan.tool_events)}</tbody>
+    </table>
   </div>
-  <table class="findings">
-    <thead>
-      <tr>
-        <th style="width:28px">#</th>
-        <th style="width:75px">Severity</th>
+  ${pgFooter(footLeft, p())}
+</div>`);
+
+  /* ─────────────────────────────────────────────
+     PAGE 4 (optional) · OWASP DISTRIBUTION
+  ───────────────────────────────────────────── */
+  if (hasOwasp) {
+    pages.push(`<div class="page">
+  ${pgHeader(generated)}
+  ${eyebrow("04 — OWASP Top 10 · 2025")}
+  <h2>Distribution by category</h2>
+  <p class="lead">Findings mapped to the OWASP Top 10 · 2025 framework.</p>
+  <div class="owasp-list">${owaspList(findings)}</div>
+  ${pgFooter(footLeft, p())}
+</div>`);
+  }
+
+  /* ─────────────────────────────────────────────
+     PAGES · FINDINGS REGISTER (paginated)
+  ───────────────────────────────────────────── */
+  if (findings.length === 0) {
+    pages.push(`<div class="page">
+  ${pgHeader(generated)}
+  ${eyebrow(`${hasOwasp ? "05" : "04"} — Findings register`)}
+  <h2>No findings recorded</h2>
+  ${pgFooter(footLeft, p())}
+</div>`);
+  } else {
+    findingChunks.forEach((ch, ci) => {
+      const isFirst = ci === 0;
+      const sectionNum = hasOwasp ? "05" : "04";
+      pages.push(`<div class="page">
+  ${pgHeader(generated)}
+  ${isFirst ? eyebrow(`${sectionNum} — Findings register`) : `<div class="eyebrow" style="color:var(--ink-3)">Findings register (continued)</div>`}
+  ${isFirst ? `<h2>All findings · sorted by severity</h2>` : ""}
+  <div class="tbl-card">
+    <table>
+      <thead><tr>
+        <th style="width:32px;text-align:right">#</th>
+        <th style="width:90px">Severity</th>
         <th>Finding</th>
-        <th style="width:90px">Tool</th>
-        <th style="width:130px">OWASP</th>
+        <th style="width:130px">Tool</th>
+        <th style="width:140px">OWASP</th>
         <th style="width:80px">Confidence</th>
-      </tr>
-    </thead>
-    <tbody>${findingsTableRows}</tbody>
-  </table>
-  <div class="page-footer">
-    <span>Cyber Sentinel &mdash; Security Assessment Report &mdash; ${esc(scan.target)}</span>
-    <span>${esc(dateStr)}</span>
+      </tr></thead>
+      <tbody>${findingRows(ch, ci * FINDINGS_PER_PAGE)}</tbody>
+    </table>
   </div>
-</div>
+  ${pgFooter(footLeft, p())}
+</div>`);
+    });
+  }
 
-${aiHtml || remHtml ? `
-<!-- AI Analysis -->
-<div class="content-page page-break">
-  <div class="page-header">
-    <div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <div class="mark"></div>
-        <div style="font-size:9px;font-weight:700;color:var(--ink3)">Cyber Sentinel</div>
+  /* ─────────────────────────────────────────────
+     PAGES · AI ANALYSIS (paginated)
+  ───────────────────────────────────────────── */
+  if (allAi.length > 0) {
+    aiGroups.forEach((group, gi) => {
+      const isFirst = gi === 0;
+      pages.push(`<div class="page">
+  ${pgHeader(generated)}
+  ${isFirst ? eyebrow("AI analysis &amp; recommendations") : `<div class="eyebrow" style="color:var(--ink-3)">AI analysis (continued)</div>`}
+  ${isFirst ? `<h2>Engagement narrative</h2>` : ""}
+  ${group.map(({ title, body }, li) => {
+    const globalIx = gi * AI_PER_PAGE + li + 1;
+    return `<section class="ai-section">
+      <div class="ai-head">
+        <div class="ix">${String(globalIx).padStart(2, "0")}</div>
+        <h3>${esc(title)}</h3>
+        <span class="pill">AI GENERATED</span>
       </div>
-      <div class="page-title">AI Analysis</div>
-      <div class="page-sub">AI-generated assessment and remediation guidance</div>
-    </div>
-    <div class="page-meta"><div>Generated ${esc(generated)}</div></div>
-  </div>
-  ${aiHtml ? `<div class="sec-title">Summary</div>${aiHtml}` : ""}
-  ${remHtml ? `<div class="sec-title" style="margin-top:16px">Remediation Guidance</div>${remHtml}` : ""}
-  <div class="page-footer">
-    <span>Cyber Sentinel &mdash; Security Assessment Report &mdash; ${esc(scan.target)}</span>
-    <span>${esc(dateStr)}</span>
-  </div>
-</div>` : ""}
+      <div class="ai-body">${nl2p(body)}</div>
+    </section>`;
+  }).join("")}
+  ${pgFooter(footLeft, p())}
+</div>`);
+    });
+  }
 
-${findings.filter(f => f.remediation_steps?.length || f.plain_english).length ? `
-<!-- Fix cards -->
-<div class="content-page page-break">
-  <div class="page-header">
-    <div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <div class="mark"></div>
-        <div style="font-size:9px;font-weight:700;color:var(--ink3)">Cyber Sentinel</div>
+  /* ─────────────────────────────────────────────
+     PAGES · REMEDIATION CARDS (paginated)
+  ───────────────────────────────────────────── */
+  if (actionFindings.length > 0) {
+    fixChunks.forEach((ch, ci) => {
+      const isFirst = ci === 0;
+      pages.push(`<div class="page">
+  ${pgHeader(generated)}
+  ${isFirst ? eyebrow("Per-finding remediation guide") : `<div class="eyebrow" style="color:var(--ink-3)">Remediation guide (continued)</div>`}
+  ${isFirst ? `<h2>Step-by-step fixes · sorted by severity</h2>` : ""}
+  ${ch.map((f, li) => {
+    const globalIx = ci * FIX_PER_PAGE + li + 1;
+    const c   = SEV_COLOR[f.severity?.toLowerCase() ?? "info"] ?? "#475569";
+    const steps = (f.remediation_steps ?? []).filter(Boolean);
+    return `<div class="fix-card" style="border-left-color:${c}">
+      <div class="fix-head">
+        ${badge(f.severity ?? "info")}
+        <span class="fix-title">${esc(f.name)}</span>
+        <span style="font-family:var(--font-mono);font-size:7.5pt;color:var(--ink-4)">#${globalIx}</span>
       </div>
-      <div class="page-title">Remediation Cards</div>
-      <div class="page-sub">Actionable fixes sorted by severity</div>
-    </div>
-    <div class="page-meta"><div>Generated ${esc(generated)}</div></div>
-  </div>
-  ${fixCards(findings.filter(f => f.remediation_steps?.length || f.plain_english))}
-  <div class="page-footer">
-    <span>Cyber Sentinel &mdash; Security Assessment Report &mdash; ${esc(scan.target)}</span>
-    <span>${esc(dateStr)}</span>
-  </div>
-</div>` : ""}
+      <div class="fix-meta">
+        <div><div class="k">Severity</div><div class="v">${esc(f.severity ?? "—")}</div></div>
+        <div><div class="k">Confidence</div><div class="v">${esc(f.confidence ?? "—")}</div></div>
+        <div><div class="k">OWASP</div><div class="v">${esc(f.owasp_category ?? "—")}</div></div>
+      </div>
+      ${(f.affected_url || f.matched_at) ? `<div class="fix-loc">${esc(f.affected_url || f.matched_at)}</div>` : ""}
+      ${f.plain_english ? `<p style="font-size:9pt;color:var(--ink-2);margin-bottom:8px">${esc(f.plain_english)}</p>` : ""}
+      ${steps.length ? `<div class="fix-steps"><ol>${steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol></div>` : ""}
+    </div>`;
+  }).join("")}
+  ${pgFooter(footLeft, p())}
+</div>`);
+    });
+  }
 
+  /* ── Assemble ── */
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cyber Sentinel — Penetration Test Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
+<style>${CSS}</style>
+</head>
+<body>
+<button class="no-print" onclick="window.print()" style="position:fixed;bottom:20px;right:20px;background:#18181b;color:white;border:0;border-radius:8px;padding:10px 20px;font-size:12px;font-weight:500;cursor:pointer;z-index:100;box-shadow:0 8px 20px -8px rgba(0,0,0,0.4);font-family:sans-serif">Print / Save PDF</button>
+${pages.join("\n")}
 </body>
 </html>`;
 }
