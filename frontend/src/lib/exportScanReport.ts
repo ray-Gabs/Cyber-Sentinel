@@ -1,4 +1,5 @@
 import type { Scan, Finding } from "@/types/scan";
+import { downloadPDF } from "@/lib/pdfDownload";
 
 export interface ScanReportData {
   scan: Scan;
@@ -545,19 +546,8 @@ ${findings.filter(f => f.remediation_steps?.length || f.plain_english).length ? 
 
 /* ── Entry point ─────────────────────────────────────────────────────────── */
 
-export function exportScanReportPDF(data: ScanReportData): void {
+export async function exportScanReportPDF(data: ScanReportData): Promise<void> {
   const html = buildHtml(data);
-  const dateStr = new Date().toISOString().slice(0, 10);
-  const slug = data.scan.id?.slice(0, 8) ?? dateStr;
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const url  = URL.createObjectURL(blob);
-  const win  = window.open(url, "_blank", "noopener,noreferrer");
-  if (!win) { URL.revokeObjectURL(url); return; }
-  win.addEventListener("load", () => {
-    win.document.title = `cyber-sentinel-report-${slug}`;
-    setTimeout(() => {
-      win.print();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-    }, 400);
-  });
+  const slug = data.scan.id?.slice(0, 8) ?? new Date().toISOString().slice(0, 10);
+  await downloadPDF(html, `cyber-sentinel-report-${slug}`);
 }

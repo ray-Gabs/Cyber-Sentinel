@@ -9,6 +9,7 @@ import type { AuditLogEntry } from "@/types";
 import { Icon, PageHead, Tabs } from "@/components/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { exportAuditLogPDF } from "@/lib/exportAuditLog";
+import { showToast } from "@/lib/utils";
 
 const ACTION_TONE: Record<string, string> = {
   "user":    "accent",
@@ -109,6 +110,7 @@ export default function AuditLog() {
   const { user } = useAuth();
   const [logs, setLogs]       = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [error, setError]     = useState<string | null>(null);
   const [filter, setFilter]   = useState("all");
   const [page, setPage]       = useState(1);
@@ -167,10 +169,20 @@ export default function AuditLog() {
               <Icon name="download" size={13} /> Export CSV
             </button>
             <button
-              onClick={() => exportAuditLogPDF({ logs: filteredLogs, filter })}
+              disabled={exportingPdf}
+              onClick={async () => {
+                setExportingPdf(true);
+                try {
+                  await exportAuditLogPDF({ logs: filteredLogs, filter });
+                } catch (err) {
+                  showToast((err as Error).message ?? "PDF export failed", "error");
+                } finally {
+                  setExportingPdf(false);
+                }
+              }}
               className="btn btn-sm flex items-center gap-1.5"
             >
-              <Icon name="file" size={13} /> Export PDF
+              <Icon name="file" size={13} /> {exportingPdf ? "Exporting…" : "Export PDF"}
             </button>
             <button
               onClick={() => load()}

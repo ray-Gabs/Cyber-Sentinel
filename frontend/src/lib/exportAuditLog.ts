@@ -1,4 +1,5 @@
 import type { AuditLogEntry } from "@/types";
+import { downloadPDF } from "@/lib/pdfDownload";
 
 export interface AuditExportData {
   logs: AuditLogEntry[];
@@ -239,18 +240,8 @@ td.ip { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: var(-
 
 /* ── Entry point ─────────────────────────────────────────────────────────── */
 
-export function exportAuditLogPDF(data: AuditExportData): void {
-  const html = buildHtml(data);
+export async function exportAuditLogPDF(data: AuditExportData): Promise<void> {
+  const html    = buildHtml(data);
   const dateStr = new Date().toISOString().slice(0, 10);
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const url  = URL.createObjectURL(blob);
-  const win  = window.open(url, "_blank", "noopener,noreferrer");
-  if (!win) { URL.revokeObjectURL(url); return; }
-  win.addEventListener("load", () => {
-    win.document.title = `audit-log-${dateStr}`;
-    setTimeout(() => {
-      win.print();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-    }, 400);
-  });
+  await downloadPDF(html, `audit-log-${dateStr}`);
 }

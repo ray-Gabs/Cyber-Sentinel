@@ -1,4 +1,5 @@
 import type { AlertSummary, AlertStats } from "@/types/alert";
+import { downloadPDF } from "@/lib/pdfDownload";
 
 export interface SocExportData {
   alerts: AlertSummary[];
@@ -276,18 +277,8 @@ td.c-verd { width: 100px; }
 
 /* ── Entry point ─────────────────────────────────────────────────────────── */
 
-export function exportSocAlertsPDF(data: SocExportData): void {
-  const html = buildHtml(data);
+export async function exportSocAlertsPDF(data: SocExportData): Promise<void> {
+  const html    = buildHtml(data);
   const dateStr = new Date().toISOString().slice(0, 10);
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const url  = URL.createObjectURL(blob);
-  const win  = window.open(url, "_blank", "noopener,noreferrer");
-  if (!win) { URL.revokeObjectURL(url); return; }
-  win.addEventListener("load", () => {
-    win.document.title = `soc-alerts-${dateStr}`;
-    setTimeout(() => {
-      win.print();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-    }, 400);
-  });
+  await downloadPDF(html, `soc-alerts-${dateStr}`);
 }

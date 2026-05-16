@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { getAlerts, getAlertStats } from "@/services/alertService";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useAuth } from "@/hooks/useAuth";
-import { timeAgo } from "@/lib/utils";
+import { timeAgo, showToast } from "@/lib/utils";
 import { Icon, Badge, KPI, PageHead, VerdictPill } from "@/components/ui";
 import { exportSocAlertsPDF } from "@/lib/exportSocAlerts";
 import type { AlertSummary, AlertStats } from "@/types";
@@ -75,6 +75,7 @@ export default function AlertFeed() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterDays,   setFilterDays]   = useState<number>(7);
   const [displayPage,  setDisplayPage]  = useState(1);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const DISPLAY_SIZE = 10;
 
   const { messages } = useWebSocket<{ type: string; alert_id?: string }>({ channel: "alerts" });
@@ -238,10 +239,20 @@ export default function AlertFeed() {
           </button>
           <button
             className="btn btn-sm"
+            disabled={exportingPdf}
             style={{ display: "flex", alignItems: "center", gap: 6 }}
-            onClick={() => exportSocAlertsPDF({ alerts: filteredAlerts, stats: alertStats })}
+            onClick={async () => {
+              setExportingPdf(true);
+              try {
+                await exportSocAlertsPDF({ alerts: filteredAlerts, stats: alertStats });
+              } catch (err) {
+                showToast((err as Error).message ?? "PDF export failed", "error");
+              } finally {
+                setExportingPdf(false);
+              }
+            }}
           >
-            <Icon name="download" size={12} /> Export
+            <Icon name="download" size={12} /> {exportingPdf ? "Exporting…" : "Export"}
           </button>
           <button className="btn btn-sm btn-primary" onClick={() => { setLoading(true); fetchAlerts(); }} disabled={isFetching}
             style={{ display: "flex", alignItems: "center", gap: 6 }}>
