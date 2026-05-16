@@ -433,15 +433,19 @@ class LLMService:
         if tool_cov:
             prompt += f"Tool coverage: {json.dumps(tool_cov)}\n"
 
-        # Failed tools context — critical for accurate AI analysis
+        # Failed/unavailable tools context — critical for accurate AI analysis
         failed_tools = getattr(scan, "failed_tools", []) or []
         scan_coverage = getattr(scan, "scan_coverage", None)
         if failed_tools:
             prompt += f"IMPORTANT — Tools that failed or timed out: {', '.join(failed_tools)}\n"
             prompt += "Note: Findings from these tools are missing. The actual risk may be higher than reported.\n"
+        skipped_tools = [t for t, st in tool_cov.items() if st == "skipped"]
+        if skipped_tools:
+            prompt += f"Tools not available (binary/templates missing): {', '.join(skipped_tools)}\n"
+            prompt += "Note: No results from these tools — coverage is incomplete.\n"
         if scan_coverage is not None:
             pct = int(scan_coverage * 100)
-            prompt += f"Scan coverage: {pct}% of planned tools completed successfully\n"
+            prompt += f"Scan coverage: {pct}% of planned tools fully completed\n"
             if pct < 70:
                 prompt += f"WARNING: Low scan coverage ({pct}%). Risk score may underestimate actual exposure.\n"
 
@@ -667,12 +671,18 @@ class LLMService:
         scan_coverage = getattr(scan, "scan_coverage", None)
         failed_tools_ctx = ""
         if failed_tools:
-            failed_tools_ctx = f"Failed/skipped tools: {', '.join(failed_tools)}\n"
+            failed_tools_ctx = f"Tools that failed or timed out: {', '.join(failed_tools)}\n"
             failed_tools_ctx += "These tools did not produce results — actual risk may be higher.\n"
+        skipped_tools = [t for t, st in tool_cov.items() if st == "skipped"]
+        if skipped_tools:
+            failed_tools_ctx += f"Tools not available (binary/templates missing): {', '.join(skipped_tools)}\n"
+            failed_tools_ctx += "No results from these tools — actual exposure may be broader.\n"
         coverage_ctx = ""
         if scan_coverage is not None:
             pct = int(scan_coverage * 100)
-            coverage_ctx = f"Scan coverage: {pct}%\n"
+            coverage_ctx = f"Scan coverage: {pct}% (tools that fully completed)\n"
+            if pct < 70:
+                coverage_ctx += f"WARNING: Low scan coverage ({pct}%). Risk score may underestimate actual exposure.\n"
 
         # ZAP context for narrative
         zap_raw = getattr(scan, "zap_raw", None)
