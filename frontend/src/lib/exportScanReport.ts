@@ -50,13 +50,6 @@ function formatDate(ts: string | undefined): string {
   return new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 }
 
-function formatDateTime(ts: string | undefined): string {
-  if (!ts) return "—";
-  return new Date(ts).toLocaleString("en-US", {
-    year: "numeric", month: "short", day: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
-}
 
 function durationLabel(start: string | undefined, end: string | undefined): string {
   if (!start || !end) return "—";
@@ -196,10 +189,8 @@ function owaspList(findings: Finding[]): string {
     if (f.severity && !map[cat].sevs.includes(f.severity)) map[cat].sevs.push(f.severity);
   }
   const entries = Object.entries(map).sort(([, a], [, b]) => b.count - a.count);
-  const maxCount = Math.max(...entries.map(([, v]) => v.count), 1);
   return entries.map(([cat, { count, sevs }]) => {
     const worst = sevs.sort((a, b) => (SEV_ORDER[a] ?? 5) - (SEV_ORDER[b] ?? 5))[0] ?? "info";
-    const pct = (count / maxCount * 100).toFixed(1);
     return `<div class="owasp-row">
       <span class="code">${esc(cat)}</span>
       <span class="owasp-name">${esc(cat)}</span>
@@ -458,7 +449,6 @@ function buildHtml(data: ScanReportData): string {
   const { scan } = data;
   const now       = new Date();
   const generated = now.toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  const dateStr   = now.toISOString().slice(0, 10);
   const footLeft  = `Cyber Sentinel · Penetration Test Report`;
 
   const findings   = [...(scan.findings ?? [])].sort((a, b) => (SEV_ORDER[a.severity ?? "info"] ?? 5) - (SEV_ORDER[b.severity ?? "info"] ?? 5));
@@ -471,10 +461,8 @@ function buildHtml(data: ScanReportData): string {
   const duration   = durationLabel(scan.created_at, scan.completed_at);
   const scanLabel  = SCAN_TYPE_LABELS[scan.scan_type ?? ""] ?? scan.scan_type ?? "Scan";
 
-  const sevTotal = Math.max(Object.values(sevCounts).reduce((a, b) => a + b, 0), 1);
   const sevStripHtml = (["critical", "high", "medium", "low", "info"] as const).map(sev => {
     const cnt = sevCounts[sev];
-    const pct = (cnt / sevTotal * 100).toFixed(1);
     return cnt > 0
       ? `<span style="background:${SEV_COLOR[sev]};flex:${cnt}">${cnt} ${sev}</span>`
       : `<span class="empty" style="flex:0"></span>`;
