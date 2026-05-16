@@ -59,7 +59,7 @@ Orchestrates 20 scanner modules in parallel via Celery, then enriches findings w
 | Security Tools | Nmap, Nuclei, SSLyze, WhatWeb, OWASP ZAP |
 | Real-time | WebSocket (scan progress + alert feed) |
 | Auth | JWT (HS256), bcrypt |
-| Reports | WeasyPrint / xhtml2pdf (PDF), Jinja2 (HTML) |
+| Reports | ReportLab (server PDF), Playwright Chromium (client PDF), Jinja2 (HTML) |
 
 ---
 
@@ -82,6 +82,9 @@ venv\Scripts\activate
 source venv/bin/activate
 
 pip install -r requirements.txt
+
+# Install headless Chromium for PDF export (run once per environment)
+playwright install chromium
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -99,6 +102,33 @@ cd frontend && npm install && npm run dev
 ```
 
 Health check: `curl http://localhost:8000/api/health`
+
+---
+
+## Full Stack (Docker — Production / Demo Mode)
+
+All services run inside Docker — no local Python or Node.js required.
+
+```bash
+cp .env.example .env   # set JWT_SECRET + one AI provider key
+docker compose up -d --build
+```
+
+| Service | Container | Port |
+|---------|-----------|------|
+| Nginx (reverse proxy) | `cyber-sentinel-nginx` | `8888` → browse here |
+| Backend API | `cyber-sentinel-backend` | internal |
+| Celery pentest worker | `cyber-sentinel-celery` | — |
+| Celery SOC worker | `cyber-sentinel-celery-soc` | — |
+| Celery beat scheduler | `cyber-sentinel-celery-beat` | — |
+| Frontend (Vite → nginx) | `cyber-sentinel-frontend` | internal |
+| MongoDB 7 | `cyber-sentinel-mongo` | internal |
+| Redis 7 | `cyber-sentinel-redis` | internal |
+| OWASP ZAP | `cyber-sentinel-zap` | internal |
+
+Access at `http://localhost:8888` — nginx proxies `/api/*` to the backend and serves the React app.
+
+> **Wazuh** is a separate optional profile: `docker compose --profile wazuh up -d`
 
 ---
 
@@ -152,16 +182,32 @@ Interactive docs at `http://localhost:8000/docs` (Swagger UI).
 | GET | `/api/version` | Version + git commit |
 | POST | `/api/auth/register` | Create account |
 | POST | `/api/auth/login` | Login, returns JWT |
+| POST | `/api/auth/refresh` | Refresh access token |
 | POST | `/api/scans` | Submit a scan |
-| GET | `/api/scans` | List scans |
+| GET | `/api/scans` | List scans (paginated) |
 | GET | `/api/scans/{id}` | Scan details + findings |
-| GET | `/api/scans/{id}/report` | Download PDF report |
 | DELETE | `/api/scans/{id}` | Delete scan |
-| GET | `/api/scans/compare` | Diff two scans |
-| GET | `/api/alerts` | Wazuh alert feed |
-| GET | `/api/correlations` | Pentest ↔ alert correlations |
+| POST | `/api/scans/{id}/cancel` | Cancel running scan |
+| POST | `/api/scans/{id}/rescan` | Re-run a completed scan |
+| GET | `/api/scans/{id}/report/html` | Download HTML report |
+| GET | `/api/scans/{id}/report/pdf` | Download PDF report (ReportLab, server-side) |
+| GET | `/api/scans/{id}/diff/{baseline_id}` | Diff two scan results |
+| POST | `/api/reports/render-pdf` | Render arbitrary HTML → PDF (Playwright, used by UI exports) |
+| GET | `/api/alerts` | Wazuh alert feed (paginated, filterable) |
+| POST | `/api/alerts/webhook` | Wazuh webhook ingest endpoint |
+| GET | `/api/alerts/{id}` | Alert detail + AI triage |
+| GET | `/api/alerts/stats` | Alert statistics by severity/verdict |
+| POST | `/api/alerts/admin/retriage-all` | Admin: re-queue all untriaged alerts |
+| POST | `/api/alerts/admin/backfill-mitre` | Admin: backfill MITRE ATT&CK tags |
+| GET | `/api/soc/projects` | List SOC projects (agent tenancy) |
+| POST | `/api/soc/projects` | Create SOC project |
+| GET | `/api/correlations` | Pentest ↔ SOC alert correlations |
+| GET | `/api/analytics/summary` | Platform analytics (SOC + pentest combined) |
+| GET | `/api/audit` | Audit log (admin) |
+| GET | `/api/search` | Cross-domain full-text search |
+| GET | `/api/notifications` | User notifications |
 | WS | `/ws/scans` | Real-time scan progress |
-| WS | `/ws/alerts` | Live alert feed |
+| WS | `/ws/alerts` | Live SOC alert feed |
 
 ---
 
@@ -177,6 +223,9 @@ Interactive docs at `http://localhost:8000/docs` (Swagger UI).
 | Unicode errors on Windows | `$env:PYTHONIOENCODING = "utf-8"` before uvicorn |
 | Celery tasks not executing | Check `docker ps` — Redis must be running |
 | Frontend can't reach API | Add `CORS_EXTRA_ORIGINS=http://your-ip:5173` to `.env` |
+| PDF export fails with 503 | Run `playwright install chromium` in the backend venv |
+| PDF export fails in Docker | Chromium installs automatically on first `docker compose build` |
+| Sessions lost on restart | Set a permanent `JWT_SECRET` in `.env` (auto-generated key does not persist) |
 
 ---
 
