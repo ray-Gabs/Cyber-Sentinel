@@ -31,7 +31,7 @@ _SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
 # Patterns used to detect timeout/error findings by name
 _TIMEOUT_PATTERNS = ("timed out", "timeout")
-_ERROR_PATTERNS = ("error", "failed")
+_ERROR_PATTERNS = ("error", "failed", "unavailable")
 
 
 class LLMService:
@@ -513,7 +513,7 @@ class LLMService:
             return {
                 "executive_summary": text[:500],
                 "remediation": "",
-                "risk_score": 5.0,
+                "risk_score": 0.0,
                 "attack_chain": "",
             }
 
