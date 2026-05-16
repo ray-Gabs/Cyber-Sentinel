@@ -59,8 +59,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Runtime system deps only — no build toolchain
 # libssl3 + libffi8: runtime .so files needed by sslyze/nassl
-# libcairo2 + libpango* + libharfbuzz0b: WeasyPrint PDF generation
-# fonts-liberation: substitutes Arial/Times in reports on headless Linux
+# fonts-liberation: fallback fonts for headless Chromium PDF generation
 # nmap + whatweb: security scanners
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -68,11 +67,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     whatweb \
     libssl3 \
     libffi8 \
-    libcairo2 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libpangoft2-1.0-0 \
-    libharfbuzz0b \
     fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
@@ -82,6 +76,12 @@ COPY --from=builder /install /usr/local
 # Go binaries compiled in builder
 COPY --from=builder /usr/local/bin/nuclei /usr/local/bin/nuclei
 COPY --from=builder /usr/local/bin/katana /usr/local/bin/katana
+
+# Playwright Chromium for PDF generation — installed as root so the binary
+# is accessible to all users; PLAYWRIGHT_BROWSERS_PATH makes the path explicit.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+RUN playwright install --with-deps chromium \
+    && chmod -R 755 /opt/playwright
 
 # Non-root user — least privilege for production
 RUN useradd -m -u 1000 -s /bin/bash sentinel

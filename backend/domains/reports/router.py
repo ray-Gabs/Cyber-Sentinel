@@ -2,9 +2,12 @@
 Reports domain — PDF rendering endpoint.
 POST /api/reports/render-pdf  → accepts raw HTML body, returns application/pdf.
 
-Requires WeasyPrint on the server:
-  pip install "weasyprint>=60.0"
-  # Ubuntu: apt-get install -y libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0
+Uses Playwright (headless Chromium) for pixel-perfect CSS rendering.
+
+First-time setup (run once per environment):
+  pip install playwright
+  playwright install chromium        # bare VM
+  playwright install --with-deps chromium  # Docker / fresh Ubuntu
 """
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -23,7 +26,7 @@ async def render_pdf(
     request: Request,
     current_user: User = Depends(get_current_user),
 ) -> Response:
-    """Render an HTML document to PDF and return it as a downloadable file."""
+    """Render an HTML document to PDF via headless Chromium and return as a file download."""
     html_bytes = await request.body()
     if not html_bytes:
         raise HTTPException(status_code=400, detail="Empty request body")
@@ -31,17 +34,35 @@ async def render_pdf(
     html = html_bytes.decode("utf-8", errors="replace")
 
     try:
-        from weasyprint import HTML as WeasyprintHTML  # noqa: PLC0415
-        pdf_bytes: bytes = WeasyprintHTML(
-            string=html,
-            base_url="http://localhost",
-        ).write_pdf()
+        from playwright.async_api import async_playwright  # noqa: PLC0415
     except ImportError:
-        log.error("weasyprint_not_installed")
+        log.error("playwright_not_installed")
         raise HTTPException(
             status_code=503,
-            detail="PDF rendering unavailable — install weasyprint on the server",
+            detail=(
+                "PDF rendering unavailable. "
+                "Run: pip install playwright && playwright install chromium"
+            ),
         )
+
+    try:
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(
+                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+            )
+            page = await browser.new_page()
+
+            # networkidle waits for Google Fonts and all sub-resources to finish
+            await page.set_content(html, wait_until="networkidle", timeout=30_000)
+
+            # prefer_css_page_size respects our @page { size: A4 landscape/portrait }
+            pdf_bytes: bytes = await page.pdf(
+                print_background=True,
+                prefer_css_page_size=True,
+                margin={"top": "0", "right": "0", "bottom": "0", "left": "0"},
+            )
+            await browser.close()
+
     except Exception as exc:
         log.error("pdf_render_failed", error=str(exc))
         raise HTTPException(status_code=500, detail=f"PDF render failed: {exc}")
