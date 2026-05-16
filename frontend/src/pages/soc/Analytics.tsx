@@ -4,7 +4,7 @@ import { getPentestAnalytics } from "@/services/analyticsService";
 import type { PentestAnalytics, AnalyticsRange } from "@/services/analyticsService";
 import type { AlertStats } from "@/types";
 import { Icon, KPI, PageHead, Card, Bars, Donut } from "@/components/ui";
-import { exportToPDF } from "@/lib/pdfExport";
+import { exportAnalyticsPDF } from "@/lib/exportAnalytics";
 
 type Tone = "critical" | "high" | "medium" | "low" | "info";
 const SEV_ORDER: Tone[] = ["critical", "high", "medium", "low", "info"];
@@ -120,33 +120,9 @@ export default function Analytics() {
           <button
             className="btn btn-sm"
             style={{ display: "flex", alignItems: "center", gap: 6 }}
+            disabled={!stats}
             onClick={() => {
-              const socRows = [
-                { metric: "Total Alerts",    value: String(socTotal)  },
-                { metric: "True Positives",  value: String(socTP)     },
-                { metric: "False Positives", value: String(socFP)     },
-                { metric: "Escalated",       value: String(socEsc)    },
-                { metric: "Unknown",         value: String(byVerdict["UNKNOWN"]    ?? 0) },
-                { metric: "Unanalyzed",      value: String(byVerdict["UNANALYZED"] ?? 0) },
-                { metric: "Monitor Actions", value: String(byAction["MONITOR"]     ?? 0) },
-                { metric: "Dismiss Actions", value: String(byAction["DISMISS"]     ?? 0) },
-              ];
-              const pentestRows = pentest ? [
-                { metric: "Total Scans",         value: String(pentest.total_scans)  },
-                { metric: "Avg Scan Duration",   value: `${pentest.avg_scan_duration_seconds}s` },
-                { metric: "Wazuh Alerts",        value: String(pentest.total_alerts) },
-                { metric: "Critical Findings",   value: String((pentest.findings_by_severity as unknown as Record<string, number>)["critical"] ?? 0) },
-                { metric: "High Findings",       value: String((pentest.findings_by_severity as unknown as Record<string, number>)["high"]     ?? 0) },
-                { metric: "Medium Findings",     value: String((pentest.findings_by_severity as unknown as Record<string, number>)["medium"]   ?? 0) },
-                { metric: "Low Findings",        value: String((pentest.findings_by_severity as unknown as Record<string, number>)["low"]      ?? 0) },
-              ] : [];
-              exportToPDF(
-                "Platform Analytics Report",
-                `SOC + Pentest metrics · range: ${range} · ${new Date().toLocaleDateString()}`,
-                [{ key: "metric", label: "Metric" }, { key: "value", label: "Value" }],
-                [...socRows, ...pentestRows],
-                "analytics-report"
-              );
+              if (stats) exportAnalyticsPDF({ range, alertStats: stats, pentest }).catch(() => {});
             }}
           >
             <Icon name="download" size={12} /> Export

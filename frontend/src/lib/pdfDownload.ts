@@ -1,5 +1,5 @@
 /**
- * Send HTML to the backend WeasyPrint renderer and trigger a real .pdf download.
+ * Send HTML to the backend Playwright renderer and trigger a real .pdf download.
  * No new tab opened — the file lands directly in the user's Downloads folder.
  */
 const TOKEN_KEY = "cyber_sentinel_token";
