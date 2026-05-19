@@ -54,7 +54,7 @@ aiosmtplib==3.*                   # Async SMTP (non-blocking email sending)
 
 # --- Observability ---
 structlog==24.*                   # Structured JSON logging (replaces stdlib logging format)
-prometheus-client==0.21.*         # Prometheus metrics — /api/metrics endpoint for Grafana
+prometheus-client==0.25.*         # Prometheus metrics — /api/metrics endpoint for Grafana
 
 # --- Cloud Storage ---
 boto3==1.35.*                     # AWS S3 report storage (falls back to local filesystem if unconfigured)
