@@ -21,7 +21,7 @@ pydantic[email]==2.10.*            # Includes EmailStr
 pydantic-settings==2.7.*          # Settings from .env
 
 # --- Task Queue ---
-celery==5.4.*
+celery==5.6.*
 redis==5.2.*
 
 # --- AI (install the one matching your AI_PROVIDER in .env) ---
