@@ -97,6 +97,18 @@ async def cache_invalidate_analytics() -> None:
     await cache_invalidate("cs:cache:analytics:*")
 
 
+async def cache_invalidate_scan_stats() -> None:
+    """Invalidate pentest scan-stats caches — call after any scan state change."""
+    await cache_invalidate("cs:cache:pentest:stats:*")
+
+
+async def cache_invalidate_all_scan_caches() -> None:
+    """Invalidate scan-stats, scan-list, and analytics caches — call on any scan lifecycle event."""
+    await cache_invalidate("cs:cache:pentest:stats:*")
+    await cache_invalidate("cs:cache:pentest:list:*")
+    await cache_invalidate("cs:cache:analytics:*")
+
+
 async def cache_invalidate_user(user_id: str) -> None:
     """Invalidate all caches scoped to a specific user."""
     await cache_invalidate(f"cs:cache:*:{user_id}:*")

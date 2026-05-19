@@ -4,7 +4,6 @@
 
 import re
 from datetime import datetime, timezone
-from typing import Optional
 
 from beanie import Document
 from pydantic import Field
@@ -27,10 +26,10 @@ class SocProject(Document):
     name: str
     slug: str
     target_url: str
-    description: Optional[str] = None
+    description: str | None = None
     wazuh_agent_registered: bool = False
-    wazuh_agent_id: Optional[str] = None
-    wazuh_agent_name: Optional[str] = None
+    wazuh_agent_id: str | None = None
+    wazuh_agent_name: str | None = None
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )

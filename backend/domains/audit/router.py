@@ -2,14 +2,15 @@
 # backend/domains/audit/router.py — Audit Log Endpoints
 # ============================================================
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
 
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel
+
 from core.dependencies import get_current_user
-from domains.auth.models import User
+from core.rate_limit import get_user_or_ip_key, limiter
 from domains.audit.models import AuditLog
+from domains.auth.models import User
 
 router = APIRouter()
 
@@ -19,10 +20,10 @@ class AuditLogResponse(BaseModel):
     user_id: str
     username: str
     action: str
-    resource_type: Optional[str] = None
-    resource_id: Optional[str] = None
-    details: Optional[str] = None
-    ip_address: Optional[str] = None
+    resource_type: str | None = None
+    resource_id: str | None = None
+    details: str | None = None
+    ip_address: str | None = None
     timestamp: datetime
 
 
@@ -32,11 +33,13 @@ def _require_admin(user: User) -> None:
 
 
 @router.get("/", response_model=list[AuditLogResponse])
+@limiter.limit("60/minute", key_func=get_user_or_ip_key)
 async def list_audit_logs(
+    request: Request,
     page: int = Query(1, ge=1),
-    size: int = Query(50, ge=1, le=200),
-    user_id: Optional[str] = Query(None, description="Filter by user ID"),
-    action: Optional[str] = Query(None, description="Filter by action prefix, e.g. 'scan.'"),
+    size: int = Query(10, ge=1, le=200),
+    user_id: str | None = Query(None, description="Filter by user ID"),
+    action: str | None = Query(None, description="Filter by action prefix, e.g. 'scan.'"),
     current_user: User = Depends(get_current_user),
 ):
     """[Admin] List audit log entries, newest first. Filterable by user and action."""
@@ -78,8 +81,44 @@ async def list_audit_logs(
 
 
 @router.get("/stats")
-async def audit_stats(current_user: User = Depends(get_current_user)):
-    """[Admin] Quick stats: total logs, unique users, top actions."""
+@limiter.limit("30/minute", key_func=get_user_or_ip_key)
+async def audit_stats(request: Request, current_user: User = Depends(get_current_user)):
+    """[Admin] Aggregated stats: total, breakdown by action prefix and top users."""
     _require_admin(current_user)
-    total = await AuditLog.count()
-    return {"total": total}
+    col = AuditLog.get_motor_collection()
+    total = await col.count_documents({})
+    # Top 10 actions
+    action_pipeline = [
+        {"$group": {"_id": "$action", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10},
+    ]
+    action_rows = await col.aggregate(action_pipeline).to_list(None)
+    top_actions = [{"action": r["_id"], "count": r["count"]} for r in action_rows]
+    # Top 10 users by activity
+    user_pipeline = [
+        {"$group": {"_id": "$username", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10},
+    ]
+    user_rows = await col.aggregate(user_pipeline).to_list(None)
+    top_users = [{"username": r["_id"], "count": r["count"]} for r in user_rows]
+    # Activity by day (last 7 days)
+    from datetime import timedelta, timezone
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    day_pipeline = [
+        {"$match": {"timestamp": {"$gte": cutoff}}},
+        {"$group": {
+            "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$timestamp"}},
+            "count": {"$sum": 1},
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+    day_rows = await col.aggregate(day_pipeline).to_list(None)
+    by_day = [{"date": r["_id"], "count": r["count"]} for r in day_rows]
+    return {
+        "total": total,
+        "top_actions": top_actions,
+        "top_users": top_users,
+        "by_day_last_7": by_day,
+    }

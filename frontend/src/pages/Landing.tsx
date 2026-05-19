@@ -43,7 +43,7 @@ export default function Landing() {
           <div>
             <div className="row" style={{ gap: 8, marginBottom: 24 }}>
               <Badge tone="accent" dot>SMART CITY & CYBERSECURITY LAB · ITS</Badge>
-              <Badge>v1.0 · OPEN BETA</Badge>
+              <Badge>v1.0.6</Badge>
             </div>
             <h1 style={{ fontSize: "clamp(44px, 6vw, 78px)", fontWeight: 600, letterSpacing: "-0.04em",
               lineHeight: 0.95, margin: 0 }}>
@@ -53,7 +53,7 @@ export default function Landing() {
             <p style={{ color: "var(--text-3)", fontSize: 17, lineHeight: 1.55, margin: "24px 0 0", maxWidth: 520 }}>
               A single console where 20 scanners stress-test your web targets,{" "}
               <b style={{ color: "var(--text)" }}>Wazuh streams every alert live</b>,
-              and AI explains what to do — for every web project on campus.
+              and AI explains what to fix — built for the ITS lab environment.
             </p>
             <div className="row" style={{ gap: 10, marginTop: 32 }}>
               <Btn variant="primary" size="lg" iconRight="arrowR" onClick={goGetStarted}>Get started — it's free</Btn>
@@ -82,13 +82,13 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Trust strip */}
+      {/* Built at strip */}
       <section style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)", background: "var(--bg-2)" }}>
         <div style={{ maxWidth: 1320, margin: "0 auto", padding: "20px 32px" }}>
           <div className="row" style={{ gap: 40, justifyContent: "space-between", flexWrap: "wrap" }}>
-            <div className="eyebrow">DEPLOYED ACROSS · ITS · SURABAYA</div>
+            <div className="eyebrow">BUILT AT ITS SMART CITY &amp; CYBERSECURITY LAB</div>
             <div className="row" style={{ gap: 40, fontSize: 12, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>
-              {["ITS LAB", "SMART CITY", "FAC. CS", "FAC. ENG", "RESEARCH OPS"].map((l) => (
+              {["INTERNSHIP PROJECT", "SURABAYA · 2026"].map((l) => (
                 <span key={l}>{l}</span>
               ))}
             </div>
@@ -163,7 +163,7 @@ export default function Landing() {
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 0, position: "relative" }}>
             {[
-              { n: "01", l: "Add target",   d: "Pair an agent + URL" },
+              { n: "01", l: "Add target",   d: "Enter a URL to scan" },
               { n: "02", l: "Launch scan",  d: "20 tools in parallel" },
               { n: "03", l: "SIEM ingests", d: "Live alerts stream in" },
               { n: "04", l: "AI triages",   d: "Verdict + reason" },
@@ -186,15 +186,15 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Stats */}
+      {/* Capabilities */}
       <section style={{ maxWidth: 1320, margin: "0 auto", padding: "96px 32px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1,
           background: "var(--border)", border: "1px solid var(--border)", borderRadius: 16, overflow: "hidden" }}>
           {[
-            { v: "20",     l: "Security tools",      d: "running in parallel" },
-            { v: "4.2s",   l: "AI triage latency",   d: "per alert · haiku-4.5" },
-            { v: "42,938", l: "Alerts ingested",      d: "in last 30 days" },
-            { v: "10/10",  l: "OWASP Top 10 · 2025", d: "category coverage" },
+            { v: "20",    l: "Scanner modules",     d: "running in parallel" },
+            { v: "Multi", l: "AI provider",         d: "Claude · Groq · Gemini · OpenAI" },
+            { v: "MITRE", l: "ATT&CK mapping",      d: "on every SOC alert" },
+            { v: "10/10", l: "OWASP Top 10 · 2025", d: "category coverage" },
           ].map((s, i) => (
             <div key={i} style={{ padding: "40px 28px", background: "var(--surface)" }}>
               <div className="num" style={{ fontSize: 56, fontWeight: 500, letterSpacing: "-0.04em",
@@ -236,13 +236,15 @@ export default function Landing() {
             <span>Cyber Sentinel · Smart City &amp; Cybersecurity Lab · ITS</span>
           </div>
           <div className="row" style={{ gap: 20 }}>
-            <span className="mono">v1.0.0</span>
+            <span className="mono">v1.0.6</span>
             <a href="https://github.com/ray-Gabs/Cyber-Sentinel/wiki"
                target="_blank" rel="noopener noreferrer"
                style={{ color: "inherit", textDecoration: "none" }}>Docs</a>
             <a href="https://github.com/ray-Gabs/Cyber-Sentinel"
                target="_blank" rel="noopener noreferrer"
                style={{ color: "inherit", textDecoration: "none" }}>GitHub</a>
+            <a href="/privacy"
+               style={{ color: "inherit", textDecoration: "none" }}>Privacy</a>
           </div>
         </div>
       </footer>

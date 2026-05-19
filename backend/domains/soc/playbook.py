@@ -9,7 +9,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from beanie import Document
 from pydantic import BaseModel, Field
@@ -26,8 +26,8 @@ class PlaybookAction(BaseModel):
     parameters: dict[str, Any] = {}
     automated: bool = False     # True = auto-execute, False = recommend only
     executed: bool = False
-    executed_at: Optional[datetime] = None
-    result: Optional[str] = None
+    executed_at: datetime | None = None
+    result: str | None = None
 
 
 class PlaybookExecution(Document):
@@ -39,7 +39,7 @@ class PlaybookExecution(Document):
     actions: list[PlaybookAction] = []
     status: str = "pending"     # pending | running | completed | failed
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
 
     class Settings:
         name = "playbook_executions"
@@ -152,7 +152,7 @@ PLAYBOOKS: dict[str, dict] = {
 class PlaybookEngine:
     """Evaluates alerts and triggers matching playbooks."""
 
-    def find_matching_playbook(self, alert) -> Optional[str]:
+    def find_matching_playbook(self, alert) -> str | None:
         """Find the first playbook that matches an alert's rule groups and level."""
         alert_groups = {g.lower().replace(" ", "_") for g in alert.rule_groups}
 
@@ -185,6 +185,8 @@ class PlaybookEngine:
         )
         await execution.insert()
 
+        any_failed = False
+
         # Execute automated actions
         for action in execution.actions:
             if action.automated:
@@ -194,10 +196,12 @@ class PlaybookEngine:
                     action.executed_at = datetime.now(timezone.utc)
                     action.result = result
                 except Exception as e:
+                    action.executed = False
                     action.result = f"Failed: {str(e)[:200]}"
-                    log.warning("Playbook action failed: %s", str(e)[:200])
+                    any_failed = True
+                    log.warning("[Playbook] Action '%s' failed for alert %s: %s", action.action_type, alert.wazuh_id, str(e)[:200])
 
-        execution.status = "completed"
+        execution.status = "completed_with_errors" if any_failed else "completed"
         execution.completed_at = datetime.now(timezone.utc)
         await execution.save()
 
@@ -221,36 +225,66 @@ class PlaybookEngine:
             source_ip = alert.data.get("srcip", source_ip)
 
         if not source_ip:
-            return "No source IP found to block"
+            raise RuntimeError("No source IP found in alert — cannot execute block")
 
-        try:
-            command = action.parameters.get("command", "firewall-drop")
-            agent_ids = [alert.agent_id] if getattr(alert, "agent_id", None) else []
-            await wazuh_client.run_active_response(
-                command=command,
-                agent_ids=agent_ids,
-                alert={"data": {"srcip": source_ip}},
-                arguments=[source_ip],
-            )
-            return f"Blocked IP {source_ip} via {command}"
-        except Exception as e:
-            return f"Wazuh AR call failed: {str(e)[:200]}"
+        agent_ids = [alert.agent_id] if getattr(alert, "agent_id", None) else []
+        if not agent_ids:
+            raise RuntimeError("No agent_id on alert — Wazuh Active Response requires a target agent")
+
+        command = action.parameters.get("command", "firewall-drop")
+        # Raises on failure — let execute_playbook mark the action as failed
+        await wazuh_client.run_active_response(
+            command=command,
+            agent_ids=agent_ids,
+            alert={"data": {"srcip": source_ip}},
+            arguments=[source_ip],
+        )
+        return f"Blocked {source_ip} on agent {agent_ids[0]} via {command}"
 
     async def _action_notify(self, action: PlaybookAction, alert) -> str:
-        """Broadcast a playbook event to connected WebSocket clients."""
+        """
+        Persist an in-app notification AND broadcast over WebSocket.
+        This is an in-platform notification only — no email or external channels.
+        """
         from core.websocket import ws_manager
-        channel = action.parameters.get("channel", "alerts")
-        payload = {
-            "type": "playbook_action",
-            "alert_id": str(alert.id),
-            "playbook": action.description,
-            "priority": action.parameters.get("priority", "medium"),
-        }
+        from domains.auth.models import User
+
+        priority = action.parameters.get("priority", "medium")
+        channel  = action.parameters.get("channel", "alerts")
+
+        # WebSocket broadcast to all connected clients
         try:
-            await ws_manager.broadcast(channel, payload)
-            return "Notification sent to dashboard"
-        except Exception:
-            return "Notification sent (best-effort)"
+            await ws_manager.broadcast(channel, {
+                "type": "playbook_action",
+                "alert_id": str(alert.id),
+                "playbook": action.description,
+                "priority": priority,
+            })
+        except Exception as exc:
+            log.debug("[Playbook] WebSocket broadcast failed: %s", exc)
+
+        # Persist notification to DB so it appears in the notification bell
+        # even if the analyst wasn't connected when the playbook ran.
+        try:
+            owner: User | None = None
+            if getattr(alert, "tenant_id", None):
+                try:
+                    owner = await User.get(alert.tenant_id)
+                except Exception:
+                    pass
+            if owner:
+                from domains.notifications.service import create_notification
+                notif_type = "soc_critical" if priority == "critical" else "soc_high" if priority == "high" else "soc_alert"
+                await create_notification(
+                    user_id=str(owner.id),
+                    type=notif_type,
+                    title=f"[Playbook] {action.description}",
+                    body=f"Rule {alert.rule_id} · {alert.rule_description[:80]}",
+                )
+        except Exception as exc:
+            log.debug("[Playbook] Persisted notification failed: %s", exc)
+
+        return f"In-app notification sent (WebSocket + persisted) — priority: {priority}"
 
     async def get_executions(self, alert_id: str) -> list[PlaybookExecution]:
         """Get all playbook executions for an alert."""

@@ -5,13 +5,11 @@
 # Import anywhere:  from core.config import settings
 # ============================================================
 
-import os
-import secrets
 import warnings
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
-from pydantic import Field, model_validator
 
 # Resolve .env location relative to this file's actual path — works both
 # when running locally (project root/.env) and inside Docker (no .env file;
@@ -145,6 +143,15 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     smtp_use_tls: bool = True
 
+    # ---- Demo User Seed ----
+    demo_user_email: str = ""
+    demo_user_password: str = ""
+    demo_juiceshop_url: str = "http://localhost:3000"
+    demo_dvwa_url: str = "http://localhost:8080"
+    # Pre-set Wazuh token for the demo user — avoids reading startup logs to find it.
+    # Leave empty to auto-generate on first boot.
+    demo_wazuh_token: str = ""
+
     # ---- First-boot Admin Seed ----
     # If the users collection is empty on startup, Cyber Sentinel creates one admin
     # account using these credentials. After that, these vars are ignored.
@@ -164,12 +171,18 @@ class Settings(BaseSettings):
     # These protect against brute-force and abuse on public endpoints.
     # Period: second | minute | hour | day
     rate_limit_login: str = "10/minute"          # per IP
-    rate_limit_forgot_password: str = "5/hour"   # per IP — prevent email flooding
+    rate_limit_forgot_password: str = "5/hour"   # per IP — prevent email flooding  # noqa: S105
     rate_limit_register: str = "10/hour"         # per IP
-    rate_limit_scan: str = "20/hour"             # per IP — prevent scan abuse
+    rate_limit_scan: str = "10/hour"             # per IP — prevent scan abuse
 
-    # Per-user scan quota (MongoDB-based, checked against authenticated user ID)
-    scan_rate_limit: int = 20                    # max scans per user per hour
+    # Per-user scan quota (MongoDB-based, checked against authenticated user ID).
+    # Each completed scan triggers up to 2 LLM API calls (summary + narrative).
+    # Keep this low in lab/shared environments to control AI billing.
+    scan_rate_limit: int = 5                     # max scans per user per hour
+
+    # Rate limit for report export endpoints (PDF / HTML).
+    # These are CPU-bound (no AI calls) but limit server resource abuse.
+    rate_limit_report_export: str = "20/hour"    # per user
 
     # Max scans a single user may have actively running/pending at the same time.
     # Prevents one user from flooding the Celery queue and starving others.
@@ -197,26 +210,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_secrets(self):
-        if not self.jwt_secret or self.jwt_secret == "CHANGE_ME":
-            # Uvicorn spawns multiple worker processes — each re-imports this module
-            # and would generate a different random secret, making cross-worker token
-            # validation fail with 401. Use atomic file creation so all workers on the
-            # same container share a single runtime-generated secret.
-            _secret_file = Path("/tmp/.cs_jwt_secret")
-            try:
-                # O_CREAT | O_EXCL is atomic — raises FileExistsError if already present
-                fd = os.open(str(_secret_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-                generated = secrets.token_urlsafe(64)
-                os.write(fd, generated.encode())
-                os.close(fd)
-                self.jwt_secret = generated
-            except FileExistsError:
-                self.jwt_secret = _secret_file.read_text().strip()
-            warnings.warn(
-                "JWT_SECRET not set — using a runtime-generated key shared across workers. "
-                "Sessions will NOT persist across container restarts. "
-                "Set JWT_SECRET in your .env file for persistent sessions.",
-                stacklevel=2,
+        if not self.jwt_secret or self.jwt_secret == "CHANGE_ME":  # noqa: S105
+            raise ValueError(
+                "JWT_SECRET must be set in your .env file. "
+                "Generate one with:  python -c \"import secrets; print(secrets.token_urlsafe(64))\"\n"
+                "Then add:  JWT_SECRET=<generated-value>  to your .env"
             )
         # Check that the configured provider has a key
         _provider_key_map = {

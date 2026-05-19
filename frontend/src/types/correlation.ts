@@ -4,9 +4,11 @@ export interface CorrelationLink {
   finding_tool: string;
   finding_name: string;
   finding_severity: string;
+  finding_matched_at?: string;
   alert_wazuh_id: string;
-  alert_rule_description: string;  // was: alert_rule_desc (field name mismatch fix)
-  alert_rule_level: number;        // was: alert_level (field name mismatch fix)
+  alert_rule_id?: string;
+  alert_rule_description: string;
+  alert_rule_level: number;
   correlation_type: string; // "ip_match" | "attack_pattern" | "cve_match" | "port_match" | "keyword"
   confidence: number;       // 0-1
 }
@@ -15,6 +17,7 @@ export interface Correlation {
   id: string;
   scan_id: string;
   scan_target: string;
+  total_links?: number;
   links: CorrelationLink[];
   ai_summary?: string;
   created_at: string;

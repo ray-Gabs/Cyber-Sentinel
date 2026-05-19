@@ -4,17 +4,16 @@
 # Mounted at prefix /api/soc in main.py
 # ============================================================
 
+import ipaddress
 import logging
 import socket
-import ipaddress
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -33,17 +32,17 @@ router = APIRouter()
 class ProjectCreate(BaseModel):
     name: str
     target_url: str
-    description: Optional[str] = None
-    wazuh_agent_name: Optional[str] = None
+    description: str | None = None
+    wazuh_agent_name: str | None = None
 
 
 class ProjectUpdate(BaseModel):
-    name: Optional[str] = None
-    target_url: Optional[str] = None
-    description: Optional[str] = None
-    wazuh_agent_registered: Optional[bool] = None
-    wazuh_agent_id: Optional[str] = None
-    wazuh_agent_name: Optional[str] = None
+    name: str | None = None
+    target_url: str | None = None
+    description: str | None = None
+    wazuh_agent_registered: bool | None = None
+    wazuh_agent_id: str | None = None
+    wazuh_agent_name: str | None = None
 
 
 
@@ -52,9 +51,9 @@ class ProjectUpdate(BaseModel):
 def _project_to_response(p: SocProject) -> dict:
     agent_name = p.wazuh_agent_name or p.slug
     install_cmd = (
-        f"curl -so wazuh-agent.deb https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.14.5-1_amd64.deb && "
+        f"sudo bash -c 'curl -so wazuh-agent.deb https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.14.5-1_amd64.deb && "
         f"WAZUH_MANAGER=\"{settings.wazuh_host_public}\" WAZUH_AGENT_NAME=\"{agent_name}\" "
-        f"dpkg -i wazuh-agent.deb && systemctl start wazuh-agent"
+        f"dpkg -i wazuh-agent.deb && systemctl start wazuh-agent'"
     )
     return {
         "id": str(p.id),
@@ -529,6 +528,52 @@ async def agent_status(project_id: str, user: User = Depends(get_current_user)):
         "last_alert_at": last_alert.timestamp.isoformat() if last_alert else None,
         "health_issues": health_issues,
     }
+
+
+# ── Batch Agent Status (replaces N individual polls with 1 call) ─────────────
+
+class BatchStatusRequest(BaseModel):
+    project_ids: list[str]
+
+
+@router.post("/batch-agent-status")
+async def batch_agent_status(body: BatchStatusRequest, user: User = Depends(get_current_user)):
+    """Check Wazuh agent status for multiple projects in a single call."""
+    reachable = await wazuh_client.check_reachable()
+
+    results: list[dict] = []
+    for project_id in body.project_ids[:20]:  # cap at 20 to prevent abuse
+        try:
+            project = await _get_accessible(project_id, user)
+        except Exception:
+            continue
+
+        agent_name = project.wazuh_agent_name or project.slug
+
+        if not reachable:
+            results.append({"project_id": project_id, "agent_name": agent_name, "status": "unknown"})
+            continue
+
+        agent = await wazuh_client.get_agent_by_name(agent_name)
+        if not agent:
+            results.append({"project_id": project_id, "agent_name": agent_name, "status": "never_registered", "wazuh_agent_id": None})
+            continue
+
+        is_active = agent.get("status", "").lower() == "active"
+        if is_active and not project.wazuh_agent_registered:
+            project.wazuh_agent_registered = True
+            project.wazuh_agent_id = agent.get("id")
+            await project.save()
+
+        results.append({
+            "project_id": project_id,
+            "agent_name": agent_name,
+            "status": "connected" if is_active else "disconnected",
+            "wazuh_agent_id": agent.get("id"),
+            "now_registered": is_active and not project.wazuh_agent_registered,
+        })
+
+    return {"results": results, "manager_reachable": reachable}
 
 
 # ── Agent Compose Download ────────────────────────────────────────────────────

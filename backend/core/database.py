@@ -3,8 +3,8 @@
 # ============================================================
 
 import certifi
-from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from core.config import settings
 
@@ -29,15 +29,15 @@ async def init_db() -> None:
     database = _client[settings.mongodb_db_name]
 
     # Import all document models here so Beanie registers them.
+    from domains.audit.models import AuditLog
     from domains.auth.models import User
-    from domains.pentesting.models import Scan
-    from domains.soc.models import Alert, AiVerdict, CustomDetectionRule
+    from domains.correlation.models import Correlation
+    from domains.notifications.models import Notification
+    from domains.pentesting.models import Scan, ScheduledScan
+    from domains.soc.models import AiVerdict, Alert, CustomDetectionRule
+    from domains.soc.playbook import PlaybookExecution
     from domains.soc.project_models import SocProject
     from domains.soc.tuning_models import TuningRecommendation
-    from domains.correlation.models import Correlation
-    from domains.soc.playbook import PlaybookExecution
-    from domains.notifications.models import Notification
-    from domains.audit.models import AuditLog
 
     await init_beanie(
         database=database,
@@ -53,6 +53,7 @@ async def init_db() -> None:
             PlaybookExecution,
             Notification,
             AuditLog,
+            ScheduledScan,
         ],
     )
 

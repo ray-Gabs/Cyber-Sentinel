@@ -151,15 +151,53 @@ async def deploy_rules_to_wazuh(
     rules_content = get_rules_xml()
 
     try:
-        result = await client._request(
+        upload_result = await client._request(
             "PUT",
             "/rules/files/cyber_sentinel_rules.xml",
             params={"overwrite": "true"},
             content=rules_content,
             headers={"Content-Type": "application/octet-stream"},
         )
-        log.info("Custom rules deployed to Wazuh successfully")
-        return {"status": "deployed", "rules_count": len(CUSTOM_RULES), "result": result}
+        log.info("[WazuhRules] Uploaded cyber_sentinel_rules.xml")
     except Exception as e:
-        log.error("Failed to deploy rules to Wazuh: %s", str(e)[:200])
+        log.error("[WazuhRules] Upload failed: %s", str(e)[:200])
         return {"status": "failed", "error": str(e)[:200]}
+
+    # Verify rules are actually loaded by querying rule IDs
+    rule_ids = [str(r["rule_id"]) for r in CUSTOM_RULES]
+    verified_count = 0
+    try:
+        verify_result = await client._request(
+            "GET",
+            "/rules",
+            params={"rule_ids": ",".join(rule_ids), "limit": len(rule_ids)},
+        )
+        items = verify_result.get("data", {}).get("affected_items", [])
+        verified_count = len(items)
+        if verified_count == 0:
+            log.warning(
+                "[WazuhRules] Upload succeeded but rules are not active — "
+                "Wazuh may need a restart or active-response must be enabled"
+            )
+            return {
+                "status": "uploaded_not_active",
+                "rules_count": len(CUSTOM_RULES),
+                "verified_active": 0,
+                "message": "File uploaded but rules are not yet active. Wazuh may require a manager restart.",
+            }
+    except Exception as e:
+        log.warning("[WazuhRules] Could not verify rule activation: %s", str(e)[:200])
+        # Treat as deployed-unverified rather than failing entirely
+        return {
+            "status": "deployed_unverified",
+            "rules_count": len(CUSTOM_RULES),
+            "message": "File uploaded but rule activation could not be confirmed.",
+        }
+
+    log.info("[WazuhRules] Verified %d/%d rules active in Wazuh", verified_count, len(CUSTOM_RULES))
+    return {
+        "status": "deployed",
+        "rules_count": len(CUSTOM_RULES),
+        "verified_active": verified_count,
+        "upload_result": upload_result,
+    }

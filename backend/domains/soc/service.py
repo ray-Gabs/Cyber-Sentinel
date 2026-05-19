@@ -4,14 +4,13 @@
 
 import logging
 import re
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 
 from core.cache import cache_invalidate_analytics
 from domains.auth.models import User
-from domains.soc.models import Alert, AiVerdict, CustomDetectionRule
+from domains.soc.models import AiVerdict, Alert, CustomDetectionRule
 from domains.soc.schemas import AnalystOverrideRequest, CustomRuleCreate, CustomRuleUpdate
 
 log = logging.getLogger(__name__)
@@ -19,7 +18,7 @@ log = logging.getLogger(__name__)
 
 async def ingest_wazuh_alert(
     raw: dict,
-    tenant_id: Optional[str] = None,
+    tenant_id: str | None = None,
 ) -> Alert:
     """
     Convert a raw Wazuh alert dict → our Alert document and save it.
@@ -178,6 +177,8 @@ async def create_rule(user_id: str, data: CustomRuleCreate) -> CustomDetectionRu
         pattern=data.pattern,
         severity=data.severity,
         enabled=data.enabled,
+        source_alert_id=data.source_alert_id,
+        source_rule_id=data.source_rule_id,
     )
     await rule.insert()
     return rule
@@ -222,7 +223,7 @@ async def delete_all_rules(user_id: str) -> int:
     return count
 
 
-async def get_alert(alert_id: str, current_user: Optional[User] = None) -> Alert:
+async def get_alert(alert_id: str, current_user: User | None = None) -> Alert:
     alert = await Alert.get(alert_id)
     if not alert:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
@@ -248,15 +249,18 @@ async def get_alert(alert_id: str, current_user: Optional[User] = None) -> Alert
 
 async def list_alerts(
     page: int = 1,
-    size: int = 50,
-    rule_level_min: Optional[int] = None,
-    ai_verdict: Optional[str] = None,
-    agent_name: Optional[str] = None,
-    agent_group: Optional[str] = None,
-    project_id: Optional[str] = None,
-    mitre_technique: Optional[str] = None,
-    current_user: Optional[User] = None,
-) -> list[Alert]:
+    size: int = 10,
+    rule_level_min: int | None = None,
+    ai_verdict: str | None = None,
+    agent_name: str | None = None,
+    agent_group: str | None = None,
+    project_id: str | None = None,
+    mitre_technique: str | None = None,
+    tab: str | None = None,
+    days: int | None = None,
+    search: str | None = None,
+    current_user: User | None = None,
+) -> tuple[list[Alert], int]:
     """
     List alerts with optional filters, newest first.
 
@@ -299,7 +303,12 @@ async def list_alerts(
 
     if rule_level_min is not None:
         query["rule_level"] = {"$gte": rule_level_min}
-    if ai_verdict:
+    # tab (triaged/untriaged) takes priority over ai_verdict to avoid overwrite conflict
+    if tab == "triaged":
+        query["ai_verdict"] = {"$nin": [None, "TRIAGE_FAILED"]}
+    elif tab == "untriaged":
+        query["$or"] = [{"ai_verdict": None}, {"ai_verdict": "TRIAGE_FAILED"}]
+    elif ai_verdict:
         query["ai_verdict"] = ai_verdict
     if agent_name:
         query["agent_name"] = {"$regex": re.escape(agent_name), "$options": "i"}
@@ -309,14 +318,32 @@ async def list_alerts(
         query["project_id"] = project_id
     if mitre_technique:
         query["mitre_techniques.technique"] = {"$regex": re.escape(mitre_technique), "$options": "i"}
+    if days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        query["timestamp"] = {"$gte": cutoff}
+    if search:
+        s = re.escape(search.strip())
+        search_cond: list[dict] = [
+            {"rule_description": {"$regex": s, "$options": "i"}},
+            {"agent_name": {"$regex": s, "$options": "i"}},
+            {"rule_id": {"$regex": s, "$options": "i"}},
+        ]
+        # Merge with any existing $or (e.g. untriaged tab) using $and
+        if "$or" in query:
+            existing_or = query.pop("$or")
+            query["$and"] = [{"$or": existing_or}, {"$or": search_cond}]
+        else:
+            query["$or"] = search_cond
 
-    return (
+    total = await Alert.find(query).count()
+    items = (
         await Alert.find(query)
         .sort("-timestamp")
         .skip((page - 1) * size)
         .limit(size)
         .to_list()
     )
+    return items, total
 
 
 async def apply_ai_verdict(alert_id: str, verdict: dict) -> Alert:
@@ -345,7 +372,7 @@ async def apply_ai_verdict(alert_id: str, verdict: dict) -> Alert:
     return alert
 
 
-async def override_verdict(alert_id: str, data: AnalystOverrideRequest, current_user: Optional[User] = None) -> Alert:
+async def override_verdict(alert_id: str, data: AnalystOverrideRequest, current_user: User | None = None) -> Alert:
     """
     Human analyst overrides the AI's classification.
     This feeds back into future prompts (few-shot learning).
@@ -366,12 +393,89 @@ async def override_verdict(alert_id: str, data: AnalystOverrideRequest, current_
     return alert
 
 
-async def enrich_alert_threat_intel(alert_id: str, current_user: Optional[User] = None) -> Alert:
-    """Enrich an alert with VirusTotal + AbuseIPDB threat intelligence."""
+async def enrich_alert_threat_intel(alert_id: str, current_user: User | None = None) -> Alert:
+    """
+    Enrich an alert with:
+      1. AI investigation guide  — always runs (works with private IPs)
+      2. Related alert clustering — same rule / same agent in last 24 h
+      3. Rule frequency stats    — how noisy this rule is
+      4. VT + AbuseIPDB          — only useful for public IPs; lab agents typically private
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from ai.llm_service import llm_service
     from domains.soc.threat_intel import threat_intel_service
 
     alert = await get_alert(alert_id, current_user=current_user)
+
+    # ── 1. External threat intel (VT + AbuseIPDB) ──────────────
     results = await threat_intel_service.enrich_alert(alert)
+
+    # ── 2. AI investigation guide ──────────────────────────────
+    if llm_service.is_available:
+        alert_payload = {
+            "rule_id":          alert.rule_id,
+            "rule_description": alert.rule_description,
+            "rule_level":       alert.rule_level,
+            "rule_groups":      alert.rule_groups,
+            "full_log":         (alert.full_log or "")[:3000],
+            "data":             alert.data,
+            "agent_name":       alert.agent_name,
+            "agent_ip":         alert.agent_ip,
+            "mitre_techniques": alert.mitre_techniques,
+            "ai_verdict":       alert.ai_verdict,
+            "ai_reasoning":     alert.ai_reasoning,
+            "iocs":             alert.iocs,
+        }
+        try:
+            guide = await llm_service.generate_investigation_guide(alert_payload)
+            results["investigation_guide"] = guide
+        except Exception as exc:
+            log.warning("Investigation guide generation failed for alert %s: %s", alert_id, exc)
+            results["investigation_guide"] = None
+    else:
+        results["investigation_guide"] = None
+
+    # ── 3. Related alerts (same rule + same agent, last 24 h) ──
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    try:
+        related_docs = (
+            await Alert.find({
+                "rule_id":    alert.rule_id,
+                "agent_name": alert.agent_name,
+                "timestamp":  {"$gte": cutoff},
+                "_id":        {"$ne": alert.id},
+            })
+            .sort("-timestamp")
+            .limit(5)
+            .to_list()
+        )
+        results["related_alerts"] = [
+            {
+                "id":               str(r.id),
+                "timestamp":        r.timestamp.isoformat(),
+                "rule_description": r.rule_description,
+                "ai_verdict":       r.ai_verdict,
+                "analyst_override": r.analyst_override,
+            }
+            for r in related_docs
+        ]
+    except Exception as exc:
+        log.warning("Related alert query failed for %s: %s", alert_id, exc)
+        results["related_alerts"] = []
+
+    # ── 4. Rule frequency stats (last 24 h) ────────────────────
+    try:
+        rule_24h  = await Alert.find({"rule_id":    alert.rule_id,   "timestamp": {"$gte": cutoff}}).count()
+        agent_24h = await Alert.find({"agent_name": alert.agent_name, "timestamp": {"$gte": cutoff}}).count()
+        results["rule_frequency"] = {
+            "same_rule_24h":  rule_24h,
+            "same_agent_24h": agent_24h,
+        }
+    except Exception as exc:
+        log.warning("Rule frequency query failed for %s: %s", alert_id, exc)
+        results["rule_frequency"] = None
+
     alert.threat_intel = results
     await alert.save()
     return alert
@@ -389,8 +493,11 @@ async def apply_mitre_mapping(alert: Alert) -> Alert:
 
 
 async def get_alert_stats(
-    project_id: Optional[str] = None,
-    current_user: Optional[User] = None,
+    project_id: str | None = None,
+    current_user: User | None = None,
+    days: int = 30,
+    agent_name: str | None = None,
+    all_time: bool = False,
 ) -> dict:
     """
     Get aggregated alert statistics for the analytics dashboard.
@@ -400,7 +507,12 @@ async def get_alert_stats(
                     this project (e.g. a specific intern/class project scope).
         current_user: Scopes all counts to the user's tenant when non-admin,
                       using the same rules as list_alerts.
+        days: Time window (7 | 30 | 90). All counts are scoped to this period.
     """
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=days)
+
     base: dict = {}
     if current_user and current_user.role != "admin":
         user_id = str(current_user.id)
@@ -428,58 +540,97 @@ async def get_alert_stats(
     if project_id:
         base["project_id"] = project_id
 
-    def _q(**extra: object) -> dict:
-        return {**base, **extra}
+    # Apply time-range filter (skipped when all_time=True, e.g. AlertFeed global counts)
+    if not all_time:
+        base["timestamp"] = {"$gte": since}
 
-    total = await Alert.find(base).count()
+    # Apply agent filter when scoping stats to a single agent
+    if agent_name:
+        base["agent_name"] = agent_name
+
+    # Use Motor directly for all aggregations — Beanie's ORM aggregate silently drops
+    # results that don't match the document schema (e.g. {_id: "date", count: N}),
+    # and compound range operators like {"$gte": 8, "$lt": 12} don't serialize
+    # reliably through Beanie's find() when nested inside a kwarg value.
+    col = Alert.get_motor_collection()
+
+    total = await col.count_documents(base)
+
+    # Verdict, action, and severity — single aggregation (one MongoDB roundtrip)
+    summary_pipeline = [
+        {"$match": base},
+        {"$group": {
+            "_id": None,
+            "tp":  {"$sum": {"$cond": [{"$eq": ["$ai_verdict", "TRUE_POSITIVE"]},  1, 0]}},
+            "fp":  {"$sum": {"$cond": [{"$eq": ["$ai_verdict", "FALSE_POSITIVE"]}, 1, 0]}},
+            "unk": {"$sum": {"$cond": [{"$eq": ["$ai_verdict", "UNKNOWN"]},         1, 0]}},
+            "una": {"$sum": {"$cond": [{"$eq": ["$ai_verdict", None]},              1, 0]}},
+            "esc": {"$sum": {"$cond": [{"$eq": ["$ai_action", "ESCALATE"]}, 1, 0]}},
+            "mon": {"$sum": {"$cond": [{"$eq": ["$ai_action", "MONITOR"]},  1, 0]}},
+            "dis": {"$sum": {"$cond": [{"$eq": ["$ai_action", "DISMISS"]},  1, 0]}},
+            "critical": {"$sum": {"$cond": [{"$gte": ["$rule_level", 12]}, 1, 0]}},
+            "high":     {"$sum": {"$cond": [{"$and": [{"$gte": ["$rule_level", 8]},  {"$lt": ["$rule_level", 12]}]}, 1, 0]}},
+            "medium":   {"$sum": {"$cond": [{"$and": [{"$gte": ["$rule_level", 4]},  {"$lt": ["$rule_level", 8]}]},  1, 0]}},
+            "low":      {"$sum": {"$cond": [{"$lt": ["$rule_level", 4]}, 1, 0]}},
+        }},
+    ]
+    sr = (await col.aggregate(summary_pipeline).to_list(None) or [{}])[0]
+
     by_verdict = {
-        "TRUE_POSITIVE": await Alert.find(_q(ai_verdict="TRUE_POSITIVE")).count(),
-        "FALSE_POSITIVE": await Alert.find(_q(ai_verdict="FALSE_POSITIVE")).count(),
-        "UNKNOWN": await Alert.find(_q(ai_verdict="UNKNOWN")).count(),
-        "UNANALYSED": await Alert.find(_q(ai_verdict=None)).count(),
+        "TRUE_POSITIVE":  sr.get("tp",  0),
+        "FALSE_POSITIVE": sr.get("fp",  0),
+        "UNKNOWN":        sr.get("unk", 0),
+        "UNANALYSED":     sr.get("una", 0),
     }
     by_action = {
-        "ESCALATE": await Alert.find(_q(ai_action="ESCALATE")).count(),
-        "MONITOR": await Alert.find(_q(ai_action="MONITOR")).count(),
-        "DISMISS": await Alert.find(_q(ai_action="DISMISS")).count(),
+        "ESCALATE": sr.get("esc", 0),
+        "MONITOR":  sr.get("mon", 0),
+        "DISMISS":  sr.get("dis", 0),
     }
-
-    # Severity distribution (Wazuh levels grouped)
     by_severity = {
-        "critical": await Alert.find(_q(rule_level={"$gte": 12})).count(),
-        "high": await Alert.find(_q(rule_level={"$gte": 8, "$lt": 12})).count(),
-        "medium": await Alert.find(_q(rule_level={"$gte": 4, "$lt": 8})).count(),
-        "low": await Alert.find(_q(rule_level={"$lt": 4})).count(),
+        "critical": sr.get("critical", 0),
+        "high":     sr.get("high",     0),
+        "medium":   sr.get("medium",   0),
+        "low":      sr.get("low",      0),
     }
 
-    # Recent alerts (last 7 days) per day
-    from datetime import timedelta
-    now = datetime.now(timezone.utc)
-    daily_counts = []
-    for days_ago in range(6, -1, -1):
-        day_start = (now - timedelta(days=days_ago)).replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = day_start + timedelta(days=1)
-        count = await Alert.find(_q(timestamp={"$gte": day_start, "$lt": day_end})).count()
-        daily_counts.append({"date": day_start.strftime("%Y-%m-%d"), "count": count})
+    # Daily alert counts — group by UTC date string
+    daily_pipeline = [
+        {"$match": base},
+        {"$group": {
+            "_id":   {"$dateToString": {"format": "%Y-%m-%d", "date": "$timestamp"}},
+            "count": {"$sum": 1},
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+    day_map = {
+        row["_id"]: row["count"]
+        for row in await col.aggregate(daily_pipeline).to_list(None)
+        if row.get("_id")
+    }
+    daily_counts = [
+        {
+            "date":  (now - timedelta(days=i)).strftime("%Y-%m-%d"),
+            "count": day_map.get((now - timedelta(days=i)).strftime("%Y-%m-%d"), 0),
+        }
+        for i in range(days - 1, -1, -1)
+    ]
 
-    # Top rule IDs
-    match_stage = {"$match": base} if base else {"$match": {}}
-    pipeline = [
-        match_stage,
+    # Top triggered rules
+    top_rules = await col.aggregate([
+        {"$match": base},
         {"$group": {"_id": "$rule_id", "count": {"$sum": 1}, "desc": {"$first": "$rule_description"}}},
         {"$sort": {"count": -1}},
         {"$limit": 10},
-    ]
-    top_rules = await Alert.aggregate(pipeline).to_list()
+    ]).to_list(None)
 
-    # Top agents
-    agent_pipeline = [
-        match_stage,
+    # Top agents by alert volume
+    top_agents = await col.aggregate([
+        {"$match": base},
         {"$group": {"_id": "$agent_name", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
         {"$limit": 10},
-    ]
-    top_agents = await Alert.aggregate(agent_pipeline).to_list()
+    ]).to_list(None)
 
     return {
         "total": total,
@@ -490,4 +641,5 @@ async def get_alert_stats(
         "top_rules": top_rules,
         "top_agents": top_agents,
         "project_id": project_id,
+        "days": days,
     }

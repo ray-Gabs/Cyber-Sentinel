@@ -3,25 +3,40 @@
 # ============================================================
 
 from beanie import PydanticObjectId
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
 from core.security import decode_access_token
 from domains.auth.models import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+# auto_error=False lets us fall through to cookie auth when no Bearer header is present
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+async def get_current_user(
+    request: Request,
+    bearer_token: str | None = Depends(oauth2_scheme),
+) -> User:
     """
-    Decode the JWT from the Authorization header, look up the user in
-    MongoDB, and return the Beanie User document.
+    Resolve the current user from an HttpOnly cookie or Authorization header.
+
+    Priority:
+      1. Cookie `access_token` — set by the login endpoint (browser clients)
+      2. Authorization: Bearer <token> — Swagger UI and API clients
 
     Usage in routes:
         @router.get("/me")
         async def me(user: User = Depends(get_current_user)):
             ...
     """
+    token = request.cookies.get("access_token") or bearer_token
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired token",
@@ -32,8 +47,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         user_id: str | None = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-    except Exception:
-        raise credentials_exception
+    except Exception as exc:
+        raise credentials_exception from exc
 
     try:
         user = await User.get(PydanticObjectId(user_id))
@@ -41,8 +56,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
             raise credentials_exception
     except HTTPException:
         raise
-    except Exception:
-        raise credentials_exception
+    except Exception as exc:
+        raise credentials_exception from exc
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

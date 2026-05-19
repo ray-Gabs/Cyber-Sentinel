@@ -5,7 +5,6 @@
 # ============================================================
 
 from datetime import datetime, timezone
-from typing import Optional
 
 from beanie import Document
 from pydantic import BaseModel, Field
@@ -35,9 +34,9 @@ class Correlation(Document):
     scan_target: str
     total_links: int = 0
     links: list[CorrelationLink] = []
-    ai_summary: Optional[str] = None
+    ai_summary: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
     class Settings:
         name = "correlations"

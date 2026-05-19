@@ -7,7 +7,6 @@
 
 import asyncio
 import json
-import logging
 import pathlib as _pathlib
 import re
 import subprocess as _subprocess
@@ -16,13 +15,13 @@ import uuid
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from slowapi.errors import RateLimitExceeded
 
 from core.config import settings
-from core.database import init_db, close_db
+from core.database import close_db, init_db
 from core.exceptions import AppError
 from core.logging_config import configure_logging
 from core.metrics import WS_ACTIVE, metrics_output, record_request
@@ -120,25 +119,26 @@ async def lifespan(app: FastAPI):
     # wazuh_agent_registered=False so the UI shows "Deploy Agent" (not fake "View Alerts").
     # Also auto-generates a wazuh_token for the demo user if not already set, which lab
     # staff can copy into the demo forwarder .env as WAZUH_WEBHOOK_TOKEN.
-    import os as _os
     import secrets as _secrets
-    _demo_email = _os.getenv("DEMO_USER_EMAIL", "").strip()
+    _demo_email = settings.demo_user_email.strip()
     if _demo_email:
         from domains.auth.models import User as _User
         from domains.soc.project_models import SocProject as _SocProject
         _demo = await _User.find_one({"email": _demo_email})
         if _demo:
             if not _demo.wazuh_token:
-                _demo.wazuh_token = _secrets.token_urlsafe(32)
+                # Use the pre-configured token if set; otherwise auto-generate.
+                _demo.wazuh_token = settings.demo_wazuh_token.strip() or _secrets.token_urlsafe(32)
                 await _demo.save()
                 log.info(
-                    "Generated wazuh_token for demo user — configure demo forwarder: WAZUH_WEBHOOK_TOKEN=%s",
+                    "Wazuh token for demo user — configure demo forwarder: WAZUH_WEBHOOK_TOKEN=%s",
                     _demo.wazuh_token,
                 )
             # Upsert each project atomically — safe across multiple uvicorn workers
-            _js_url = _os.getenv("DEMO_JUICESHOP_URL", "http://localhost:3000")
-            _dvwa_url = _os.getenv("DEMO_DVWA_URL", "http://localhost:8080")
-            from datetime import datetime, timezone as _tz
+            _js_url = settings.demo_juiceshop_url
+            _dvwa_url = settings.demo_dvwa_url
+            from datetime import datetime
+            from datetime import timezone as _tz
             _col = _SocProject.get_motor_collection()
             for _slug, _name, _url, _desc in [
                 ("juice-shop", "Juice Shop", _js_url,
@@ -168,7 +168,10 @@ async def lifespan(app: FastAPI):
     # Without this, the per-user concurrent limit blocks all new scans forever.
     # Also catches scans with null started_at (broken records that would never age out).
     try:
-        from datetime import datetime, timezone as _tz, timedelta as _td
+        from datetime import datetime
+        from datetime import timedelta as _td
+        from datetime import timezone as _tz
+
         from domains.pentesting.models import Scan as _Scan
         _stale_cutoff = datetime.now(_tz.utc) - _td(hours=2)
         _stale_result = await _Scan.get_motor_collection().update_many(
@@ -195,7 +198,10 @@ async def lifespan(app: FastAPI):
     # These block the per-user concurrent limit just as badly as stale "running" scans.
     # Also catches scans with null created_at (broken records that would never age out).
     try:
-        from datetime import datetime, timezone as _tz, timedelta as _td
+        from datetime import datetime
+        from datetime import timedelta as _td
+        from datetime import timezone as _tz
+
         from domains.pentesting.models import Scan as _Scan
         _pending_cutoff = datetime.now(_tz.utc) - _td(hours=1)
         _pending_result = await _Scan.get_motor_collection().update_many(
@@ -224,9 +230,9 @@ async def lifespan(app: FastAPI):
     # permanently blocked by a stale count.
     try:
         import redis.asyncio as _aioredis
-        from core.config import settings as _cfg
+
         from domains.pentesting.models import Scan as _Scan
-        _redis_sync = _aioredis.from_url(_cfg.app_redis_url, socket_connect_timeout=5)
+        _redis_sync = _aioredis.from_url(settings.app_redis_url, socket_connect_timeout=5)
         try:
             _active_keys = await _redis_sync.keys("scan:active:*")
             if _active_keys:
@@ -269,7 +275,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Cyber Sentinel API",
     description="Unified Pentesting & SOC Platform",
-    version="1.0.2",
+    version=_VERSION,
     lifespan=lifespan,
 )
 
@@ -283,6 +289,13 @@ async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONR
     detail_str = str(exc.detail)
     limit_match = re.match(r"(\d+)", detail_str)
     limit_value = limit_match.group(1) if limit_match else "unknown"
+    log.warning(
+        "rate_limit_exceeded",
+        path=request.url.path,
+        method=request.method,
+        client=request.client.host if request.client else "unknown",
+        limit=limit_value,
+    )
     response = JSONResponse(
         status_code=429,
         content={
@@ -357,20 +370,35 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    # CSP — restricts allowed resource origins; 'unsafe-inline' for styles needed by report templates
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self';"
+    )
+    # HSTS — browsers ignore this on plain HTTP, so it is safe to always set
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 
 # --------------- Routers ---------------
 
-from domains.auth.router import router as auth_router
-from domains.pentesting.router import router as pentest_router
-from domains.soc.router import router as soc_router
-from domains.correlation.router import router as correlation_router
-from domains.notifications.router import router as notifications_router
 from domains.analytics.router import router as analytics_router
 from domains.audit.router import router as audit_router
-from domains.soc.projects_router import router as soc_projects_router
+from domains.auth.router import router as auth_router
+from domains.correlation.router import router as correlation_router
+from domains.notifications.router import router as notifications_router
+from domains.pentesting.router import router as pentest_router
+from domains.reports.router import router as reports_router
 from domains.search.router import router as search_router
+from domains.soc.projects_router import router as soc_projects_router
+from domains.soc.router import router as soc_router
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 app.include_router(pentest_router, prefix="/api/scans", tags=["Pentesting"])
@@ -381,6 +409,7 @@ app.include_router(analytics_router, tags=["Analytics"])
 app.include_router(audit_router, prefix="/api/audit", tags=["Audit"])
 app.include_router(soc_projects_router, prefix="/api/soc", tags=["SOC Projects"])
 app.include_router(search_router)
+app.include_router(reports_router, prefix="/api/reports", tags=["Reports"])
 
 # --------------- Health Check ---------------
 
@@ -463,7 +492,7 @@ async def health():
         content={
             "status": overall,
             "service": "Cyber Sentinel",
-            "version": "1.0.2",
+            "version": _VERSION,
             "uptime_seconds": int(_time.time() - _start_time),
             "checks": checks,
         },
@@ -563,17 +592,17 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # --------------- WebSocket Endpoint ---------------
 
 @app.websocket("/ws/{channel}")
-async def websocket_endpoint(
-    websocket: WebSocket,
-    channel: str,
-    token: str = Query(None),
-):
+async def websocket_endpoint(websocket: WebSocket, channel: str):
     """
-    Generic WebSocket endpoint. Requires a valid JWT via ?token= query param.
+    Generic WebSocket endpoint. Auth via HttpOnly cookie (browser) or
+    ?token= query param fallback (for non-browser clients / Swagger).
     Channels:
         - "scans"  → real-time scan progress updates
         - "alerts" → live Wazuh alert feed
     """
+    # Cookie is preferred (browser sends it automatically on same-origin WS).
+    # Bearer token in query param is kept as fallback for API/test clients.
+    token = websocket.cookies.get("access_token") or websocket.query_params.get("token")
     if not token:
         await websocket.close(code=1008)
         return

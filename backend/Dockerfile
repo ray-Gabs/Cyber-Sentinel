@@ -31,6 +31,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir --prefix=/install -r /build/requirements.txt
 
 # Nuclei (ProjectDiscovery vuln scanner)
+# To upgrade: --build-arg NUCLEI_VERSION=<latest> at docker build time
 ARG NUCLEI_VERSION=3.8.0
 RUN curl -fsSL \
     "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_amd64.zip" \
@@ -55,12 +56,12 @@ FROM python:3.11-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    NUCLEI_TEMPLATES=/home/sentinel/nuclei-templates
 
 # Runtime system deps only — no build toolchain
 # libssl3 + libffi8: runtime .so files needed by sslyze/nassl
-# libcairo2 + libpango* + libharfbuzz0b: WeasyPrint PDF generation
-# fonts-liberation: substitutes Arial/Times in reports on headless Linux
+# fonts-liberation: fallback fonts for headless Chromium PDF generation
 # nmap + whatweb: security scanners
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -68,11 +69,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     whatweb \
     libssl3 \
     libffi8 \
-    libcairo2 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libpangoft2-1.0-0 \
-    libharfbuzz0b \
     fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
@@ -82,6 +78,18 @@ COPY --from=builder /install /usr/local
 # Go binaries compiled in builder
 COPY --from=builder /usr/local/bin/nuclei /usr/local/bin/nuclei
 COPY --from=builder /usr/local/bin/katana /usr/local/bin/katana
+
+# Playwright Chromium for PDF generation — installed as root so the binary
+# is accessible to all users; PLAYWRIGHT_BROWSERS_PATH makes the path explicit.
+# Pre-clean apt cache so --with-deps has enough space in /var/cache/apt/archives/.
+# Non-fatal (|| true): if disk is still tight the build succeeds and PDF export
+# degrades gracefully — the router already handles ImportError/PlaywrightError.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+RUN apt-get clean && rm -rf /var/cache/apt/archives/*.deb /var/lib/apt/lists/* \
+    && ( playwright install --with-deps chromium \
+         && chmod -R 755 /opt/playwright \
+       ) \
+    || echo "WARNING: Playwright Chromium install failed — PDF export will be unavailable"
 
 # Non-root user — least privilege for production
 RUN useradd -m -u 1000 -s /bin/bash sentinel
@@ -98,8 +106,17 @@ RUN mkdir -p /home/sentinel/nuclei-templates \
 USER sentinel
 
 # Pre-download Nuclei templates at build time so the first scan doesn't need
-# internet access. Non-fatal: || true lets builds succeed in air-gapped envs.
-RUN nuclei -update-templates || true
+# internet access. -duc suppresses the "binary outdated" version-check noise.
+# Non-fatal: || true ensures air-gapped builds succeed; templates auto-download on first scan.
+# Note: no pipe — piping steals nuclei's exit code and breaks the verification check.
+RUN nuclei -update-templates -duc || true; \
+    if [ -d /home/sentinel/nuclei-templates ] && [ "$(ls -A /home/sentinel/nuclei-templates 2>/dev/null)" ]; then \
+      echo "nuclei: templates downloaded OK at ~/nuclei-templates"; \
+    elif [ -d /home/sentinel/.local/share/nuclei/templates ] && [ "$(ls -A /home/sentinel/.local/share/nuclei/templates 2>/dev/null)" ]; then \
+      echo "nuclei: templates downloaded OK at XDG path"; \
+    else \
+      echo "nuclei: WARNING — templates empty, will retry on first scan"; \
+    fi
 
 EXPOSE 8000
 

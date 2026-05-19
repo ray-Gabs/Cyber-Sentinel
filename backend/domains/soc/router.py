@@ -5,31 +5,36 @@
 import asyncio
 import hmac
 import logging
+import math
+from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Query, HTTPException, Request, status
-from typing import Any, Optional
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+
+from core.rate_limit import get_user_or_ip_key, limiter
 
 log = logging.getLogger(__name__)
 
 from core.config import settings
 from core.dependencies import get_current_user
+from domains.audit import service as audit_service
 from domains.auth.models import User
+from domains.soc import service
 from domains.soc.models import Alert
 from domains.soc.schemas import (
-    AlertSummaryResponse,
     AlertDetailResponse,
+    AlertSummaryResponse,
     AnalystOverrideRequest,
-    CustomRuleCreate,
-    CustomRuleUpdate,
-    CustomRuleResponse,
-    TenantSettingsUpdate,
-    WazuhTokenResponse,
+    BatchOverrideRequest,
     BatchRetriangeRequest,
-    TriageResultResponse,
+    CustomRuleCreate,
+    CustomRuleResponse,
+    CustomRuleUpdate,
     FalsePositivePatternResponse,
+    PaginatedAlertResponse,
+    TenantSettingsUpdate,
+    TriageResultResponse,
+    WazuhTokenResponse,
 )
-from domains.soc import service
-from domains.audit import service as audit_service
 
 router = APIRouter()
 
@@ -90,42 +95,82 @@ def _to_detail(a: Alert) -> AlertDetailResponse:
     )
 
 
-@router.get("/", response_model=list[AlertSummaryResponse])
+@router.get("/", response_model=PaginatedAlertResponse)
+@limiter.limit("120/minute", key_func=get_user_or_ip_key)
 async def list_alerts(
+    request: Request,
     page: int = Query(1, ge=1),
-    size: int = Query(50, ge=1, le=200),
-    rule_level_min: Optional[int] = Query(None, ge=0, le=15),
-    ai_verdict: Optional[str] = Query(None),
-    agent_name: Optional[str] = Query(None),
-    agent_group: Optional[str] = Query(None, description="Filter by Wazuh agent group (admin only)"),
-    project_id: Optional[str] = Query(None, description="Filter alerts by project ID"),
-    mitre_technique: Optional[str] = Query(None, description="Filter alerts by MITRE technique ID (e.g. T1021)"),
+    size: int = Query(10, ge=1, le=200),
+    rule_level_min: int | None = Query(None, ge=0, le=15),
+    ai_verdict: str | None = Query(None),
+    agent_name: str | None = Query(None),
+    agent_group: str | None = Query(None, description="Filter by Wazuh agent group (admin only)"),
+    project_id: str | None = Query(None, description="Filter alerts by project ID"),
+    mitre_technique: str | None = Query(None, description="Filter alerts by MITRE technique ID (e.g. T1021)"),
+    tab: str | None = Query(None, description="Filter by triage state: triaged | untriaged"),
+    days: int | None = Query(None, ge=1, le=365, description="Limit to alerts from the last N days"),
+    search: str | None = Query(None, max_length=200, description="Full-text search across rule description, agent name, and rule ID"),
     user: User = Depends(get_current_user),
 ):
     """List ingested Wazuh alerts (newest first) with optional filters."""
-    alerts = await service.list_alerts(
+    alerts, total = await service.list_alerts(
         page, size, rule_level_min, ai_verdict, agent_name,
         agent_group=agent_group, project_id=project_id,
-        mitre_technique=mitre_technique, current_user=user,
+        mitre_technique=mitre_technique, tab=tab, days=days,
+        search=search, current_user=user,
     )
-    return [_to_summary(a) for a in alerts]
+    return PaginatedAlertResponse(
+        items=[_to_summary(a) for a in alerts],
+        total=total,
+        page=page,
+        size=size,
+        pages=math.ceil(total / size) if total > 0 else 1,
+    )
 
 
 # Static paths must be registered BEFORE /{alert_id} — FastAPI matches in order.
 @router.get("/stats/summary")
+@limiter.limit("60/minute", key_func=get_user_or_ip_key)
 async def alert_stats(
-    project_id: Optional[str] = Query(None, description="Scope stats to a specific project"),
+    request: Request,
+    response: Response,
+    project_id: str | None = Query(None, description="Scope stats to a specific project"),
+    range: str = Query("30d", pattern="^(7d|30d|90d)$", description="Time window: 7d | 30d | 90d"),
+    agent_name: str | None = Query(None, description="Scope stats to a specific Wazuh agent"),
+    all_time: bool = Query(False, description="When true, ignore the range filter (return all-time stats)"),
     user: User = Depends(get_current_user),
 ):
     """Get aggregated alert statistics for the analytics dashboard."""
-    return await service.get_alert_stats(project_id=project_id, current_user=user)
+    from core.cache import TTL_STANDARD, cache_get, cache_set
+    days = {"7d": 7, "30d": 30, "90d": 90}.get(range, 30)
+    scope = "admin" if user.role == "admin" else f"user:{user.id}"
+    cache_key = (
+        f"cs:cache:analytics:soc:stats:{scope}:{days}"
+        f":{'all' if all_time else 'range'}"
+        f":{agent_name or 'any'}:{project_id or 'any'}"
+    )
+    if hit := await cache_get(cache_key):
+        response.headers["Cache-Control"] = "private, max-age=60"
+        return hit
+    result = await service.get_alert_stats(
+        project_id=project_id,
+        current_user=user,
+        days=days,
+        agent_name=agent_name,
+        all_time=all_time,
+    )
+    await cache_set(cache_key, result, ttl=TTL_STANDARD)
+    response.headers["Cache-Control"] = "private, max-age=60"
+    return result
 
 
 @router.get("/health")
 async def wazuh_health(user: User = Depends(get_current_user)):
     """
-    Test Wazuh Manager connectivity — does NOT expose credentials or the manager URL.
+    [Admin] Test Wazuh Manager connectivity — does NOT expose credentials or the manager URL.
     """
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
     from domains.soc.wazuh_client import wazuh_client
     try:
         await wazuh_client.authenticate()
@@ -142,7 +187,8 @@ async def wazuh_health(user: User = Depends(get_current_user)):
 
 
 @router.get("/agents")
-async def list_agents(user: User = Depends(get_current_user)):
+@limiter.limit("30/minute", key_func=get_user_or_ip_key)
+async def list_agents(request: Request, user: User = Depends(get_current_user)):
     """List all registered Wazuh agents with their status and metadata."""
     from domains.soc.wazuh_client import wazuh_client
     try:
@@ -158,7 +204,8 @@ async def list_agents(user: User = Depends(get_current_user)):
 # ── Custom Detection Rules CRUD ──────────────────────────────────────────────
 
 @router.get("/detection-rules", response_model=list[CustomRuleResponse])
-async def list_detection_rules(user: User = Depends(get_current_user)):
+@limiter.limit("60/minute", key_func=get_user_or_ip_key)
+async def list_detection_rules(request: Request, user: User = Depends(get_current_user)):
     """
     List detection rules visible to the current user.
 
@@ -183,35 +230,42 @@ async def list_detection_rules(user: User = Depends(get_current_user)):
             id=str(r.id), user_id=r.user_id, project_id=r.project_id,
             name=r.name, description=r.description, pattern=r.pattern,
             severity=r.severity, enabled=r.enabled, created_at=r.created_at,
+            source_alert_id=r.source_alert_id, source_rule_id=r.source_rule_id,
         )
         for r in rules
     ]
 
 
 @router.post("/detection-rules", response_model=CustomRuleResponse, status_code=201)
-async def create_detection_rule(data: CustomRuleCreate, user: User = Depends(get_current_user)):
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
+async def create_detection_rule(request: Request, data: CustomRuleCreate, user: User = Depends(get_current_user)):
     """Create a new custom detection rule (optionally scoped to a project the user owns)."""
     try:
         rule = await service.create_rule(str(user.id), data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    details = f"name={rule.name} severity={rule.severity} pattern={rule.pattern[:60]}"
+    if rule.source_alert_id:
+        details += f" source_alert={rule.source_alert_id}"
     await audit_service.log_event(
         user_id=str(user.id),
         username=user.username,
         action="detection_rule.created",
         resource_type="detection_rule",
         resource_id=str(rule.id),
-        details=f"name={rule.name} severity={rule.severity} pattern={rule.pattern[:60]}",
+        details=details,
     )
     return CustomRuleResponse(
         id=str(rule.id), user_id=rule.user_id, project_id=rule.project_id,
         name=rule.name, description=rule.description, pattern=rule.pattern,
         severity=rule.severity, enabled=rule.enabled, created_at=rule.created_at,
+        source_alert_id=rule.source_alert_id, source_rule_id=rule.source_rule_id,
     )
 
 
 @router.put("/detection-rules/{rule_id}", response_model=CustomRuleResponse)
-async def update_detection_rule(rule_id: str, data: CustomRuleUpdate, user: User = Depends(get_current_user)):
+@limiter.limit("30/minute", key_func=get_user_or_ip_key)
+async def update_detection_rule(request: Request, rule_id: str, data: CustomRuleUpdate, user: User = Depends(get_current_user)):
     """Update an existing detection rule."""
     is_admin = getattr(user, "role", "") == "admin"
     try:
@@ -228,21 +282,24 @@ async def update_detection_rule(rule_id: str, data: CustomRuleUpdate, user: User
         details=f"name={rule.name} changed_fields={changed}",
     )
     return CustomRuleResponse(
-        id=str(rule.id), user_id=rule.user_id, name=rule.name,
-        description=rule.description, pattern=rule.pattern,
+        id=str(rule.id), user_id=rule.user_id, project_id=getattr(rule, "project_id", None),
+        name=rule.name, description=rule.description, pattern=rule.pattern,
         severity=rule.severity, enabled=rule.enabled, created_at=rule.created_at,
+        source_alert_id=rule.source_alert_id, source_rule_id=rule.source_rule_id,
     )
 
 
 @router.delete("/detection-rules", status_code=200)
-async def delete_all_detection_rules(user: User = Depends(get_current_user)):
+@limiter.limit("10/minute", key_func=get_user_or_ip_key)
+async def delete_all_detection_rules(request: Request, user: User = Depends(get_current_user)):
     """Delete all user-owned detection rules (system defaults are preserved)."""
     count = await service.delete_all_rules(str(user.id))
     return {"deleted": count, "message": f"Deleted {count} rule(s)"}
 
 
 @router.delete("/detection-rules/{rule_id}", status_code=200)
-async def delete_detection_rule(rule_id: str, user: User = Depends(get_current_user)):
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
+async def delete_detection_rule(request: Request, rule_id: str, user: User = Depends(get_current_user)):
     """Delete a single detection rule by ID."""
     is_admin = getattr(user, "role", "") == "admin"
     await service.delete_rule(rule_id, str(user.id), is_admin=is_admin)
@@ -271,9 +328,10 @@ _MAX_WEBHOOK_BYTES = 10 * 1024 * 1024  # 10 MB — prevents memory DoS from huge
 
 
 @router.post("/webhook")
+@limiter.limit("300/minute")
 async def wazuh_webhook(
     request: Request,
-    x_wazuh_token: Optional[str] = Header(None, alias="X-Wazuh-Token"),
+    x_wazuh_token: str | None = Header(None, alias="X-Wazuh-Token"),
 ):
     """
     Wazuh push webhook — receives alert events from Wazuh integration.
@@ -298,7 +356,7 @@ async def wazuh_webhook(
         )
 
     # ── Token resolution: per-user token takes priority over global token ──────
-    tenant_id: Optional[str] = None
+    tenant_id: str | None = None
     tenant_min_level: int = 0
 
     provided_token = x_wazuh_token or ""
@@ -309,7 +367,7 @@ async def wazuh_webhook(
         )
 
     owner = await User.find_one({"wazuh_token": provided_token})
-    if owner:
+    if owner and hmac.compare_digest(provided_token, owner.wazuh_token or ""):
         tenant_id = str(owner.id)
         tenant_min_level = owner.wazuh_min_level
     elif settings.wazuh_webhook_token and hmac.compare_digest(
@@ -460,51 +518,69 @@ async def update_tenant_settings(
 
 @router.get("/mitre-summary", tags=["SOC"])
 async def get_mitre_summary(current_user: User = Depends(get_current_user)) -> dict:
-    """Aggregate MITRE ATT&CK technique frequency from the most recent 500 alerts."""
+    """Aggregate MITRE ATT&CK technique frequency across all alerts in scope."""
     query: dict = {}
     if current_user.role != "admin":
         from domains.soc.project_models import SocProject
         user_id = str(current_user.id)
         projects = await SocProject.find(SocProject.owner_id == user_id).to_list()
         agent_names = [p.wazuh_agent_name or p.slug for p in projects if p.wazuh_agent_name or p.slug]
-        # OR both ownership paths: directly owned tenant AND any project agent name.
-        # Alerts ingested via global webhook and claimed by admin still appear because
-        # claimUntenantedAlerts assigns tenant_id=admin_id; agent_name match catches them.
         conditions: list[dict] = [{"tenant_id": user_id}]
         if agent_names:
             conditions.append({"agent_name": {"$in": agent_names}})
         query = {"$or": conditions} if len(conditions) > 1 else conditions[0]
-    alerts = await Alert.find(query).sort("-timestamp").limit(500).to_list()
+
+    col = Alert.get_motor_collection()
+
+    # Real total — not capped by any limit
+    total_alerts = await col.count_documents(query)
+
+    # Aggregate technique hits across ALL alerts via MongoDB pipeline — no Python-side
+    # in-memory scan so this scales regardless of alert volume.
+    pipeline: list[dict] = [
+        {"$match": query},
+        {"$project": {"mt": {"$ifNull": ["$mitre_techniques", []]}}},
+        {"$unwind": "$mt"},
+        {
+            "$group": {
+                "_id": {
+                    "tactic": {
+                        "$cond": [
+                            {"$gt": [{"$strLenCP": {"$ifNull": ["$mt.tactic", ""]}}, 0]},
+                            "$mt.tactic",
+                            "Unknown",
+                        ]
+                    },
+                    "technique": {"$ifNull": ["$mt.technique", {"$ifNull": ["$mt.id", ""]}]},
+                    "name": {"$ifNull": ["$mt.name", ""]},
+                },
+                "count": {"$sum": 1},
+            }
+        },
+    ]
+    agg_rows = await col.aggregate(pipeline).to_list(None)
 
     # by_tactic: { tactic → { technique_id → { count, name } } }
     by_tactic: dict[str, dict[str, dict]] = {}
     total_hits = 0
-
-    for alert in alerts:
-        for mt in (alert.mitre_techniques or []):
-            if isinstance(mt, dict):
-                technique: str | None = mt.get("technique") or mt.get("id")
-                tactic: str = mt.get("tactic") or "Unknown"
-                name: str = mt.get("name") or technique or ""
-            else:
-                technique = getattr(mt, "technique", None) or getattr(mt, "id", None)
-                tactic = getattr(mt, "tactic", None) or "Unknown"
-                name = getattr(mt, "name", None) or technique or ""
-
-            if not technique:
-                continue
-
-            bucket = by_tactic.setdefault(tactic, {})
-            entry = bucket.setdefault(technique, {"count": 0, "name": name})
-            entry["count"] += 1
-            if not entry["name"] and name:
-                entry["name"] = name
-            total_hits += 1
+    for row in agg_rows:
+        tactic = row["_id"].get("tactic") or "Unknown"
+        technique = row["_id"].get("technique") or ""
+        name = row["_id"].get("name") or technique
+        count = int(row.get("count", 0))
+        if not technique:
+            continue
+        bucket = by_tactic.setdefault(tactic, {})
+        entry = bucket.setdefault(technique, {"count": 0, "name": name})
+        entry["count"] += count
+        if not entry["name"] and name:
+            entry["name"] = name
+        total_hits += count
 
     return {
         "by_tactic": by_tactic,
         "total_technique_hits": total_hits,
-        "alerts_analyzed": len(alerts),
+        "alerts_analyzed": total_alerts,
     }
 
 
@@ -598,7 +674,7 @@ async def admin_classify_low_priority(user: User = Depends(get_current_user)):
     Single MongoDB updateMany — runs in milliseconds regardless of count.
     Call once after deployment to clean up historical UNANALYSED noise.
     """
-    if (user.role or "").lower() != "admin":
+    if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     col = Alert.get_motor_collection()
@@ -617,49 +693,61 @@ async def admin_classify_low_priority(user: User = Depends(get_current_user)):
     return {"updated": result.modified_count}
 
 
-@router.post("/admin/retriage-all")
-async def admin_retriage_all(user: User = Depends(get_current_user)):
-    """
-    Admin only: push all unanalysed/failed alerts (rule_level >= 4) into the
-    Redis triage queue so the drain task processes them at a controlled rate.
+@router.get("/triage-status")
+@limiter.limit("60/minute", key_func=get_user_or_ip_key)
+async def triage_status(request: Request, user: User = Depends(get_current_user)):
+    """Live triage queue stats — pending count, Redis queue depth, abandoned count."""
+    col = Alert.get_motor_collection()
+    base = {"rule_level": {"$gte": 4}, "$or": [{"ai_verdict": None}, {"ai_verdict": "TRIAGE_FAILED"}]}
 
-    Returns immediately — processing happens in the background celery-soc worker.
+    pending, abandoned = await asyncio.gather(
+        col.count_documents({**base, "triage_attempts": {"$lt": 3}}),
+        col.count_documents({**base, "triage_attempts": {"$gte": 3}}),
+    )
+
+    queue_depth = 0
+    try:
+        import redis.asyncio as _aioredis
+        _r = _aioredis.from_url(settings.redis_url, socket_connect_timeout=1)
+        queue_depth = int(await asyncio.wait_for(_r.zcard("soc:triage_pending"), timeout=1.0))
+        await _r.aclose()
+    except Exception:
+        pass
+
+    return {"pending": pending, "queue_depth": queue_depth, "abandoned": abandoned}
+
+
+@router.post("/admin/retriage-all")
+@limiter.limit("5/hour", key_func=get_user_or_ip_key)
+async def admin_retriage_all(request: Request, user: User = Depends(get_current_user)):
     """
-    if (user.role or "").lower() != "admin":
+    Admin only: dispatch triage tasks for the oldest 200 unanalysed/failed alerts
+    (rule_level >= 4) directly to the Celery SOC worker. Skips alerts that have
+    already failed 3+ times to prevent infinite retry loops.
+    """
+    if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
-    # Find all alerts that need triage — no tenant filter for admins so that
-    # alerts ingested via the forwarder (no tenant_id) are included.
-    # Use motor directly to fetch only _id, avoiding full document deserialization.
-    col = Alert.get_motor_collection()
-    cursor = col.find(
-        {"rule_level": {"$gte": 4},
-         "$or": [{"ai_verdict": None}, {"ai_verdict": "TRIAGE_FAILED"}]},
-        {"_id": 1},
-    )
-    alert_ids = [str(doc["_id"]) async for doc in cursor]
+    from domains.soc.tasks import triage_single_alert
 
-    if not alert_ids:
+    col = Alert.get_motor_collection()
+    verdict_filter = {"$or": [{"ai_verdict": None}, {"ai_verdict": "TRIAGE_FAILED"}]}
+    base_filter = {"rule_level": {"$gte": 4}, **verdict_filter, "triage_attempts": {"$lt": 3}}
+
+    total_untriaged = await col.count_documents(base_filter)
+    if total_untriaged == 0:
         return {"queued": 0, "total_untriaged": 0}
 
-    import time
-    import redis.asyncio as aioredis
-    from core.config import settings
+    cursor = col.find(base_filter, {"_id": 1}).sort("timestamp", 1).limit(200)
+    alert_ids = [str(doc["_id"]) async for doc in cursor]
 
-    r = aioredis.from_url(settings.app_redis_url, socket_connect_timeout=3)
     queued = 0
-    try:
-        now = time.time()
-        # Pipeline all zadd calls to avoid N round-trips
-        pipe = r.pipeline()
-        for i, aid in enumerate(alert_ids):
-            pipe.zadd("soc:triage_pending", {aid: now + i * 0.001}, nx=True)
-        results = await pipe.execute()
-        queued = sum(1 for v in results if v)
-    except Exception as exc:
-        log.warning("[admin] Failed to push triage queue: %s", exc)
-    finally:
-        await r.aclose()
+    for aid in alert_ids:
+        try:
+            triage_single_alert.delay(aid)
+            queued += 1
+        except Exception as exc:
+            log.warning("[admin/retriage-all] Failed to dispatch %s: %s", aid, exc)
 
     await audit_service.log_event(
         user_id=str(user.id),
@@ -667,13 +755,14 @@ async def admin_retriage_all(user: User = Depends(get_current_user)):
         action="alerts.bulk_retriage_queued",
         resource_type="alert",
         resource_id="*",
-        details=f"queued {queued}/{len(alert_ids)} alerts into soc:triage_pending",
+        details=f"queued {queued}/{total_untriaged} alerts for triage",
     )
-    return {"queued": queued, "total_untriaged": len(alert_ids)}
+    return {"queued": queued, "total_untriaged": total_untriaged}
 
 
 @router.post("/retriage-mine")
-async def retriage_my_alerts(user: User = Depends(get_current_user)):
+@limiter.limit("10/hour", key_func=get_user_or_ip_key)
+async def retriage_my_alerts(request: Request, user: User = Depends(get_current_user)):
     """
     Queue AI triage for all untriaged/failed alerts visible to the current user.
 
@@ -700,8 +789,8 @@ async def retriage_my_alerts(user: User = Depends(get_current_user)):
     scope: dict = {"$or": conditions} if len(conditions) > 1 else conditions[0]
     verdict_filter: dict = {"$or": [{"ai_verdict": None}, {"ai_verdict": "TRIAGE_FAILED"}]}
     alerts = await Alert.find(
-        {"$and": [scope, verdict_filter]}
-    ).to_list()
+        {"$and": [scope, verdict_filter, {"triage_attempts": {"$lt": 3}}]}
+    ).limit(200).to_list()
 
     from domains.soc.tasks import triage_single_alert
     queued = 0
@@ -721,6 +810,100 @@ async def retriage_my_alerts(user: User = Depends(get_current_user)):
         details=f"queued triage for {queued}/{len(alerts)} alerts",
     )
     return {"queued": queued, "total_untriaged": len(alerts)}
+
+
+@router.patch("/batch/override")
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
+async def batch_override_verdicts(
+    request: Request,
+    body: BatchOverrideRequest,
+    user: User = Depends(get_current_user),
+):
+    """Bulk analyst verdict override — mark multiple alerts as TRUE_POSITIVE or FALSE_POSITIVE."""
+    VALID_OVERRIDES = {"TRUE_POSITIVE", "FALSE_POSITIVE"}
+    if body.override not in VALID_OVERRIDES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"override must be one of: {', '.join(VALID_OVERRIDES)}",
+        )
+    col = Alert.get_motor_collection()
+    from bson import ObjectId
+    object_ids = []
+    for aid in body.alert_ids:
+        try:
+            object_ids.append(ObjectId(aid))
+        except Exception:
+            continue
+    if not object_ids:
+        raise HTTPException(status_code=400, detail="No valid alert IDs provided")
+    query: dict = {"_id": {"$in": object_ids}}
+    if user.role != "admin":
+        query["tenant_id"] = str(user.id)
+    result = await col.update_many(
+        query,
+        {"$set": {
+            "analyst_override": body.override,
+            "analyst_notes": body.notes or "",
+        }},
+    )
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="alert.batch_override",
+        resource_type="alert",
+        resource_id="*",
+        details=f"override={body.override} count={result.modified_count}/{len(object_ids)}",
+    )
+    return {
+        "updated": result.modified_count,
+        "requested": len(object_ids),
+        "override": body.override,
+    }
+
+
+@router.delete("/{alert_id}", status_code=204)
+async def delete_alert(alert_id: str, user: User = Depends(get_current_user)):
+    """[Admin] Permanently delete an alert and its associated verdicts."""
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+    a = await service.get_alert(alert_id, current_user=user)
+    from domains.soc.models import AiVerdict
+    await AiVerdict.find({"alert_id": alert_id}).delete()
+    await audit_service.log_event(
+        user_id=str(user.id),
+        username=user.username,
+        action="alert.deleted",
+        resource_type="alert",
+        resource_id=alert_id,
+        details=f"wazuh_id={a.wazuh_id} rule={a.rule_description[:60]}",
+    )
+    await a.delete()
+
+
+@router.get("/{alert_id}/history")
+async def get_alert_history(alert_id: str, user: User = Depends(get_current_user)):
+    """Return the audit trail for an alert — all triage and override events."""
+    # Verify access
+    await service.get_alert(alert_id, current_user=user)
+    from domains.audit.models import AuditLog
+    logs = (
+        await AuditLog.find(
+            {"resource_type": "alert", "resource_id": alert_id}
+        )
+        .sort("-timestamp")
+        .limit(50)
+        .to_list()
+    )
+    return [
+        {
+            "id": str(entry.id),
+            "action": entry.action,
+            "username": entry.username,
+            "details": entry.details,
+            "timestamp": entry.timestamp,
+        }
+        for entry in logs
+    ]
 
 
 @router.get("/{alert_id}", response_model=AlertDetailResponse)
@@ -782,11 +965,11 @@ async def get_alert_playbooks(alert_id: str, user: User = Depends(get_current_us
 @router.post("/{alert_id}/playbooks/trigger")
 async def trigger_playbook(
     alert_id: str,
-    playbook_id: Optional[str] = Query(None),
+    playbook_id: str | None = Query(None),
     user: User = Depends(get_current_user),
 ):
     """Manually trigger a playbook for an alert. If playbook_id is omitted, auto-selects."""
-    from domains.soc.playbook import PlaybookEngine, PLAYBOOKS
+    from domains.soc.playbook import PLAYBOOKS, PlaybookEngine
     a = await service.get_alert(alert_id, current_user=user)
     engine = PlaybookEngine()
     pb_id = playbook_id or engine.find_matching_playbook(a)
@@ -799,7 +982,9 @@ async def trigger_playbook(
 # ── v2 Triage pipeline endpoints ─────────────────────────────────────────────
 
 @router.post("/{alert_id}/retriage", response_model=TriageResultResponse)
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
 async def retriage_alert(
+    request: Request,
     alert_id: str,
     user: User = Depends(get_current_user),
 ):
@@ -810,7 +995,9 @@ async def retriage_alert(
 
 
 @router.post("/triage/batch", response_model=list[TriageResultResponse])
+@limiter.limit("10/minute", key_func=get_user_or_ip_key)
 async def batch_retriage_alerts(
+    request: Request,
     body: BatchRetriangeRequest,
     user: User = Depends(get_current_user),
 ):
@@ -821,7 +1008,9 @@ async def batch_retriage_alerts(
 
 
 @router.post("/{alert_id}/remediation")
+@limiter.limit("15/minute", key_func=get_user_or_ip_key)
 async def get_alert_remediation(
+    request: Request,
     alert_id: str,
     user: User = Depends(get_current_user),
 ):
@@ -895,7 +1084,7 @@ async def false_positive_patterns(
 
 @router.get("/tuning/recommendations")
 async def list_tuning_recommendations(
-    status: Optional[str] = Query(None, description="pending | applied | dismissed"),
+    status: str | None = Query(None, description="pending | applied | dismissed"),
     limit: int = Query(50, ge=1, le=200),
     user: User = Depends(get_current_user),
 ):
@@ -921,9 +1110,11 @@ async def update_tuning_recommendation(
         raise HTTPException(status_code=403, detail="Admin role required")
     if action not in ("applied", "dismissed"):
         raise HTTPException(status_code=400, detail="action must be 'applied' or 'dismissed'")
-    from domains.soc.tuning_models import TuningRecommendation
-    from beanie import PydanticObjectId
     from datetime import datetime, timezone
+
+    from beanie import PydanticObjectId
+
+    from domains.soc.tuning_models import TuningRecommendation
     rec = await TuningRecommendation.get(PydanticObjectId(rec_id))
     if not rec:
         raise HTTPException(status_code=404, detail="Recommendation not found")
@@ -935,7 +1126,9 @@ async def update_tuning_recommendation(
 
 
 @router.post("/tuning/analyze")
+@limiter.limit("3/hour", key_func=get_user_or_ip_key)
 async def trigger_tuning_analysis(
+    request: Request,
     days: int = Query(7, ge=1, le=90, description="Analysis window in days"),
     user: User = Depends(get_current_user),
 ):
@@ -960,7 +1153,7 @@ async def get_agent_context(agent_id: str, user: User = Depends(get_current_user
 @router.get("/wazuh/agents/{agent_id}/vulnerabilities")
 async def get_agent_vulnerabilities(
     agent_id: str,
-    severity: Optional[str] = Query(None, description="critical | high | medium | low"),
+    severity: str | None = Query(None, description="critical | high | medium | low"),
     limit: int = Query(50, ge=1, le=500),
     user: User = Depends(get_current_user),
 ):
@@ -991,7 +1184,7 @@ async def get_agent_sca(
 @router.get("/wazuh/agents/{agent_id}/fim")
 async def get_agent_fim(
     agent_id: str,
-    event_type: Optional[str] = Query(None, description="added | modified | deleted"),
+    event_type: str | None = Query(None, description="added | modified | deleted"),
     limit: int = Query(50, ge=1, le=200),
     user: User = Depends(get_current_user),
 ):

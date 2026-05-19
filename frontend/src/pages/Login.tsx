@@ -38,7 +38,7 @@ export default function Login() {
       const httpStatus =
         (err as { response?: { status?: number } })?.response?.status;
       if (httpStatus === 403 && detail.toLowerCase().includes("pending")) {
-        setError("Your account is pending admin approval.");
+        setError("Your account is pending admin approval. Please wait — an admin will activate your account.");
       } else if (httpStatus === 403 && detail.toLowerCase().includes("suspended")) {
         setError("Your account has been suspended. Contact an administrator.");
       } else {
@@ -55,14 +55,17 @@ export default function Login() {
 
         {justRegistered && (
           <div style={{
-            display: "flex", alignItems: "center", gap: 8,
+            display: "flex", alignItems: "flex-start", gap: 8,
             padding: "10px 14px", marginBottom: 16, borderRadius: "var(--r-md)",
             background: "oklch(from var(--sev-low) l c h / 0.12)",
             border: "1px solid oklch(from var(--sev-low) l c h / 0.3)",
             color: "var(--sev-low)", fontSize: 13,
           }}>
-            <Icon name="check" size={14} />
-            Account created — sign in to continue
+            <Icon name="check" size={14} style={{ marginTop: 1, flexShrink: 0 }} />
+            <span>
+              Account created! <strong>Your account is pending admin approval.</strong>{" "}
+              An admin will review your request — you'll receive access once approved.
+            </span>
           </div>
         )}
 
@@ -89,7 +92,7 @@ export default function Login() {
               type="text"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
-              placeholder="you@its.ac.id"
+              placeholder="Username or email"
               autoComplete="username"
               required
             />
@@ -111,6 +114,7 @@ export default function Login() {
               style={{ paddingLeft: 32, paddingRight: 36 }}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
               autoComplete="current-password"
               required
             />

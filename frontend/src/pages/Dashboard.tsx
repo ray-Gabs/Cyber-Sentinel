@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { getScans } from "@/services/scanService";
+import { getScans, getScanStats } from "@/services/scanService";
+import type { ScanStats } from "@/services/scanService";
 import { getAlertStats } from "@/services/alertService";
 import { TOOL_INFO, SCAN_TYPE_LABELS } from "@/lib/constants";
 import { useAuth } from "@/hooks/useAuth";
@@ -51,19 +52,20 @@ export default function Dashboard() {
   const [roleDismissed, setRoleDismissed] = useState(false);
 
   const [scans,      setScans]      = useState<ScanSummary[]>([]);
+  const [scanStats,  setScanStats]  = useState<ScanStats | null>(null);
   const [alertStats, setAlertStats] = useState<AlertStats | null>(null);
   const [alertError, setAlertError] = useState(false);
-  const [, setScanError]  = useState(false);
   const [loading,    setLoading]    = useState(true);
 
   const fetchData = useCallback(async () => {
-    const [scanData, statsData] = await Promise.allSettled([
-      getScans(1, 50),
+    const [recentData, statsData, alertData] = await Promise.allSettled([
+      getScans(1, 10),
+      getScanStats(),
       getAlertStats(),
     ]);
-    if (scanData.status === "fulfilled") { setScans(scanData.value); setScanError(false); }
-    else setScanError(true);
-    if (statsData.status === "fulfilled") { setAlertStats(statsData.value); setAlertError(false); }
+    if (recentData.status === "fulfilled") setScans(recentData.value);
+    if (statsData.status  === "fulfilled") setScanStats(statsData.value);
+    if (alertData.status  === "fulfilled") { setAlertStats(alertData.value); setAlertError(false); }
     else setAlertError(true);
     setLoading(false);
   }, []);
@@ -74,18 +76,19 @@ export default function Dashboard() {
     return () => clearInterval(id);
   }, [fetchData]);
 
-  // ── Pentest derived stats ──
+  // ── Pentest KPIs — sourced from stats endpoint (DB aggregate, not page slice) ──
   const activeScans    = scans.filter((s) => s.status === "running" || s.status === "pending");
-  const completedScans = scans.filter((s) => s.status === "completed");
-  const totalFindings  = scans.reduce((sum, s) => sum + (s.finding_count || 0), 0);
-  const highRiskCount  = scans.filter((s) => (s.risk_score ?? 0) >= 7).length;
+  const activeCount    = scanStats ? scanStats.running + scanStats.pending : activeScans.length;
+  const completedCount = scanStats?.completed ?? 0;
+  const totalFindings  = scanStats?.total_findings ?? 0;
+  const highRiskCount  = scanStats?.high_risk ?? 0;
 
-  // ── Severity distribution ──
-  const sevCritical = completedScans.filter((s) => (s.risk_score ?? 0) >= 8).reduce((n, s) => n + (s.finding_count || 0), 0);
-  const sevHigh     = completedScans.filter((s) => (s.risk_score ?? 0) >= 6 && (s.risk_score ?? 0) < 8).reduce((n, s) => n + (s.finding_count || 0), 0);
-  const sevMedium   = completedScans.filter((s) => (s.risk_score ?? 0) >= 4 && (s.risk_score ?? 0) < 6).reduce((n, s) => n + (s.finding_count || 0), 0);
-  const sevLow      = completedScans.filter((s) => (s.risk_score ?? 0) < 4 && (s.finding_count || 0) > 0).reduce((n, s) => n + (s.finding_count || 0), 0);
-  const sevInfo     = completedScans.filter((s) => !s.risk_score && (s.finding_count || 0) === 0).length;
+  // ── Severity distribution — from stats aggregate, accurate across all scans ──
+  const sevCritical = scanStats?.findings_critical ?? 0;
+  const sevHigh     = scanStats?.findings_high     ?? 0;
+  const sevMedium   = scanStats?.findings_medium   ?? 0;
+  const sevLow      = scanStats?.findings_low      ?? 0;
+  const sevInfo     = 0;
 
   // ── SOC derived stats ──
   const socTotal     = alertStats?.total ?? 0;
@@ -94,16 +97,21 @@ export default function Dashboard() {
   const socFP        = alertStats?.by_verdict?.["FALSE_POSITIVE"] ?? 0;
   const socMonitor   = alertStats?.by_action?.["MONITOR"] ?? 0;
 
-  // Sparkline data — filled with socTotal or zeroes
-  const kpiSparkData = socTotal > 0
-    ? [42, 38, 45, 52, 48, 38, 24, 18, 14, 22, 35, 41, 38, 32, 28, 24, 22, 18, 14, 12, 18, 24, 22, 18]
-    : new Array(24).fill(0);
+  // Sparkline — use real daily_counts from the API (last 24 data points)
+  const kpiSparkData = (() => {
+    const counts = alertStats?.daily_counts ?? [];
+    if (counts.length === 0) return new Array(24).fill(0);
+    const values = counts.slice(-24).map((d) => d.count);
+    // Pad to 24 points if fewer days are available
+    while (values.length < 24) values.unshift(0);
+    return values;
+  })();
 
   const today = new Date();
   const eyebrow = `${today.toLocaleDateString("en-US", { weekday: "long" }).toUpperCase()} · ${today.toLocaleDateString()}`;
   const subText = socTotal > 0
-    ? `${socTotal.toLocaleString()} alerts monitored · ${socEscalated} escalated${activeScans.length > 0 ? ` · ${activeScans.length} scan${activeScans.length !== 1 ? "s" : ""} running` : " · all systems nominal."}`
-    : `SOC platform ready${activeScans.length > 0 ? ` · ${activeScans.length} scan${activeScans.length !== 1 ? "s" : ""} running` : ""}`;
+    ? `${socTotal.toLocaleString()} alerts monitored · ${socEscalated} escalated${activeCount > 0 ? ` · ${activeCount} scan${activeCount !== 1 ? "s" : ""} running` : " · all systems nominal."}`
+    : `SOC platform ready${activeCount > 0 ? ` · ${activeCount} scan${activeCount !== 1 ? "s" : ""} running` : ""}`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--gap-md)" }}>
@@ -296,8 +304,8 @@ export default function Dashboard() {
                   <div key={i} className="animate-pulse" style={{ height: 68, borderRadius: 8, background: "var(--bg-2)", border: "1px solid var(--border)" }} />
                 ))
               ) : ([
-                { l: "ACTIVE",         v: activeScans.length.toString(),    tone: activeScans.length > 0 ? "accent" : undefined },
-                { l: "COMPLETED",      v: completedScans.length.toString(), tone: undefined },
+                { l: "ACTIVE",         v: activeCount.toString(),            tone: activeCount > 0 ? "accent" : undefined },
+                { l: "COMPLETED",      v: completedCount.toLocaleString(),   tone: undefined },
                 { l: "TOTAL FINDINGS", v: totalFindings.toLocaleString(),    tone: "accent" },
                 { l: "HIGH RISK",      v: highRiskCount.toString(),          tone: highRiskCount > 0 ? "critical" : undefined },
               ].map((s) => (
@@ -367,7 +375,7 @@ export default function Dashboard() {
                       { l: "True positive",  v: socTP,                                           pct: socTotal > 0 ? Math.round((socTP / socTotal) * 100) : 0,      tone: "critical" },
                       { l: "False positive", v: socFP,                                           pct: socTotal > 0 ? Math.round((socFP / socTotal) * 100) : 0,      tone: "medium"   },
                       { l: "Unknown",        v: alertStats.by_verdict?.["UNKNOWN"] ?? 0,          pct: socTotal > 0 ? Math.round(((alertStats.by_verdict?.["UNKNOWN"] ?? 0) / socTotal) * 100) : 0, tone: "info" },
-                      { l: "Unanalyzed",     v: alertStats.by_verdict?.["UNANALYZED"] ?? 0,       pct: socTotal > 0 ? Math.round(((alertStats.by_verdict?.["UNANALYZED"] ?? 0) / socTotal) * 100) : 0, tone: "low" },
+                      { l: "Unanalyzed",     v: alertStats.by_verdict?.["UNANALYSED"] ?? 0,       pct: socTotal > 0 ? Math.round(((alertStats.by_verdict?.["UNANALYSED"] ?? 0) / socTotal) * 100) : 0, tone: "low" },
                     ].map((r) => (
                       <div key={r.l} className="sev-row">
                         <span style={{ width: 90, color: "var(--text-3)", fontSize: 11 }}>{r.l}</span>
@@ -409,7 +417,7 @@ export default function Dashboard() {
         <div className="card">
           <div className="card-head">
             <div>
-              <div className="eyebrow" style={{ marginBottom: 2 }}>LATEST · {scans.length} SCANS</div>
+              <div className="eyebrow" style={{ marginBottom: 2 }}>RECENT SCANS · {scanStats?.total ?? scans.length} TOTAL</div>
               <h2 className="h2">Recent Scans</h2>
             </div>
             <Link to="/scans" style={{ fontSize: 12, color: "var(--accent)", textDecoration: "none" }}>View all →</Link>
@@ -467,14 +475,14 @@ export default function Dashboard() {
       </div>
 
       {/* Active scans progress — only shown when scans are running */}
-      {!loading && activeScans.length > 0 && (
+      {!loading && activeCount > 0 && (
         <div className="card" style={{ borderColor: "oklch(from var(--accent) l c h / 0.35)" }}>
           <div className="card-head">
             <div>
               <div className="eyebrow" style={{ marginBottom: 2 }}>LIVE</div>
               <h2 className="h2">Active Scans</h2>
             </div>
-            <span className="mono" style={{ fontSize: 11, color: "var(--accent)" }}>{activeScans.length} running</span>
+            <span className="mono" style={{ fontSize: 11, color: "var(--accent)" }}>{activeCount} running</span>
           </div>
           <div style={{ padding: "var(--pad-card)", display: "flex", flexDirection: "column", gap: 10 }}>
             {activeScans.map((scan) => (

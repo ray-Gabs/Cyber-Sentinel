@@ -9,27 +9,79 @@ export interface MitreTechnique {
   name: string;        // e.g. "Brute Force"
 }
 
+export interface VTResult {
+  source: "virustotal";
+  type: "ip" | "domain" | "hash";
+  ip?: string;
+  domain?: string;
+  hash?: string;
+  malicious: number;
+  suspicious: number;
+  harmless: number;
+  undetected?: number;
+  reputation?: number;
+  // IP fields
+  country?: string;
+  as_owner?: string;
+  // Domain fields
+  registrar?: string;
+  // Hash fields
+  type_description?: string;
+  meaningful_name?: string;
+  size?: number;
+}
+
+export interface AbuseIPDBResult {
+  source: "abuseipdb";
+  type: "ip";
+  ip: string;
+  abuse_confidence: number;
+  total_reports: number;
+  country_code: string;
+  isp: string;
+  domain?: string;
+  is_tor: boolean;
+  usage_type?: string;
+}
+
+export type ThreatIntelError =
+  | "no_api_keys"
+  | "only_private_ips"
+  | "no_indicators"
+  | "rate_limited";
+
+export interface InvestigationGuide {
+  investigation_steps: string[];
+  host_artifacts: string[];
+  false_positive_scenarios: string[];
+  escalation_criteria: string;
+  mitre_context: string;
+  confidence_note?: string;
+}
+
+export interface RelatedAlert {
+  id: string;
+  timestamp: string;
+  rule_description: string;
+  ai_verdict?: string;
+  analyst_override?: string;
+}
+
+export interface RuleFrequency {
+  same_rule_24h: number;
+  same_agent_24h: number;
+}
+
 export interface ThreatIntelResult {
-  virustotal?: Array<{
-    source: string;
-    ip?: string;
-    domain?: string;
-    malicious: number;
-    suspicious: number;
-    harmless: number;
-    reputation?: number;
-    country?: string;
-    as_owner?: string;
-  }>;
-  abuseipdb?: Array<{
-    source: string;
-    ip: string;
-    abuse_confidence: number;
-    total_reports: number;
-    country_code: string;
-    isp: string;
-    is_tor: boolean;
-  }>;
+  virustotal?: VTResult[];
+  abuseipdb?: AbuseIPDBResult[];
+  errors?: ThreatIntelError[];
+  enriched_at?: string;
+  indicators_checked?: number;
+  private_ips_skipped?: number;
+  investigation_guide?: InvestigationGuide | null;
+  related_alerts?: RelatedAlert[];
+  rule_frequency?: RuleFrequency;
 }
 
 export interface AlertIOCs {
@@ -104,6 +156,17 @@ export interface AlertFilterParams {
   agent_group?: string;
   project_id?: string;
   mitre_technique?: string;
+  tab?: string;
+  days?: number;
+  search?: string;
+}
+
+export interface PaginatedAlerts {
+  items: AlertSummary[];
+  total: number;
+  page: number;
+  size: number;
+  pages: number;
 }
 
 export interface DetectionRule {
@@ -116,6 +179,8 @@ export interface DetectionRule {
   severity: "low" | "medium" | "high" | "critical";
   enabled: boolean;
   created_at: string;
+  source_alert_id?: string | null;
+  source_rule_id?: string | null;
 }
 
 export interface DetectionRuleCreate {
@@ -125,6 +190,8 @@ export interface DetectionRuleCreate {
   severity: "low" | "medium" | "high" | "critical";
   enabled?: boolean;
   project_id?: string | null;
+  source_alert_id?: string | null;
+  source_rule_id?: string | null;
 }
 
 export interface DetectionRuleUpdate {

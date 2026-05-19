@@ -3,7 +3,6 @@
 # ============================================================
 
 from datetime import datetime, timezone
-from typing import Optional
 
 from beanie import Document
 from pydantic import Field, field_validator
@@ -28,28 +27,28 @@ class User(Document):
     # Default is viewer — instructor promotes to analyst via PATCH /api/auth/users/{id}/role
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    last_login: Optional[datetime] = None
+    last_login: datetime | None = None
 
     # Password reset (single-use token stored as SHA-256 hash)
-    password_reset_token_hash: Optional[str] = None
-    password_reset_expires: Optional[datetime] = None
+    password_reset_token_hash: str | None = None
+    password_reset_expires: datetime | None = None
 
     # Registration approval flow
     status: str = Field(default="active")   # "pending" | "active" | "suspended"
     is_demo: bool = False
-    approved_by: Optional[str] = None       # user_id of admin who approved
-    approved_at: Optional[datetime] = None
+    approved_by: str | None = None       # user_id of admin who approved
+    approved_at: datetime | None = None
 
     # Wazuh agent binding — links this user to a specific Wazuh agent so the SOC
     # dashboard scopes to their alerts only. Set by the student via PATCH /api/auth/me.
     # Matches the "name" field Wazuh uses when the agent registers (e.g. "alice-laptop").
     # Admin role ignores this filter and always sees all alerts.
-    wazuh_agent_name: Optional[str] = None
+    wazuh_agent_name: str | None = None
 
     # Multi-tenant Wazuh integration (professor's recommendation)
-    wazuh_token: Optional[str] = None          # Per-user forwarder token (secrets.token_urlsafe)
+    wazuh_token: str | None = None          # Per-user forwarder token (secrets.token_urlsafe)
     wazuh_min_level: int = 3                   # Per-user minimum alert level (0–15)
-    wazuh_agent_group: Optional[str] = None    # Wazuh agent group, e.g. "tenant_juiceshop"
+    wazuh_agent_group: str | None = None    # Wazuh agent group, e.g. "tenant_juiceshop"
 
     # Per-user notification preferences
     notification_prefs: dict = Field(default_factory=lambda: {

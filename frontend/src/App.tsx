@@ -32,6 +32,7 @@ import ScanList from "@/pages/pentest/ScanList";
 import ScanConfig from "@/pages/pentest/ScanConfig";
 import ScanDetail from "@/pages/pentest/ScanDetail";
 import ScanDiff from "@/pages/pentest/ScanDiff";
+import ScheduledScans from "@/pages/pentest/ScheduledScans";
 import AlertFeed from "@/pages/soc/AlertFeed";
 import AlertDetail from "@/pages/soc/AlertDetail";
 import Analytics from "@/pages/soc/Analytics";
@@ -44,6 +45,7 @@ import ResetPassword from "@/pages/ResetPassword";
 import Admin from "@/pages/Admin";
 import AuditLog from "@/pages/AuditLog";
 import Onboarding from "@/pages/Onboarding";
+import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import SocDashboard from "@/pages/soc/SocDashboard";
 import MitreNavigator from "@/pages/soc/MitreNavigator";
 import DetectionRules from "@/pages/soc/DetectionRules";
@@ -140,6 +142,7 @@ function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
 
       {/* Protected routes — wrapped in the sidebar/header layout */}
       <Route
@@ -154,6 +157,7 @@ function AppRoutes() {
         <Route path="/scans/new" element={<RoleRoute requiredRole="analyst"><ScanConfig /></RoleRoute>} />
         <Route path="/scans/:id" element={<ScanDetailKeyed />} />
         <Route path="/scans/:id/diff" element={<ScanDiff />} />
+        <Route path="/scans/scheduled" element={<RoleRoute requiredRole="analyst"><ScheduledScans /></RoleRoute>} />
         <Route path="/alerts" element={<AlertFeed />} />
         <Route path="/alerts/:id" element={<AlertDetail />} />
         <Route path="/agents" element={<AgentsMonitor />} />

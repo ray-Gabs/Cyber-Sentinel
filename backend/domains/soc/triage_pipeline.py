@@ -19,7 +19,6 @@
 import asyncio
 import logging
 import time
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +61,17 @@ async def run_triage_pipeline(alert_id: str) -> dict:
 
     result["wazuh_id"] = alert.wazuh_id
     result["rule_level"] = alert.rule_level
+
+    # Increment attempt counter so permanently-failing alerts stop being requeued
+    try:
+        from bson import ObjectId as _ObjId
+
+        from domains.soc.models import Alert
+        await Alert.get_motor_collection().update_one(
+            {"_id": _ObjId(alert_id)}, {"$inc": {"triage_attempts": 1}}
+        )
+    except Exception as _exc:
+        log.debug("[Triage] Could not increment triage_attempts for %s: %s", alert_id, _exc)
 
     # ── Stage 1: Context build ────────────────────────────────────────────────
     context = await _stage_context_build(alert, result)
@@ -319,8 +329,8 @@ async def _stage_notify(alert, result: dict):
     for the agent owner (if alert is high-severity and the owner is linked).
     """
     try:
-        from domains.auth.models import User
         from core.websocket import ws_manager
+        from domains.auth.models import User
 
         # WebSocket broadcast to all connected clients on the "alerts" channel
         try:
@@ -397,8 +407,9 @@ async def _stage_correlate(alert, result: dict):
             result["stages_completed"].append("correlate")
             return
 
-        from domains.pentesting.models import Scan
         from datetime import timedelta
+
+        from domains.pentesting.models import Scan
         since = __import__("datetime").datetime.now(__import__("datetime").timezone.utc) - timedelta(days=30)
 
         pattern = search_ip.replace(".", "\\.") if search_ip else search_name
@@ -469,7 +480,7 @@ async def batch_retriage(alert_ids: list[str], concurrency: int = 3) -> list[dic
             *[retriage_alert(aid) for aid in batch],
             return_exceptions=True,
         )
-        for aid, res in zip(batch, batch_results):
+        for aid, res in zip(batch, batch_results, strict=False):
             if isinstance(res, Exception):
                 log.warning("[Triage] batch_retriage failed for %s: %s", aid, res)
                 results.append({"alert_id": aid, "error": str(res)})

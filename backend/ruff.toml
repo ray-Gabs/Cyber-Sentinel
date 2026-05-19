@@ -1,0 +1,19 @@
+exclude = ["venv", ".venv", "__pycache__", "*.egg-info"]
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    # Module-level imports not at top: intentional in celery_app.py (sys.path setup),
+    # auth routers (log setup before domain imports), and main.py (routers at bottom).
+    "E402",
+    # Single-line if-return style used intentionally in small utility functions
+    "E701",
+    # Line length: AI prompt strings and log messages are intentionally long;
+    # wrapping them changes readability without improving correctness.
+    "E501",
+]
+
+[lint.per-file-ignores]
+# celery_app.py manipulates sys.path before importing — single-line import needed
+"core/celery_app.py" = ["E401"]

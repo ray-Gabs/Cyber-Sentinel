@@ -2,9 +2,9 @@
 # backend/domains/correlation/schemas.py — Request/Response Schemas
 # ============================================================
 
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class CorrelationLinkResponse(BaseModel):
@@ -26,7 +26,7 @@ class CorrelationResponse(BaseModel):
     scan_target: str
     total_links: int
     links: list[CorrelationLinkResponse] = []
-    ai_summary: Optional[str] = None
+    ai_summary: str | None = None
     created_at: datetime
 
 

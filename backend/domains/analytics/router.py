@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from core.cache import TTL_STANDARD, TTL_SLOW, cache_get, cache_set
+from core.cache import TTL_STANDARD, cache_get, cache_set
 from core.dependencies import get_current_user
 from domains.auth.models import User
 from domains.pentesting.models import Scan
@@ -25,10 +25,14 @@ RANGE_DAYS = {"7d": 7, "30d": 30, "90d": 90}
 
 
 def _level_to_severity(level: int) -> str:
-    if level >= 12: return "critical"
-    if level >= 8:  return "high"
-    if level >= 5:  return "medium"
-    if level >= 1:  return "low"
+    if level >= 12:
+        return "critical"
+    if level >= 8:
+        return "high"
+    if level >= 5:
+        return "medium"
+    if level >= 1:
+        return "low"
     return "informational"
 
 
@@ -54,8 +58,9 @@ async def get_admin_stats(
     if cached := await cache_get(cache_key):
         return cached
 
-    from domains.auth.models import User as UserModel
     from bson import ObjectId
+
+    from domains.auth.models import User as UserModel
 
     days = RANGE_DAYS.get(range, 7)
     now = datetime.now(timezone.utc)

@@ -37,6 +37,7 @@ export type {
   Alert,
   AlertSummary,
   AlertFilterParams,
+  PaginatedAlerts,
   AlertClassification,
   AlertAction,
   AnalystOverrideRequest,

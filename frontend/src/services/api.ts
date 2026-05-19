@@ -1,36 +1,63 @@
+import { API_BASE } from "@/lib/constants";
 import axios from "axios";
-import { TOKEN_KEY, API_BASE } from "@/lib/constants";
+import type { AxiosRequestConfig } from "axios";
 
-/** Axios instance with JWT interceptor */
+/** Axios instance — auth via HttpOnly cookie (sent automatically by the browser). */
 const api = axios.create({
   baseURL: API_BASE,
   headers: { "Content-Type": "application/json" },
   timeout: 30000,
+  withCredentials: true, // browser sends the HttpOnly access_token cookie on every request
 });
 
-// ── Request interceptor: attach JWT ──
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+let _refreshing = false;
+let _refreshQueue: Array<() => void> = [];
 
-// ── Response interceptor: handle 401 and 429 ──
+function _flushQueue() {
+  _refreshQueue.forEach((fn) => fn());
+  _refreshQueue = [];
+}
+
+// ── Response interceptor: handle 401 (auto-refresh) and 429 ──
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const status = error.response?.status;
+    const originalRequest: AxiosRequestConfig & { _retry?: boolean } = error.config ?? {};
 
-    if (status === 401) {
-      const token = localStorage.getItem(TOKEN_KEY);
-      // Only clear token and redirect when a stored token was rejected.
-      // If there is no token (e.g. login page returning "bad credentials"),
-      // do nothing — the caller handles the error in its own catch block.
-      if (token && !window.location.pathname.includes("/login")) {
-        localStorage.removeItem(TOKEN_KEY);
-        window.location.href = "/login";
+    if (status === 401 && !originalRequest._retry) {
+      const isAuthPath =
+        originalRequest.url?.includes("/auth/login") ||
+        originalRequest.url?.includes("/auth/refresh") ||
+        originalRequest.url?.includes("/auth/me");
+      const onLoginPage = window.location.pathname.includes("/login");
+
+      if (!isAuthPath && !onLoginPage) {
+        // Queue concurrent callers while a refresh is in flight
+        if (_refreshing) {
+          return new Promise((resolve, reject) => {
+            _refreshQueue.push(async () => {
+              try {
+                originalRequest._retry = true;
+                resolve(await api(originalRequest));
+              } catch (e) { reject(e); }
+            });
+          });
+        }
+
+        _refreshing = true;
+        originalRequest._retry = true;
+        try {
+          await axios.post(`${API_BASE}/auth/refresh`, {}, { withCredentials: true });
+          _flushQueue();
+          return api(originalRequest);
+        } catch {
+          _refreshQueue = [];
+          window.location.href = "/login";
+        } finally {
+          _refreshing = false;
+        }
+        return Promise.reject(error);
       }
     }
 

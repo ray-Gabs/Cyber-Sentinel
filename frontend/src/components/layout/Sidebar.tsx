@@ -22,11 +22,12 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: ROUTES.DASHBOARD,       label: "Dashboard",       icon: "dashboard", section: null },
-  { to: ROUTES.ALERTS,          label: "SOC Alerts",      icon: "bell",      section: "SOC Platform" },
-  { to: ROUTES.SOC_DASHBOARD,   label: "SOC Dashboard",   icon: "activity",  section: null },
+  { to: ROUTES.SOC_DASHBOARD,   label: "SOC Dashboard",   icon: "activity",  section: "SOC Platform" },
+  { to: ROUTES.ALERTS,          label: "SOC Alerts",      icon: "bell",      section: null },
   { to: ROUTES.PROJECTS,        label: "Projects",        icon: "folder",    section: null },
   { to: ROUTES.ANALYTICS,       label: "Analytics",       icon: "chart",     section: null },
   { to: ROUTES.SCANS,           label: "Scans",           icon: "scan",      section: "Pentest Engine" },
+  { to: ROUTES.SCANS_SCHEDULED, label: "Scheduled",       icon: "calendar",  section: null, roles: ["analyst"] },
   { to: ROUTES.CORRELATIONS,    label: "Correlation",     icon: "network",   section: "Intelligence" },
   { to: ROUTES.MITRE,           label: "MITRE ATT&CK",   icon: "target",    section: null },
   { to: ROUTES.DETECTION_RULES, label: "Detection Rules", icon: "rules",     section: null },
@@ -40,8 +41,11 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { to: ROUTES.DASHBOARD,       label: "Dashboard",       icon: "dashboard", section: null },
   { to: ROUTES.ADMIN,           label: "Users",           icon: "users",     section: "Admin Panel" },
   { to: ROUTES.AUDIT,           label: "Audit Log",       icon: "logs",      section: null },
-  { to: ROUTES.ALERTS,          label: "SOC Alerts",      icon: "bell",      section: "SOC Monitor" },
-  { to: ROUTES.SOC_DASHBOARD,   label: "SOC Dashboard",   icon: "activity",  section: null },
+  { to: ROUTES.SCANS,           label: "Scans",           icon: "scan",      section: "Pentest Engine" },
+  { to: ROUTES.SCANS_SCHEDULED, label: "Scheduled",       icon: "calendar",  section: null },
+  { to: ROUTES.CORRELATIONS,    label: "Correlation",     icon: "network",   section: "Intelligence" },
+  { to: ROUTES.SOC_DASHBOARD,   label: "SOC Dashboard",   icon: "activity",  section: "SOC Monitor" },
+  { to: ROUTES.ALERTS,          label: "SOC Alerts",      icon: "bell",      section: null },
   { to: ROUTES.PROJECTS,        label: "Projects",        icon: "folder",    section: null },
   { to: ROUTES.ANALYTICS,       label: "Analytics",       icon: "chart",     section: null },
   { to: ROUTES.MITRE,           label: "MITRE ATT&CK",   icon: "target",    section: null },
@@ -110,6 +114,7 @@ function SidebarContent({
               )}
               <NavLink
                 to={item.to}
+                end
                 title={collapsed ? item.label : undefined}
                 onClick={onNavClick}
                 className={({ isActive }) => `sb-item${isActive ? " active" : ""}`}

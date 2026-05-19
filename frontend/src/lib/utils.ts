@@ -6,14 +6,29 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** Format ISO date string to a readable format */
+/**
+ * Parse an ISO datetime string as UTC regardless of whether it carries a
+ * timezone indicator. MongoDB/Beanie returns naive UTC strings (no `Z`),
+ * which browsers interpret as LOCAL time per the ECMAScript spec — causing
+ * timestamps to be offset by the user's UTC offset (e.g. −7h for UTC+7).
+ * Appending `Z` forces correct UTC interpretation.
+ */
+export function parseUtcDate(iso: string): Date {
+  if (!iso.endsWith("Z") && !/[+-]\d{2}:\d{2}$/.test(iso)) {
+    return new Date(iso + "Z");
+  }
+  return new Date(iso);
+}
+
+/** Format ISO date string to a readable format (24-hour clock) */
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
+  return parseUtcDate(iso).toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
 }
 
@@ -24,22 +39,22 @@ export function formatDate(iso: string): string {
  */
 export function formatAlertTime(iso: string | null | undefined): string {
   if (!iso) return "—";
-  const d = new Date(iso);
+  const d = parseUtcDate(iso);
   if (isNaN(d.getTime())) return "—";
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
   if (isToday) {
-    return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
   }
   const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
   return `${date}  ${time}`;
 }
 
 /** Format relative time with sub-hour precision for SIEM use cases */
 export function timeAgo(iso: string | null | undefined): string {
   if (!iso) return "—";
-  const ms = Date.now() - new Date(iso).getTime();
+  const ms = Date.now() - parseUtcDate(iso).getTime();
   if (isNaN(ms)) return "—";
   const seconds = Math.floor(ms / 1000);
   if (seconds < 60)  return "just now";

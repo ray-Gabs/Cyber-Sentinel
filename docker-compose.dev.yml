@@ -1,0 +1,48 @@
+# ============================================================
+# Cyber Sentinel — Development Override
+# ============================================================
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Differences from prod:
+#   - Backend:  uvicorn --reload for hot-reload on file save
+#   - Frontend: Vite dev server on port 5173 (with HMR)
+#   - Both mount source code as volumes
+# ============================================================
+
+services:
+
+  backend:
+    command: uvicorn main:app --reload --host 0.0.0.0 --port 8000
+    volumes:
+      - ./backend:/app
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+
+  celery:
+    command: celery -A core.celery_app worker --loglevel=debug --pool=solo -Q celery
+    volumes:
+      - ./backend:/app
+
+  celery-soc:
+    command: celery -A core.celery_app worker --loglevel=debug --pool=solo -Q soc
+    volumes:
+      - ./backend:/app
+
+  celery-beat:
+    volumes:
+      - ./backend:/app

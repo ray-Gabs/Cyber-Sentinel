@@ -7,7 +7,6 @@
 # ============================================================
 
 from datetime import datetime, timezone
-from typing import Optional
 
 from beanie import Document
 from pydantic import Field
@@ -23,10 +22,10 @@ class AuditLog(Document):
                             # "scan.created" | "scan.deleted" | "scan.cancelled"
                             # "role.changed" | "account.activated" | "account.deactivated"
                             # "alert.received" | "alert.triaged"
-    resource_type: Optional[str] = None   # "scan" | "user" | "alert" | "report"
-    resource_id: Optional[str] = None     # MongoDB ID of the affected resource
-    details: Optional[str] = None         # Human-readable summary (≤ 200 chars)
-    ip_address: Optional[str] = None
+    resource_type: str | None = None   # "scan" | "user" | "alert" | "report"
+    resource_id: str | None = None     # MongoDB ID of the affected resource
+    details: str | None = None         # Human-readable summary (≤ 200 chars)
+    ip_address: str | None = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

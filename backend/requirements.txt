@@ -15,8 +15,7 @@ beanie==1.27.*             # MongoDB ODM (built on Motor + Pydantic)
 
 # --- Auth ---
 PyJWT[crypto]>=2.8.0,<3.0.0        # JWT encoding/decoding (replaces python-jose — CVE-2024-33664)
-passlib[bcrypt]>=1.7.4,<2.0.0     # Password hashing
-bcrypt==4.0.1                      # passlib 1.7.x needs __about__; removed in bcrypt 4.1+
+bcrypt>=4.2.0,<5.0                # direct bcrypt — no passlib wrapper
 pydantic[email]==2.10.*            # Includes EmailStr
 pydantic-settings==2.7.*          # Settings from .env
 
@@ -38,11 +37,13 @@ sslyze==6.*                       # SSL/TLS analyser
 
 # --- HTTP ---
 httpx==0.28.*                     # Async HTTP client (for Wazuh + ZAP APIs)
+defusedxml>=0.7.1                 # Safe XML parsing (prevents XXE in sitemap parsing)
 python-dotenv==1.0.*              # .env file loading
 beautifulsoup4==4.12.*            # HTML parsing (fallback crawler + fingerprinting)
 
 # --- Reports ---
 reportlab>=4.0,<5.0               # Pure-Python PDF generation — no GTK/Cairo system deps (works on Windows + Linux)
+playwright>=1.40.0                # Headless Chromium PDF renderer (run: playwright install chromium)
 jinja2==3.1.*                     # HTML templates for reports
 
 # --- Rate Limiting ---
@@ -64,3 +65,7 @@ boto3==1.35.*                     # AWS S3 report storage (falls back to local f
 
 # --- MITRE ATT&CK ---
 # Uses bundled STIX data + LLM classification (no extra deps)
+
+# --- Testing ---
+pytest>=8.0,<9.0
+pytest-asyncio>=0.24,<1.0

@@ -5,6 +5,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Suppress Edge/IE native password reveal button — we use our own toggle */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
 /* ══════════════════════════════════════════════════════
    BRIDGE ALIASES
    Maps old var names → new tokens so un-migrated
@@ -343,6 +349,7 @@ body {
   color: var(--text-2);
   border: 1px solid var(--border);
   text-transform: uppercase;
+  white-space: nowrap;
 }
 .badge-critical { background: var(--sev-critical-bg); color: var(--sev-critical); border-color: oklch(from var(--sev-critical) l c h / 0.3); }
 .badge-high     { background: var(--sev-high-bg);     color: var(--sev-high);     border-color: oklch(from var(--sev-high) l c h / 0.3); }
@@ -378,7 +385,7 @@ body {
 .kpi-trend.down { color: var(--sev-low); }
 
 /* Table */
-.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
 .tbl thead th {
   text-align: left;
   font-family: var(--font-mono);

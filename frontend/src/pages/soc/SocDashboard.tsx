@@ -8,17 +8,15 @@ import {
   type RecentAlert,
 } from "@/services/socService";
 import {
-  claimUntenantedAlerts,
-  retriageAllUntriaged,
   retriageMyAlerts,
   getMitreSummary,
-  type AdminClaimResult,
   type AdminRetriangeResult,
   type MitreSummary,
 } from "@/services/alertService";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useAuth } from "@/hooks/useAuth";
 import { Icon, Badge, KPI, PageHead, Status, Card } from "@/components/ui";
+import { parseUtcDate } from "@/lib/utils";
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
@@ -94,7 +92,7 @@ function ProjectCard({ entry }: { entry: PerProjectEntry }) {
           <div style={{ marginLeft: "auto", textAlign: "right" }}>
             <div className="eyebrow">LAST</div>
             <div className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>
-              {new Date(entry.last_alert_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              {parseUtcDate(entry.last_alert_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </div>
           </div>
         )}
@@ -117,14 +115,18 @@ function ProjectCard({ entry }: { entry: PerProjectEntry }) {
   );
 }
 
+const SEVERITY_TONE: Record<string, "critical" | "high" | "medium" | "low" | "info"> = {
+  critical: "critical", high: "high", medium: "medium", low: "low",
+};
+const VERDICT_STYLE: Record<string, { tone: "critical" | "high" | "medium" | "low" | "info"; label: string }> = {
+  true_positive:  { tone: "critical", label: "TRUE POS"      },
+  false_positive: { tone: "medium",   label: "FALSE POS"     },
+  unknown:        { tone: "info",     label: "UNKNOWN"       },
+  unanalyzed:     { tone: "low",      label: "UNANALYZED"    },
+  triage_failed:  { tone: "high",     label: "TRIAGE FAILED" },
+};
+
 function RecentAlertsTable({ alerts }: { alerts: RecentAlert[] }) {
-  const toneFor = (sev: string): "critical" | "high" | "medium" | "low" | "info" => {
-    if (sev === "critical") return "critical";
-    if (sev === "high")     return "high";
-    if (sev === "medium")   return "medium";
-    if (sev === "low")      return "low";
-    return "info";
-  };
   return (
     <div style={{ overflowX: "auto", width: "100%" }}>
     <table className="tbl" style={{ width: "100%" }}>
@@ -139,16 +141,26 @@ function RecentAlertsTable({ alerts }: { alerts: RecentAlert[] }) {
         </tr>
       </thead>
       <tbody>
-        {alerts.map((alert, i) => (
-          <tr key={alert.id ?? i}>
-            <td><span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>{new Date(alert.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span></td>
-            <td><span className="mono" style={{ fontSize: 11 }}>{alert.agent_name}</span></td>
-            <td><span style={{ fontSize: 12 }}>{alert.project_name}</span></td>
-            <td><span style={{ fontSize: 12, color: "var(--text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", maxWidth: 240 }}>{alert.rule_description}</span></td>
-            <td><Badge tone={toneFor(alert.severity)}>{alert.severity.toUpperCase()}</Badge></td>
-            <td>{alert.ai_verdict ? <Badge tone={toneFor(alert.ai_verdict.toLowerCase())}>{alert.ai_verdict.replace("_", " ")}</Badge> : <span className="dim mono" style={{ fontSize: 11 }}>—</span>}</td>
-          </tr>
-        ))}
+        {alerts.map((alert, i) => {
+          const sevTone = SEVERITY_TONE[alert.severity?.toLowerCase()] ?? "info";
+          const vKey    = (alert.ai_verdict ?? "").toLowerCase();
+          const vStyle  = VERDICT_STYLE[vKey];
+          return (
+            <tr key={alert.id ?? i}>
+              <td><span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>{parseUtcDate(alert.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span></td>
+              <td><span className="mono" style={{ fontSize: 11 }}>{alert.agent_name}</span></td>
+              <td><span style={{ fontSize: 12 }}>{alert.project_name}</span></td>
+              <td><span style={{ fontSize: 12, color: "var(--text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", maxWidth: 240 }}>{alert.rule_description}</span></td>
+              <td><Badge tone={sevTone}>{alert.severity?.toUpperCase() ?? "—"}</Badge></td>
+              <td>
+                {vStyle
+                  ? <Badge tone={vStyle.tone}>{vStyle.label}</Badge>
+                  : <span className="dim mono" style={{ fontSize: 11 }}>—</span>
+                }
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
     </div>
@@ -225,53 +237,6 @@ function MitreTacticsWidget({ data }: { data: MitreSummary | null }) {
   );
 }
 
-// ── Admin Maintenance Panel ────────────────────────────────────────────────
-
-function AdminMaintenancePanel() {
-  const [claimState,  setClaimState]  = useState<{ loading: boolean; result?: AdminClaimResult;   error?: string }>({ loading: false });
-  const [triageState, setTriageState] = useState<{ loading: boolean; result?: AdminRetriangeResult; error?: string }>({ loading: false });
-
-  const handleClaim = async () => {
-    setClaimState({ loading: true });
-    try { const result = await claimUntenantedAlerts();  setClaimState({ loading: false, result }); }
-    catch (e: unknown) { setClaimState({ loading: false, error: e instanceof Error ? e.message : "Failed" }); }
-  };
-  const handleRetriage = async () => {
-    setTriageState({ loading: true });
-    try { const result = await retriageAllUntriaged();   setTriageState({ loading: false, result }); }
-    catch (e: unknown) { setTriageState({ loading: false, error: e instanceof Error ? e.message : "Failed" }); }
-  };
-
-  return (
-    <div style={{ padding: 16, borderRadius: "var(--r-lg)", background: "oklch(from var(--sev-medium) l c h / 0.06)", border: "1px solid oklch(from var(--sev-medium) l c h / 0.2)" }}>
-      <div className="row" style={{ gap: 6, marginBottom: 12 }}>
-        <Icon name="settings" size={13} style={{ color: "var(--sev-medium)" }} />
-        <span className="eyebrow" style={{ color: "var(--sev-medium)" }}>Admin Maintenance</span>
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <button onClick={handleClaim} disabled={claimState.loading} className="btn btn-sm" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <Icon name={claimState.loading ? "refresh" : "database"} size={11} style={{ color: "var(--sev-medium)" }} />
-            1. Claim Untenanted Alerts
-          </button>
-          {claimState.result && <span style={{ fontSize: 10, color: "var(--sev-low)" }}>{claimState.result.claimed} alerts claimed</span>}
-          {claimState.error  && <span style={{ fontSize: 10, color: "var(--sev-critical)" }}>{claimState.error}</span>}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <button onClick={handleRetriage} disabled={triageState.loading} className="btn btn-sm" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <Icon name={triageState.loading ? "refresh" : "zap"} size={11} style={{ color: "var(--sev-medium)" }} />
-            2. Queue Triage Backlog
-          </button>
-          {triageState.result && <span style={{ fontSize: 10, color: "var(--sev-low)" }}>{triageState.result.queued}/{triageState.result.total_untriaged} queued — check Celery worker</span>}
-          {triageState.error  && <span style={{ fontSize: 10, color: "var(--sev-critical)" }}>{triageState.error}</span>}
-        </div>
-      </div>
-      <p style={{ fontSize: 10, marginTop: 12, color: "var(--text-3)" }}>
-        Run step 1 to claim alerts ingested via global webhook token, then step 2 to populate MITRE data and AI verdicts.
-      </p>
-    </div>
-  );
-}
 
 function AnalystTriagePanel() {
   const [state, setState] = useState<{ loading: boolean; result?: AdminRetriangeResult; error?: string }>({ loading: false });
@@ -394,13 +359,15 @@ export default function SocDashboard() {
         </>}
       />
 
-      {user?.role === "admin"  && <AdminMaintenancePanel />}
       {user?.role !== "admin"  && <AnalystTriagePanel />}
       {system_notifications.length > 0 && <NotificationStrip notifications={system_notifications} />}
 
       {/* Summary KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "var(--gap-md)" }}>
-        <KPI label="TOTAL AGENTS"   value={summary.total_agents}   icon="cube" />
+        {user?.role === "admin"
+          ? <KPI label="TOTAL AGENTS"  value={summary.total_agents}  icon="cube" />
+          : <KPI label="MY PROJECTS"   value={per_project.length}    icon="cube" />
+        }
         <KPI label="ACTIVE AGENTS"  value={summary.active_agents}  icon="check" accent="low" />
         <KPI label="ALERTS TODAY"   value={summary.alerts_today}   icon="bell" accent="medium" />
         <KPI label="CRITICAL UNREAD" value={summary.critical_unread} icon="alert" accent={summary.critical_unread > 0 ? "critical" : "default"} sub="needs review" />
@@ -434,10 +401,28 @@ export default function SocDashboard() {
       {per_project.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "var(--gap-md)" }}>
           <MitreTacticsWidget data={mitreData} />
-          <Card title="Projects" eyebrow={`${per_project.length} CONNECTED`} pad={false}>
+          <Card
+            title="Projects"
+            eyebrow={`${per_project.length} CONNECTED`}
+            action={
+              per_project.length > 6
+                ? <a href="/projects" style={{ fontSize: 12, color: "var(--accent)", textDecoration: "none" }}>
+                    All {per_project.length} projects →
+                  </a>
+                : undefined
+            }
+            pad={false}
+          >
             <div style={{ padding: "var(--pad-card)", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
-              {per_project.map((p) => <ProjectCard key={p.project_id} entry={p} />)}
+              {per_project.slice(0, 6).map((p) => <ProjectCard key={p.project_id} entry={p} />)}
             </div>
+            {per_project.length > 6 && (
+              <div style={{ padding: "10px var(--pad-card)", borderTop: "1px solid var(--border)", textAlign: "center" }}>
+                <a href="/projects" style={{ fontSize: 12, color: "var(--accent)", textDecoration: "none" }}>
+                  +{per_project.length - 6} more projects — view all →
+                </a>
+              </div>
+            )}
           </Card>
         </div>
       )}

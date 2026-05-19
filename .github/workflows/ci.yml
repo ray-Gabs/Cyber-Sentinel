@@ -48,8 +48,8 @@ jobs:
         run: bandit -r backend/ -ll --exclude backend/venv -q
 
       - name: pip-audit (dependency CVE scan)
-        # Fail on CVSS >= 7.0 (HIGH). Use --progress-spinner off in CI.
-        run: pip-audit -r backend/requirements.txt --progress-spinner off
+        # Audits all direct + transitive deps. Config in backend/pyproject.toml.
+        run: pip-audit -r backend/requirements.txt --progress-spinner off --config-file backend/pyproject.toml
 
   # ------------------------------------------------------------------
   # 2. Frontend — ESLint + TypeScript type check
