@@ -5,8 +5,8 @@
 # ============================================================
 
 # --- Core Framework ---
-fastapi==0.115.*
-uvicorn[standard]==0.34.*
+fastapi==0.136.*
+uvicorn[standard]==0.47.*
 python-multipart==0.0.*
 
 # --- Database ---
@@ -16,8 +16,8 @@ beanie==1.27.*             # MongoDB ODM (built on Motor + Pydantic)
 # --- Auth ---
 PyJWT[crypto]>=2.8.0,<3.0.0        # JWT encoding/decoding (replaces python-jose — CVE-2024-33664)
 bcrypt>=4.2.0,<5.0                # direct bcrypt — no passlib wrapper
-pydantic[email]==2.10.*            # Includes EmailStr
-pydantic-settings==2.7.*          # Settings from .env
+pydantic[email]==2.13.*            # Includes EmailStr
+pydantic-settings==2.14.*          # Settings from .env
 
 # --- Task Queue ---
 celery==5.4.*
