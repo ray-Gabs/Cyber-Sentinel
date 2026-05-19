@@ -6,7 +6,8 @@ export type ScanStatus =
   | "running"
   | "completed"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "verifying";
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
 export type AuthType = "none" | "cookie" | "bearer" | "basic" | "header";
 
@@ -70,6 +71,27 @@ export interface Finding {
 
   // ── Confidence ────────────────────────────────────────
   confidence?: "Confirmed" | "Likely" | "Possible";
+  confidence_score?: number;  // 0.0–1.0, computed server-side from evidence + correlation signals
+  corroborating_tools?: string[];  // tools that independently found this same vuln (from merge)
+  merge_count?: number;            // how many raw findings were collapsed into this one
+
+  // ── Verification ──────────────────────────────────────
+  verified?: boolean;
+  verification_note?: string;
+  last_verified_at?: string;
+  verification_history?: VerificationHistoryEntry[];
+
+  // ── Analyst feedback ──────────────────────────────────
+  analyst_verdict?: "confirmed" | "false_positive" | "needs_investigation";
+  analyst_notes?: string;
+  analyst_reviewed_at?: string;
+}
+
+export interface VerificationHistoryEntry {
+  timestamp: string;
+  verified: boolean;
+  note: string;
+  probe_type: string;
 }
 
 export interface ToolEvent {
@@ -78,6 +100,7 @@ export interface ToolEvent {
   findings_count: number;
   elapsed_seconds: number;
   error: string | null;
+  skipped_reason: string | null;
   timestamp: string;
 }
 
@@ -155,4 +178,47 @@ export interface ScanCreateRequest {
   auth_config?: AuthConfig;
   nuclei_templates?: string[];
   rate_limit?: number;
+}
+
+export type ScheduleFrequency = "hourly" | "daily" | "weekly" | "monthly";
+
+export interface ScheduledScan {
+  id: string;
+  target: string;
+  scan_type: ScanType;
+  schedule: ScheduleFrequency;
+  is_enabled: boolean;
+  last_run_at?: string;
+  next_run_at?: string;
+  created_at: string;
+  tools_enabled?: string[];
+  auth_config?: AuthConfig;
+  nuclei_templates?: string[];
+  rate_limit?: number;
+}
+
+export interface ScheduledScanCreateRequest {
+  target: string;
+  scan_type: ScanType;
+  schedule: ScheduleFrequency;
+  tools_enabled?: string[];
+  auth_config?: AuthConfig;
+  nuclei_templates?: string[];
+  rate_limit?: number;
+}
+
+export interface PaginatedScans {
+  items: ScanSummary[];
+  total: number;
+  page: number;
+  size: number;
+  pages: number;
+}
+
+export interface PaginatedScheduledScans {
+  items: ScheduledScan[];
+  total: number;
+  page: number;
+  size: number;
+  pages: number;
 }

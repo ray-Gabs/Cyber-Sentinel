@@ -8,7 +8,8 @@ import { getAuditLogs } from "@/services/authService";
 import type { AuditLogEntry } from "@/types";
 import { Icon, PageHead, Tabs } from "@/components/ui";
 import { useAuth } from "@/hooks/useAuth";
-import { exportToPDF } from "@/lib/pdfExport";
+import { exportAuditLogPDF } from "@/lib/exportAuditLog";
+import { showToast } from "@/lib/utils";
 
 const ACTION_TONE: Record<string, string> = {
   "user":    "accent",
@@ -92,8 +93,13 @@ function exportCSV(logs: AuditLogEntry[]) {
   URL.revokeObjectURL(url);
 }
 
+function parseUtcDate(iso: string): Date {
+  if (!iso.endsWith("Z") && !/[+-]\d{2}:\d{2}$/.test(iso)) return new Date(iso + "Z");
+  return new Date(iso);
+}
+
 function formatTime(iso: string): string {
-  const d = new Date(iso);
+  const d = parseUtcDate(iso);
   return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
@@ -109,15 +115,18 @@ export default function AuditLog() {
   const { user } = useAuth();
   const [logs, setLogs]       = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [error, setError]     = useState<string | null>(null);
   const [filter, setFilter]   = useState("all");
   const [page, setPage]       = useState(1);
+
+  const PAGE_SIZE = 10;
 
   async function load(p = page) {
     setLoading(true);
     setError(null);
     try {
-      const data = await getAuditLogs(p, 50);
+      const data = await getAuditLogs(p, PAGE_SIZE);
       setLogs(data);
     } catch {
       setError("Failed to load audit logs.");
@@ -165,28 +174,20 @@ export default function AuditLog() {
               <Icon name="download" size={13} /> Export CSV
             </button>
             <button
-              onClick={() => exportToPDF(
-                "Platform Audit Log",
-                `Activity trail · ${filter !== "all" ? filter.toUpperCase() + " events · " : ""}${filteredLogs.length} records · ${new Date().toLocaleDateString()}`,
-                [
-                  { key: "timestamp", label: "Timestamp" },
-                  { key: "user",      label: "User" },
-                  { key: "action",    label: "Action" },
-                  { key: "details",   label: "Details" },
-                  { key: "ip",        label: "IP Address" },
-                ],
-                filteredLogs.map((l) => ({
-                  timestamp: formatTime(l.timestamp),
-                  user:      l.username,
-                  action:    l.action,
-                  details:   getActionDetail(l),
-                  ip:        l.ip_address ?? "—",
-                })),
-                `audit-log-${new Date().toISOString().slice(0, 10)}`
-              )}
+              disabled={exportingPdf}
+              onClick={async () => {
+                setExportingPdf(true);
+                try {
+                  await exportAuditLogPDF({ logs: filteredLogs, filter });
+                } catch (err) {
+                  showToast((err as Error).message ?? "PDF export failed", "error");
+                } finally {
+                  setExportingPdf(false);
+                }
+              }}
               className="btn btn-sm flex items-center gap-1.5"
             >
-              <Icon name="file" size={13} /> Export PDF
+              <Icon name="file" size={13} /> {exportingPdf ? "Exporting…" : "Export PDF"}
             </button>
             <button
               onClick={() => load()}
@@ -301,7 +302,7 @@ export default function AuditLog() {
         <span className="text-xs" style={{ color: "var(--text-2)" }}>Page {page}</span>
         <button
           onClick={() => setPage((p) => p + 1)}
-          disabled={logs.length < 50 || loading}
+          disabled={logs.length < PAGE_SIZE || loading}
           className="btn btn-sm disabled:opacity-40"
         >
           Next

@@ -3,12 +3,11 @@
 # ============================================================
 
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Literal
 
 from beanie import Document
 from pydantic import Field
 from pymongo import ASCENDING, IndexModel
-
 
 NotificationType = Literal[
     "scan_complete",
@@ -28,11 +27,11 @@ class Notification(Document):
     user_id: str
     type: NotificationType
     title: str
-    body: Optional[str] = None
-    scan_id: Optional[str] = None
-    scan_target: Optional[str] = None
-    severity_summary: Optional[dict[str, int]] = None
-    risk_score: Optional[float] = None
+    body: str | None = None
+    scan_id: str | None = None
+    scan_target: str | None = None
+    severity_summary: dict[str, int] | None = None
+    risk_score: float | None = None
     is_read: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

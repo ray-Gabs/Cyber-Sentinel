@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.config import settings
 
@@ -48,7 +48,7 @@ def test_triage_skips_duplicate_alert():
 
 
 def test_drain_pops_from_sorted_set():
-    """drain_triage_queue pops alert IDs from soc:triage_pending and calls batch_retriage."""
+    """drain_triage_queue pops alert IDs from soc:triage_pending and dispatches per-alert tasks."""
     mock_redis = AsyncMock()
     mock_redis.zpopmin = AsyncMock(return_value=[
         (b"alert-id-1", 1000.0),
@@ -57,17 +57,14 @@ def test_drain_pops_from_sorted_set():
     ])
     mock_redis.aclose = AsyncMock()
 
-    captured_ids = []
-
-    async def fake_batch_retriage(alert_ids, concurrency=2):
-        captured_ids.extend(alert_ids)
-        return []
-
     with patch("redis.asyncio.from_url", return_value=mock_redis):
-        with patch("domains.soc.triage_pipeline.batch_retriage", side_effect=fake_batch_retriage):
-            with patch("core.database.init_db", new_callable=AsyncMock):
-                from domains.soc import tasks as soc_tasks
+        with patch("core.database.init_db", new_callable=AsyncMock):
+            from domains.soc import tasks as soc_tasks
+            with patch.object(soc_tasks.triage_single_alert, "delay") as mock_delay:
                 asyncio.run(soc_tasks._drain_async())
 
-    assert captured_ids == ["alert-id-1", "alert-id-2", "alert-id-3"]
-    mock_redis.zpopmin.assert_called_once_with("soc:triage_pending", count=5)
+    assert mock_delay.call_count == 3
+    mock_delay.assert_any_call("alert-id-1")
+    mock_delay.assert_any_call("alert-id-2")
+    mock_delay.assert_any_call("alert-id-3")
+    mock_redis.zpopmin.assert_called_once_with("soc:triage_pending", count=50)

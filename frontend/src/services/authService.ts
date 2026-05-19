@@ -7,13 +7,10 @@
  */
 import api from "./api";
 import type { LoginRequest, RegisterRequest, TokenResponse, UserResponse, UpdateProfileRequest, UpdateRoleRequest, AuditLogEntry } from "@/types";
-import { TOKEN_KEY } from "@/lib/constants";
 
-/** POST /api/auth/login → returns { access_token, token_type } */
+/** POST /api/auth/login → server sets HttpOnly cookie; token is not stored in JS */
 export async function login(data: LoginRequest): Promise<TokenResponse> {
   const res = await api.post<TokenResponse>("/auth/login", data);
-  // Store the JWT token so future requests are authenticated
-  localStorage.setItem(TOKEN_KEY, res.data.access_token);
   return res.data;
 }
 
@@ -29,20 +26,21 @@ export async function getMe(): Promise<UserResponse> {
   return res.data;
 }
 
-/** Remove token without redirecting (stale/invalid token cleanup) */
+/** Clear the HttpOnly cookie server-side (fire-and-forget, no redirect) */
 export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+  api.post("/auth/logout").catch(() => {});
 }
 
-/** Remove token and redirect to login */
+/** Clear cookie server-side and redirect to login */
 export function logout(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  window.location.href = "/login";
+  api.post("/auth/logout").catch(() => {}).finally(() => {
+    window.location.href = "/login";
+  });
 }
 
-/** Check if a token exists in localStorage */
+/** With HttpOnly cookies we can't inspect the token from JS — always attempt getMe() */
 export function isAuthenticated(): boolean {
-  return !!localStorage.getItem(TOKEN_KEY);
+  return true;
 }
 
 /** POST /api/auth/forgot-password → sends reset email */
@@ -63,9 +61,9 @@ export async function updateProfile(data: UpdateProfileRequest): Promise<UserRes
 
 // ── Admin ──────────────────────────────────────────────────────────────────
 
-/** GET /api/auth/users → list all users (admin only) */
-export async function listUsers(): Promise<UserResponse[]> {
-  const res = await api.get<UserResponse[]>("/auth/users");
+/** GET /api/auth/users → list all users (admin only), paginated */
+export async function listUsers(page = 1, size = 50): Promise<UserResponse[]> {
+  const res = await api.get<UserResponse[]>(`/auth/users?page=${page}&size=${size}`);
   return res.data;
 }
 

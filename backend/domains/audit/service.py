@@ -7,7 +7,6 @@
 # ============================================================
 
 import logging
-from typing import Optional
 
 from domains.audit.models import AuditLog
 
@@ -18,10 +17,10 @@ async def log_event(
     user_id: str,
     username: str,
     action: str,
-    resource_type: Optional[str] = None,
-    resource_id: Optional[str] = None,
-    details: Optional[str] = None,
-    ip_address: Optional[str] = None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    details: str | None = None,
+    ip_address: str | None = None,
 ) -> None:
     """
     Persist an audit log entry.

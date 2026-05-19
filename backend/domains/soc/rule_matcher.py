@@ -22,40 +22,11 @@ def _compile(pattern: str) -> re.Pattern | None:
         return None
 
 
-# Global platform rules — visible to ALL users, read-only, no project scope.
-# Keep these generic — they apply to any web app / Wazuh deployment.
-DEFAULT_RULES: list[dict[str, Any]] = [
-    {
-        "name": "Failed Web Login",
-        "description": "Detects failed authentication attempts on web applications",
-        "pattern": r"authentication failed|invalid password|login failed|unauthorized|invalid credentials",
-        "severity": "medium",
-    },
-    {
-        "name": "Brute Force Attempt",
-        "description": "Detects repeated authentication failures indicating brute force",
-        "pattern": r"multiple authentication failures|blocked by|too many requests|rate limit|brute.?force",
-        "severity": "high",
-    },
-    {
-        "name": "SQL Injection Attempt",
-        "description": "Detects SQL injection patterns in web requests",
-        "pattern": r"sql syntax|mysql error|ORA-\d|union select|information_schema|sqlmap",
-        "severity": "high",
-    },
-    {
-        "name": "XSS Attempt",
-        "description": "Detects cross-site scripting patterns in web requests",
-        "pattern": r"<script[\s>]|onerror\s*=|javascript:|alert\s*\(|document\.cookie",
-        "severity": "medium",
-    },
-    {
-        "name": "Directory Traversal",
-        "description": "Detects path traversal attempts",
-        "pattern": r"\.\./|\.\.\\|etc/passwd|etc/shadow|/proc/self",
-        "severity": "high",
-    },
-]
+# Global platform rules were removed.
+# Wazuh's native rule_groups (e.g. "web", "attack", "sql_injection") already classify
+# these patterns on every incoming alert — duplicating them here only adds noise.
+# App and project-specific context rules (below) are the correct layer for this system.
+DEFAULT_RULES: list[dict[str, Any]] = []
 
 # Project-specific preset rules — seeded when a project is created.
 # Keyed by slug fragment; matched against the project slug on creation.
@@ -125,33 +96,13 @@ def match_alert(alert_data: dict[str, Any], rules: list) -> list[str]:
 
 async def seed_default_rules() -> None:
     """
-    Insert global platform rules (user_id='system', project_id=None) on first startup.
-    App-specific presets (Juice Shop, DVWA) are NOT seeded here — they are scoped
-    to individual projects and seeded by seed_project_rules() when a project is created.
+    No-op: global platform rules were removed.
+
+    Wazuh's native rule_groups field already classifies attack patterns on every alert —
+    adding duplicate regex rules here only creates noise. App-specific presets are still
+    seeded per-project by seed_project_rules() when a project is created.
     """
-    from domains.soc.models import CustomDetectionRule
-
-    try:
-        count = await CustomDetectionRule.find(
-            {"user_id": "system", "project_id": None}
-        ).count()
-        if count > 0:
-            return
-
-        for rule_data in DEFAULT_RULES:
-            await CustomDetectionRule(
-                user_id="system",
-                project_id=None,
-                name=rule_data["name"],
-                description=rule_data["description"],
-                pattern=rule_data["pattern"],
-                severity=rule_data["severity"],
-                enabled=True,
-            ).insert()
-
-        log.info("[RuleMatcher] Seeded %d global platform detection rules", len(DEFAULT_RULES))
-    except Exception as exc:
-        log.error("[RuleMatcher] Failed to seed default rules: %s", exc, exc_info=True)
+    log.debug("[RuleMatcher] seed_default_rules: no global platform rules to seed (by design)")
 
 
 async def seed_project_rules(project_id: str, project_slug: str) -> None:

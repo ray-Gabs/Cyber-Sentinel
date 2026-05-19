@@ -38,7 +38,9 @@ export default function MitreNavigator() {
   const [data, setData] = useState<MitreSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hovered, setHovered] = useState<{ tactic: string; technique: string } | null>(null);
+  const [hovered, setHovered]       = useState<{ tactic: string; technique: string } | null>(null);
+  const [filterTactic, setFilterTactic] = useState("");
+  const [sortMode, setSortMode]     = useState<"count" | "name">("count");
 
   async function load() {
     setLoading(true);
@@ -59,9 +61,17 @@ export default function MitreNavigator() {
     (m, [, t]) => Math.max(m, ...Object.values(t).map((e) => e.count)),
     0,
   );
+  const filteredTactics = filterTactic
+    ? tactics.filter(([t]) => t === filterTactic)
+    : tactics;
+  const displayTactics = [...filteredTactics].sort(([ta, a], [tb, b]) =>
+    sortMode === "count"
+      ? Object.values(b).reduce((s, e) => s + e.count, 0) - Object.values(a).reduce((s, e) => s + e.count, 0)
+      : ta.localeCompare(tb),
+  );
 
   return (
-    <div className="flex flex-col gap-6 p-4">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -98,7 +108,7 @@ export default function MitreNavigator() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {([
             ["Tactics Detected",   tactics.length],
-            ["Techniques Mapped",  Object.values(data.by_tactic).reduce((s, t) => s + Object.keys(t).length, 0)],
+            ["Techniques Mapped",  new Set(tactics.flatMap(([, t]) => Object.keys(t))).size],
             ["Technique Hits",     data.total_technique_hits.toLocaleString()],
             ["Alerts Analyzed",    data.alerts_analyzed.toLocaleString()],
           ] as [string, string | number][]).map(([label, value]) => (
@@ -130,9 +140,55 @@ export default function MitreNavigator() {
         </div>
       )}
 
+      {/* Filter / Sort controls */}
+      {data && tactics.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs" style={{ color: "var(--text-3)" }}>Tactic:</span>
+            <select
+              value={filterTactic}
+              onChange={(e) => setFilterTactic(e.target.value)}
+              className="rounded-lg border px-3 py-1.5 text-xs outline-none"
+              style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", color: "var(--text-1)" }}
+            >
+              <option value="">All tactics ({tactics.length})</option>
+              {Object.keys(data.by_tactic).sort().map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs" style={{ color: "var(--text-3)" }}>Sort:</span>
+            {(["count", "name"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setSortMode(mode)}
+                className="px-2.5 py-1 rounded text-xs font-medium transition-colors"
+                style={{
+                  backgroundColor: sortMode === mode ? "color-mix(in oklab, var(--accent) 15%, transparent)" : "var(--surface)",
+                  color: sortMode === mode ? "var(--accent)" : "var(--text-2)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                {mode === "count" ? "By count" : "By name"}
+              </button>
+            ))}
+          </div>
+          {filterTactic && (
+            <button
+              onClick={() => setFilterTactic("")}
+              className="flex items-center gap-1 text-xs"
+              style={{ color: "var(--accent)" }}
+            >
+              <Icon name="x" size={11} /> Clear filter
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Skeleton */}
       {loading && (
-        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
+        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
@@ -161,14 +217,8 @@ export default function MitreNavigator() {
 
       {/* Heatmap */}
       {!loading && data && tactics.length > 0 && (
-        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
-          {tactics
-            .sort(
-              ([, a], [, b]) =>
-                Object.values(b).reduce((s, e) => s + e.count, 0) -
-                Object.values(a).reduce((s, e) => s + e.count, 0)
-            )
-            .map(([tactic, techniques]) => {
+        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
+          {displayTactics.map(([tactic, techniques]) => {
               const tacticColor = TACTIC_COLORS[tactic] ?? TACTIC_COLORS["Unknown"];
               const tacticTotal = Object.values(techniques).reduce((s, e) => s + e.count, 0);
               const sortedTechs = Object.entries(techniques).sort(([, a], [, b]) => b.count - a.count);

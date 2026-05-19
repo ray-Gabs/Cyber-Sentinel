@@ -2,12 +2,12 @@
  * Alert API service — SOC / Wazuh alert operations.
  */
 import api from "./api";
-import type { Alert, AlertSummary, AlertFilterParams, AlertStats, AnalystOverrideRequest, DetectionRule, DetectionRuleCreate, DetectionRuleUpdate } from "@/types";
+import type { Alert, AlertFilterParams, PaginatedAlerts, AlertStats, AnalystOverrideRequest, DetectionRule, DetectionRuleCreate, DetectionRuleUpdate } from "@/types";
 
-/** GET /api/alerts/ → list alerts with optional filters */
+/** GET /api/alerts/ → list alerts with optional filters, returns paginated envelope */
 export async function getAlerts(
   params: AlertFilterParams = {}
-): Promise<AlertSummary[]> {
+): Promise<PaginatedAlerts> {
   const query: Record<string, unknown> = {};
   if (params.page) query.page = params.page;
   if (params.size) query.size = params.size;
@@ -17,7 +17,10 @@ export async function getAlerts(
   if (params.agent_group) query.agent_group = params.agent_group;
   if (params.project_id) query.project_id = params.project_id;
   if (params.mitre_technique) query.mitre_technique = params.mitre_technique;
-  const res = await api.get<AlertSummary[]>("/alerts/", { params: query });
+  if (params.tab) query.tab = params.tab;
+  if (params.days) query.days = params.days;
+  if (params.search) query.search = params.search;
+  const res = await api.get<PaginatedAlerts>("/alerts/", { params: query });
   return res.data;
 }
 
@@ -43,8 +46,15 @@ export async function enrichAlert(id: string): Promise<Alert> {
 }
 
 /** GET /api/alerts/stats/summary → aggregated alert statistics */
-export async function getAlertStats(): Promise<AlertStats> {
-  const res = await api.get<AlertStats>("/alerts/stats/summary");
+export async function getAlertStats(
+  range: "7d" | "30d" | "90d" = "30d",
+  agentName?: string,
+  allTime?: boolean,
+): Promise<AlertStats> {
+  const params: Record<string, unknown> = { range };
+  if (agentName)  params.agent_name = agentName;
+  if (allTime)    params.all_time   = true;
+  const res = await api.get<AlertStats>("/alerts/stats/summary", { params });
   return res.data;
 }
 
@@ -228,4 +238,21 @@ export async function classifyLowPriorityAlerts(): Promise<{ updated: number }> 
 export async function retriageMyAlerts(): Promise<AdminRetriangeResult> {
   const res = await api.post<AdminRetriangeResult>("/alerts/retriage-mine");
   return res.data;
+}
+
+/** GET /api/alerts/triage-status → live triage queue stats */
+export async function getTriageStatus(): Promise<{ pending: number; queue_depth: number; abandoned: number }> {
+  const res = await api.get<{ pending: number; queue_depth: number; abandoned: number }>("/alerts/triage-status");
+  return res.data;
+}
+
+/** PATCH /api/alerts/batch/override → bulk verdict override */
+export async function batchOverrideAlerts(alert_ids: string[], override: string): Promise<{ updated: number }> {
+  const res = await api.patch<{ updated: number }>("/alerts/batch/override", { alert_ids, override });
+  return res.data;
+}
+
+/** PATCH /api/alerts/:id → assign alert to analyst */
+export async function assignAlert(alert_id: string, assigned_to: string | null): Promise<void> {
+  await api.patch(`/alerts/${alert_id}/assign`, { assigned_to });
 }

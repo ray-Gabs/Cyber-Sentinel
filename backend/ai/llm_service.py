@@ -14,12 +14,12 @@ import logging
 import random
 import re as _re
 from datetime import datetime
-from typing import Any
 from pathlib import Path
+from typing import Any
 
-from core.config import settings
 from ai.cache import AiCache
 from ai.providers import get_provider, get_soc_provider
+from core.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -29,9 +29,10 @@ _MAX_FINDINGS_FOR_AI = 25  # narrative report sends at most 25; prevents batch-s
 _MAX_DESC_LEN = 350
 _SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
-# Patterns used to detect timeout/error findings by name
+# Patterns used to detect timeout/error/blocked findings by name
 _TIMEOUT_PATTERNS = ("timed out", "timeout")
-_ERROR_PATTERNS = ("error", "failed")
+_ERROR_PATTERNS   = ("error", "failed", "unavailable")
+_BLOCKED_PATTERNS = ("blocked by", "waf/cdn", "not performed")
 
 
 class LLMService:
@@ -96,12 +97,12 @@ class LLMService:
         # Full jitter: wait = random(0, base_delay) — spreads concurrent Celery
         # worker retries across the window instead of all retrying simultaneously.
         _base_delays = [5, 15, 30, 60]
-        last_exc: Exception | None = None
+        _last_exc: Exception | None = None
 
         for attempt in range(len(_base_delays) + 1):
             if attempt > 0:
                 base = _base_delays[attempt - 1]
-                wait_secs = random.uniform(0, base)  # full jitter
+                wait_secs = random.uniform(0, base)  # full jitter  # noqa: S311
                 log.warning(
                     "AI provider 429 rate limit — waiting %.1fs (jittered from %ds base) retry %d/%d",
                     wait_secs, base, attempt, len(_base_delays),
@@ -116,7 +117,7 @@ class LLMService:
             except Exception as exc:
                 err_str = str(exc)
                 if "429" in err_str or "rate_limit" in err_str.lower() or "rate limit" in err_str.lower():
-                    last_exc = exc
+                    _last_exc = exc
                     continue  # retry with jittered backoff
                 raise  # non-429 error: propagate immediately
 
@@ -141,7 +142,7 @@ class LLMService:
         lines = ["Open ports/services (from Nmap):"]
         found_any = False
         host_count = 0
-        for host_addr, host_data in nmap_raw.items():
+        for _host_addr, host_data in nmap_raw.items():
             if not isinstance(host_data, dict):
                 continue
             host_count += 1
@@ -272,25 +273,42 @@ class LLMService:
 
         timeout_tools: set[str] = set()
         error_tools: set[str] = set()
+        blocked_tools: set[str] = set()
+        # Richer detail extracted from finding descriptions (e.g. partial counts, platform names)
+        tool_detail: dict[str, str] = {}
 
+        import re as _re
         for f in findings:
             sev = (f.severity if hasattr(f, "severity") else f.get("severity", "")) or ""
             if sev != "info":
                 continue
-            # Use the finding's tool field as the primary identifier — more reliable than
-            # substring-matching the name (avoids false positives on "error_handling" tool key).
             f_tool = (f.tool if hasattr(f, "tool") else f.get("tool", "")) or ""
-            name_lower = ((f.name if hasattr(f, "name") else f.get("name", "")) or "").lower()
-            if f_tool in enabled:
-                if any(p in name_lower for p in _TIMEOUT_PATTERNS):
-                    timeout_tools.add(f_tool)
-                elif any(p in name_lower for p in _ERROR_PATTERNS):
-                    error_tools.add(f_tool)
+            name = (f.name if hasattr(f, "name") else f.get("name", "")) or ""
+            desc = (f.description if hasattr(f, "description") else f.get("description", "")) or ""
+            name_lower = name.lower()
+            if f_tool not in enabled:
+                continue
+            if any(p in name_lower for p in _TIMEOUT_PATTERNS):
+                timeout_tools.add(f_tool)
+                # Extract captured-findings count for nuclei partial results
+                m = _re.search(r"(\d+)\s+finding", desc)
+                if m:
+                    tool_detail[f_tool] = f"partial — {m.group(1)} finding(s) captured before timeout"
+            elif any(p in name_lower for p in _BLOCKED_PATTERNS):
+                blocked_tools.add(f_tool)
+                # Extract platform name from "ZAP Scan: Blocked by <Platform>"
+                if "blocked by" in name_lower:
+                    platform = name.split("Blocked by", 1)[-1].strip()
+                    tool_detail[f_tool] = f"blocked by {platform} — no active scan performed"
+            elif any(p in name_lower for p in _ERROR_PATTERNS):
+                error_tools.add(f_tool)
 
         coverage: dict[str, str] = {}
         for tool_key in enabled:
-            if tool_key in timeout_tools:
-                coverage[tool_key] = "timeout"
+            if tool_key in blocked_tools:
+                coverage[tool_key] = tool_detail.get(tool_key, "blocked")
+            elif tool_key in timeout_tools:
+                coverage[tool_key] = tool_detail.get(tool_key, "timeout")
             elif tool_key in error_tools:
                 coverage[tool_key] = "error"
             elif tool_key in completed:
@@ -298,6 +316,118 @@ class LLMService:
             else:
                 coverage[tool_key] = "skipped"
         return coverage
+
+    @staticmethod
+    def _build_scan_limitations(scan, tool_cov: dict[str, str]) -> str:
+        """
+        Build a SCAN LIMITATIONS block for the AI prompt.
+
+        Extracts partial-timeout and WAF-blocked info findings and returns a
+        prominent notice that the AI must explicitly address in the report.
+        Falls back to tool_events for cases where no info finding was generated
+        (e.g. Nuclei hard-killed by Celery, ZAP daemon offline).
+        Returns an empty string when there are no notable limitations.
+        """
+        import re as _re
+        findings = getattr(scan, "findings", []) or []
+        tool_events = getattr(scan, "tool_events", []) or []
+        lines: list[str] = []
+        covered_tools: set[str] = set()
+
+        for f in findings:
+            sev = (f.severity if hasattr(f, "severity") else f.get("severity", "")) or ""
+            if sev != "info":
+                continue
+            f_tool = (f.tool if hasattr(f, "tool") else f.get("tool", "")) or ""
+            name = (f.name if hasattr(f, "name") else f.get("name", "")) or ""
+            desc = (f.description if hasattr(f, "description") else f.get("description", "")) or ""
+            name_lower = name.lower()
+
+            # Nuclei partial timeout (info finding generated by nuclei_scanner.py)
+            if f_tool == "nuclei" and "partial" in name_lower and any(p in name_lower for p in _TIMEOUT_PATTERNS):
+                m = _re.search(r"(\d+)\s+finding", desc)
+                count = m.group(1) if m else "some"
+                lines.append(
+                    f"NUCLEI SCANNER — TIMED OUT (partial): {count} finding(s) captured before "
+                    f"the {scan.scan_type or 'standard'} scan time limit. Templates scanned after "
+                    f"the deadline were not evaluated — additional vulnerabilities may exist."
+                )
+                covered_tools.add("nuclei")
+
+            # ZAP active scan self-limited (partial results, new graceful-stop behavior)
+            elif f_tool == "zap" and any(p in name_lower for p in _TIMEOUT_PATTERNS):
+                lines.append(
+                    "ZAP ACTIVE SCAN — TIMED OUT (partial results): The active scan reached "
+                    "its time limit and stopped gracefully. Findings above reflect only the "
+                    "attack surface tested within that window — additional vulnerabilities "
+                    "may exist in endpoints that were not reached."
+                )
+                covered_tools.add("zap")
+
+            # ZAP blocked by WAF/CDN before active scan started
+            elif f_tool == "zap" and "blocked by" in name_lower:
+                platform = name.split("Blocked by", 1)[-1].strip() if "Blocked by" in name else "WAF/CDN"
+                lines.append(
+                    f"ZAP ACTIVE SCAN — BLOCKED: {platform} prevented ZAP's spider and "
+                    f"Chromium crawler from accessing the target. No dynamic vulnerability "
+                    f"testing was performed. All ZAP-based injection and misconfiguration "
+                    f"checks are absent from this report."
+                )
+                covered_tools.add("zap")
+
+            # ZAP scan ran but zero alerts returned (WAF blocked probes)
+            elif f_tool == "zap" and "no alerts" in name_lower and ("waf" in name_lower or "cdn" in name_lower):
+                lines.append(
+                    "ZAP ACTIVE SCAN — POSSIBLE WAF INTERFERENCE: The active scan completed "
+                    "but returned zero alerts. The target's WAF/CDN may have blocked scan "
+                    "probes, producing a false-negative result. Dynamic findings should be "
+                    "treated as incomplete."
+                )
+                covered_tools.add("zap")
+
+        # Second pass: tool_events catches cases where no info finding was generated
+        # (Nuclei hard-killed by Celery, ZAP daemon offline, etc.)
+        for ev in tool_events:
+            ev_tool   = (ev.tool           if hasattr(ev, "tool")           else ev.get("tool",           "")) or ""
+            ev_status = (ev.status         if hasattr(ev, "status")         else ev.get("status",         "")) or ""
+            ev_skip   = (ev.skipped_reason if hasattr(ev, "skipped_reason") else ev.get("skipped_reason", "")) or ""
+            elapsed   = (ev.elapsed_seconds if hasattr(ev, "elapsed_seconds") else ev.get("elapsed_seconds")) or 0
+            if ev_tool in covered_tools:
+                continue
+
+            if ev_status == "timeout" and ev_tool == "nuclei":
+                elapsed_str = f" after {int(elapsed)}s" if elapsed else ""
+                lines.append(
+                    f"NUCLEI SCANNER — TIMED OUT{elapsed_str}: The scan was terminated by the "
+                    f"task scheduler before completion. Vulnerability templates were not fully "
+                    f"evaluated — findings above are incomplete and additional vulnerabilities may exist."
+                )
+
+            elif ev_status == "timeout" and ev_tool == "zap":
+                elapsed_str = f" after {int(elapsed)}s" if elapsed else ""
+                lines.append(
+                    f"ZAP ACTIVE SCAN — TIMED OUT{elapsed_str}: The scan exceeded its allowed "
+                    f"time window and was terminated. Findings above are partial — "
+                    f"additional vulnerabilities may exist beyond the tested attack surface."
+                )
+
+            elif ev_status == "skipped" and ev_tool == "zap":
+                skip_lower = ev_skip.lower()
+                if any(kw in skip_lower for kw in ("daemon", "unavailable", "ip address", "ip target")):
+                    lines.append(
+                        "ZAP ACTIVE SCAN — SKIPPED: The ZAP daemon was unavailable or the target "
+                        "is an IP address (ZAP requires a domain name). No dynamic vulnerability "
+                        "testing was performed. All ZAP-based injection and misconfiguration "
+                        "checks are absent from this report."
+                    )
+
+        if not lines:
+            return ""
+
+        block = "SCAN LIMITATIONS — MUST mention these explicitly in ENGAGEMENT OVERVIEW and TOOL COVERAGE MATRIX:\n"
+        for line in lines:
+            block += f"  * {line}\n"
+        return block
 
     @staticmethod
     def _derive_confidence(finding) -> str:
@@ -433,15 +563,24 @@ class LLMService:
         if tool_cov:
             prompt += f"Tool coverage: {json.dumps(tool_cov)}\n"
 
-        # Failed tools context — critical for accurate AI analysis
+        # Scan limitations — partial timeouts, WAF blocks (prominent, AI must address these)
+        limitations = self._build_scan_limitations(scan, tool_cov)
+        if limitations:
+            prompt += f"\n{limitations}\n"
+
+        # Failed/unavailable tools context — critical for accurate AI analysis
         failed_tools = getattr(scan, "failed_tools", []) or []
         scan_coverage = getattr(scan, "scan_coverage", None)
         if failed_tools:
             prompt += f"IMPORTANT — Tools that failed or timed out: {', '.join(failed_tools)}\n"
             prompt += "Note: Findings from these tools are missing. The actual risk may be higher than reported.\n"
+        skipped_tools = [t for t, st in tool_cov.items() if st == "skipped"]
+        if skipped_tools:
+            prompt += f"Tools not available (binary/templates missing): {', '.join(skipped_tools)}\n"
+            prompt += "Note: No results from these tools — coverage is incomplete.\n"
         if scan_coverage is not None:
             pct = int(scan_coverage * 100)
-            prompt += f"Scan coverage: {pct}% of planned tools completed successfully\n"
+            prompt += f"Scan coverage: {pct}% of planned tools fully completed\n"
             if pct < 70:
                 prompt += f"WARNING: Low scan coverage ({pct}%). Risk score may underestimate actual exposure.\n"
 
@@ -513,7 +652,7 @@ class LLMService:
             return {
                 "executive_summary": text[:500],
                 "remediation": "",
-                "risk_score": 5.0,
+                "risk_score": 0.0,
                 "attack_chain": "",
             }
 
@@ -639,7 +778,7 @@ class LLMService:
                         f"{t.get('name', k)} {t.get('version', '')}".strip()
                         for k, t in clean_techs.items() if isinstance(t, dict)
                     ]
-                    tech_info = f"Detected technologies: {', '.join(tech_names)}\n" if tech_names else "Detected technologies: No data available\n"
+                    tech_info = f"Detected technologies: {', '.join(tech_names)}\n" if tech_names else "Detected technologies: No data available\n"  # noqa: E501
                 else:
                     tech_info = "Detected technologies: No data available\n"
             else:
@@ -661,18 +800,25 @@ class LLMService:
         ssl_ctx = self._extract_ssl_context(scan)
         tool_cov = self._build_tool_coverage(scan)
         duration = self._compute_scan_duration(scan)
+        limitations_ctx = self._build_scan_limitations(scan, tool_cov)
 
         # Failed tools context for narrative
         failed_tools = getattr(scan, "failed_tools", []) or []
         scan_coverage = getattr(scan, "scan_coverage", None)
         failed_tools_ctx = ""
         if failed_tools:
-            failed_tools_ctx = f"Failed/skipped tools: {', '.join(failed_tools)}\n"
+            failed_tools_ctx = f"Tools that failed or timed out: {', '.join(failed_tools)}\n"
             failed_tools_ctx += "These tools did not produce results — actual risk may be higher.\n"
+        skipped_tools = [t for t, st in tool_cov.items() if st == "skipped"]
+        if skipped_tools:
+            failed_tools_ctx += f"Tools not available (binary/templates missing): {', '.join(skipped_tools)}\n"
+            failed_tools_ctx += "No results from these tools — actual exposure may be broader.\n"
         coverage_ctx = ""
         if scan_coverage is not None:
             pct = int(scan_coverage * 100)
-            coverage_ctx = f"Scan coverage: {pct}%\n"
+            coverage_ctx = f"Scan coverage: {pct}% (tools that fully completed)\n"
+            if pct < 70:
+                coverage_ctx += f"WARNING: Low scan coverage ({pct}%). Risk score may underestimate actual exposure.\n"
 
         # ZAP context for narrative
         zap_raw = getattr(scan, "zap_raw", None)
@@ -709,13 +855,14 @@ class LLMService:
             f"{nmap_ctx}{ssl_ctx}"
             f"{zap_ctx}{whatweb_ctx}"
             f"{failed_tools_ctx}{coverage_ctx}"
+            f"{limitations_ctx}"
             f"OWASP 2025 category names: {json.dumps(owasp_names)}\n"
-            f"\nOWASP 2025 Category Distribution (for reference only — do NOT invent findings for categories not in the findings list below):\n"
+            f"\nOWASP 2025 Category Distribution (for reference only — do NOT invent findings for categories not in the findings list below):\n"  # noqa: E501
         )
         for cat, items in owasp_cats.items():
             header += f"  {cat}: {len(items)} findings\n"
 
-        _NARRATIVE_TIMEOUT = 120  # seconds; outer guard in addition to per-provider timeout
+        _NARRATIVE_TIMEOUT = 120  # seconds; outer guard in addition to per-provider timeout  # noqa: N806
 
         def _timeout_fallback() -> str:
             tools_str = ", ".join(scan.completed_tools or ["unknown"])
@@ -904,6 +1051,52 @@ class LLMService:
         prompt = template + f"\n\nALERT + TRIAGE CONTEXT:\n{json.dumps(combined, separators=(',', ':'))}"
         return await self._generate(prompt, max_tokens=1500, _provider=self._soc_provider)
 
+    async def generate_investigation_guide(self, alert_dict: dict) -> dict:
+        """
+        Generate a focused, analyst-ready investigation guide for a single alert.
+
+        Always runs against the raw alert data — not cached, so each call
+        produces guidance specific to the exact alert fields (log, data, iocs).
+
+        Returns a structured dict:
+          investigation_steps        — ordered steps to execute RIGHT NOW
+          host_artifacts             — specific files/processes/keys to check on the endpoint
+          false_positive_scenarios   — conditions under which this is benign
+          escalation_criteria        — one-line trigger for escalating to senior analyst
+          mitre_context              — what attackers typically do after this technique
+          confidence_note            — analyst guidance about data quality/caveats
+        """
+        prompt = (
+            "You are a senior SOC L2 analyst writing a focused investigation guide for an L1 analyst.\n"
+            "Use the ACTUAL alert fields — do NOT give generic advice. Reference specific log values,\n"
+            "process names, file paths, rule groups, or MITRE techniques from the data provided.\n"
+            "Keep each step ≤ 2 sentences. Be concrete and immediately actionable.\n\n"
+            "Respond ONLY in valid JSON with exactly these keys:\n"
+            '  "investigation_steps": [string, ...]        — 4-6 ordered steps to run RIGHT NOW\n'
+            '  "host_artifacts": [string, ...]             — specific files, processes, reg keys, or network conns to examine\n'  # noqa: E501
+            '  "false_positive_scenarios": [string, ...]   — realistic conditions where this alert is benign\n'  # noqa: E501
+            '  "escalation_criteria": string               — escalate if you also observe: (one sentence)\n'  # noqa: E501
+            '  "mitre_context": string                     — what attackers typically do immediately after this technique\n'  # noqa: E501
+            '  "confidence_note": string                   — any data quality caveats (truncated log, missing fields, etc.)\n\n'  # noqa: E501
+            f"ALERT DATA:\n{json.dumps(alert_dict, separators=(',', ':'))}"
+        )
+
+        text = await self._generate(
+            prompt, use_cache=False, max_tokens=900, _provider=self._soc_provider
+        )
+        try:
+            result = json.loads(self._extract_json(text))
+        except json.JSONDecodeError:
+            result = {}
+
+        result.setdefault("investigation_steps",      [])
+        result.setdefault("host_artifacts",           [])
+        result.setdefault("false_positive_scenarios", [])
+        result.setdefault("escalation_criteria",      "")
+        result.setdefault("mitre_context",            "")
+        result.setdefault("confidence_note",          "")
+        return result
+
     async def batch_analyse_alerts(
         self,
         alerts: list[dict],
@@ -951,7 +1144,7 @@ class LLMService:
         text = text.strip()
         if text.startswith("```"):
             lines = text.split("\n")
-            lines = [l for l in lines if not l.strip().startswith("```")]
+            lines = [ln for ln in lines if not ln.strip().startswith("```")]
             text = "\n".join(lines).strip()
         match = _re.search(r"\{.*\}", text, _re.DOTALL)
         if match:

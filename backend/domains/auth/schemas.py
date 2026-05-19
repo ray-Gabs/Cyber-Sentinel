@@ -5,9 +5,9 @@
 # and shape HTTP response bodies.
 # ============================================================
 
-from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
-from typing import Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 
 def _validate_email(v: str) -> str:
@@ -23,19 +23,27 @@ def _validate_email(v: str) -> str:
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=32)
     email: str
+    password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        v = v.strip()
+        import re as _re
+        if not _re.fullmatch(r"[A-Za-z0-9_.\-]+", v):
+            raise ValueError("Username may only contain letters, numbers, underscores, dots, and hyphens")
+        return v
 
     @field_validator("email")
     @classmethod
     def validate_email(cls, v: str) -> str:
         return _validate_email(v)
 
-    password: str = Field(..., min_length=8, max_length=128)
-
 
 class LoginRequest(BaseModel):
     """Accepts either username or email + password."""
-    identifier: str = Field(..., min_length=1, description="Username or email address")
-    password: str
+    identifier: str = Field(..., min_length=1, max_length=256, description="Username or email address")
+    password: str = Field(..., max_length=128)
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -75,18 +83,24 @@ class UpdateProfileRequest(BaseModel):
     (e.g. 'alice-laptop'). Once set, your SOC view scopes to only
     that agent's alerts. Clear by sending an empty string "".
     """
-    wazuh_agent_name: Optional[str] = Field(
+    wazuh_agent_name: str | None = Field(
         None,
         max_length=128,
         description="Wazuh agent name to link (matches 'name' in Wazuh agent list). Empty string unlinks.",
     )
 
 
+class ChangePasswordRequest(BaseModel):
+    """Change the current user's password (requires the current password for verification)."""
+    current_password: str = Field(..., description="The user's current password")
+    new_password: str = Field(..., min_length=8, max_length=128, description="New password (min 8 characters)")
+
+
 # --------------- Responses ---------------
 
 class TokenResponse(BaseModel):
     access_token: str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105
 
 
 class UserResponse(BaseModel):
@@ -99,8 +113,9 @@ class UserResponse(BaseModel):
     status: str = "active"
     is_demo: bool = False
     created_at: datetime
-    last_login: Optional[datetime] = None
-    wazuh_agent_name: Optional[str] = None
+    last_login: datetime | None = None
+    wazuh_agent_name: str | None = None
+    wazuh_agent_group: str | None = None
 
     class Config:
         from_attributes = True

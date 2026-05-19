@@ -34,7 +34,7 @@ class AppError(Exception):
             trace_id = structlog.contextvars.get_contextvars().get("trace_id")
             if trace_id:
                 d["trace_id"] = trace_id
-        except Exception:
+        except Exception:  # noqa: S110 — structlog optional; silently omit trace_id if unavailable
             pass
         return d
 

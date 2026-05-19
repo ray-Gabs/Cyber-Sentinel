@@ -12,7 +12,6 @@
 import logging
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 from urllib.parse import urlparse
 
 from domains.correlation.models import Correlation, CorrelationLink
@@ -104,13 +103,13 @@ async def run_correlation(scan_id: str) -> Correlation:
     return correlation
 
 
-async def get_correlation(scan_id: str) -> Optional[Correlation]:
+async def get_correlation(scan_id: str) -> Correlation | None:
     """Get the correlation record for a scan."""
     return await Correlation.find_one({"scan_id": scan_id})
 
 
 async def list_correlations(
-    page: int = 1, size: int = 20, user_id: Optional[str] = None
+    page: int = 1, size: int = 20, user_id: str | None = None
 ) -> list[Correlation]:
     """List correlations newest first. If user_id given, scope to that user's scans."""
     if user_id is not None:
@@ -134,7 +133,7 @@ async def list_correlations(
     )
 
 
-async def count_correlations(user_id: Optional[str] = None) -> int:
+async def count_correlations(user_id: str | None = None) -> int:
     """Count correlations scoped to a user's scans."""
     if user_id is not None:
         cutoff = datetime.now(timezone.utc) - timedelta(days=30)
@@ -187,7 +186,7 @@ def _finding_keywords(finding: dict) -> frozenset[str]:
     return frozenset(w for w in _WORD_RE.findall(f"{name} {desc}") if w not in _STOPWORDS)
 
 
-def _check_correlation(finding: dict, alert: Alert, target_host: str, f_keywords: frozenset[str]) -> Optional[CorrelationLink]:
+def _check_correlation(finding: dict, alert: Alert, target_host: str, f_keywords: frozenset[str]) -> CorrelationLink | None:  # noqa: E501
     """Check if a finding correlates with an alert. Returns a link or None."""
     # 1. IP/host match — alert from same host as scan target
     if _ip_match(alert, target_host):
@@ -273,13 +272,16 @@ def _ip_match(alert: Alert, target_host: str) -> bool:
 
 
 def _attack_pattern_match(finding: dict, alert: Alert) -> bool:
-    """Check if the finding tool/type matches alert rule groups."""
+    """Check if the finding tool/type matches alert rule groups (exact token match)."""
     tool = finding.get("tool", "")
     expected_groups = ATTACK_PATTERN_MAP.get(tool, [])
     if not expected_groups:
         return False
-    alert_groups = [g.lower() for g in alert.rule_groups]
-    return any(eg in ag for eg in expected_groups for ag in alert_groups)
+    # Normalise alert groups to a set for exact matching.
+    # Previously used substring matching (eg in ag) which caused false positives
+    # e.g. "attack" matching inside "web_attack" for unrelated findings.
+    alert_group_set = {g.lower() for g in alert.rule_groups}
+    return bool(set(expected_groups) & alert_group_set)
 
 
 def _cve_match(finding: dict, alert: Alert) -> bool:
@@ -315,12 +317,20 @@ def _port_match(finding: dict, alert: Alert) -> bool:
 
 
 def _keyword_match(alert: Alert, f_keywords: frozenset[str]) -> bool:
-    """Check for significant keyword overlap between pre-extracted finding keywords and alert."""
-    if len(f_keywords) < 2:
+    """
+    Check for significant keyword overlap between finding keywords and alert text.
+
+    Requires at least 3 keyword matches AND that matched keywords cover at least
+    30% of the finding's keyword set. The old threshold of 2 was too permissive —
+    any generic alert would match findings with large keyword sets.
+    """
+    if len(f_keywords) < 3:
         return False
     alert_text = f"{alert.rule_description} {alert.full_log}".lower()
     matches = sum(1 for kw in f_keywords if kw in alert_text)
-    return matches >= 2
+    if matches < 3:
+        return False
+    return (matches / len(f_keywords)) >= 0.30
 
 
 async def _generate_correlation_summary(llm_service, scan, links: list[CorrelationLink]) -> str:
@@ -328,14 +338,14 @@ async def _generate_correlation_summary(llm_service, scan, links: list[Correlati
     import json
     link_data = [
         {
-            "finding": l.finding_name,
-            "f_sev": l.finding_severity,
-            "alert": l.alert_rule_description,
-            "a_lvl": l.alert_rule_level,
-            "type": l.correlation_type,
-            "conf": l.confidence,
+            "finding": lnk.finding_name,
+            "f_sev": lnk.finding_severity,
+            "alert": lnk.alert_rule_description,
+            "a_lvl": lnk.alert_rule_level,
+            "type": lnk.correlation_type,
+            "conf": lnk.confidence,
         }
-        for l in links[:15]
+        for lnk in links[:15]
     ]
 
     prompt = (

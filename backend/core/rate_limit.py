@@ -40,7 +40,7 @@ def get_user_or_ip_key(request: Request) -> str:
             uid = payload.get("sub")
             if uid:
                 return f"user:{uid}"
-        except Exception:
+        except Exception:  # noqa: S110 — token decode failure falls back to IP-based rate limiting
             pass
     return get_remote_address(request)
 

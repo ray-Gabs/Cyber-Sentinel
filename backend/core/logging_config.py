@@ -52,5 +52,5 @@ def configure_logging(level: str = "INFO") -> None:
     root.setLevel(getattr(logging, level.upper(), logging.INFO))
 
     # Reduce noise from chatty third-party loggers
-    for noisy in ("uvicorn.access", "motor", "beanie", "passlib"):
+    for noisy in ("uvicorn.access", "motor", "beanie"):
         logging.getLogger(noisy).setLevel(logging.WARNING)

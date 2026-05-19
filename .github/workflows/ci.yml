@@ -48,8 +48,17 @@ jobs:
         run: bandit -r backend/ -ll --exclude backend/venv -q
 
       - name: pip-audit (dependency CVE scan)
-        # Fail on CVSS >= 7.0 (HIGH). Use --progress-spinner off in CI.
-        run: pip-audit -r backend/requirements.txt --progress-spinner off
+        # Three CVEs are acknowledged but cannot be patched without breaking dependency
+        # resolution — each is documented below and tracked for future upgrade:
+        #   GHSA-2c2j-9gv5-cj73 / GHSA-7f5h-v6xp-fcq8 — starlette transitive dep,
+        #     constrained by fastapi==0.115.*; resolve when fastapi 0.116+ is adopted.
+        #   GHSA-6w46-j5rx-g56g — pytest, test-only dep (not in production image);
+        #     fix requires pytest 9.x which conflicts with pytest-asyncio 0.24.x.
+        run: |
+          pip-audit -r backend/requirements.txt --progress-spinner off \
+            --ignore-vuln GHSA-2c2j-9gv5-cj73 \
+            --ignore-vuln GHSA-7f5h-v6xp-fcq8 \
+            --ignore-vuln GHSA-6w46-j5rx-g56g
 
   # ------------------------------------------------------------------
   # 2. Frontend — ESLint + TypeScript type check

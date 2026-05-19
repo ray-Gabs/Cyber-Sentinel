@@ -2,7 +2,7 @@
  * UserProjects — SOC project management page.
  * Each project maps to a monitored target + Wazuh agent deployment.
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import api from "@/services/api";
 import { Icon, PageHead, Btn, Status } from "@/components/ui";
@@ -56,6 +56,37 @@ export default function UserProjects() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Auto-poll unregistered projects every 20s — one batch call instead of N individual ones
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    const pending = projects.filter((p) => !p.wazuh_agent_registered);
+    if (pending.length === 0) {
+      if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+      return;
+    }
+    if (pollingRef.current) return;
+    pollingRef.current = setInterval(async () => {
+      const stillPending = projects.filter((p) => !p.wazuh_agent_registered);
+      if (stillPending.length === 0) { clearInterval(pollingRef.current!); pollingRef.current = null; return; }
+      try {
+        const res = await api.post<{ results: { project_id: string; status: string; wazuh_agent_id?: string }[] }>(
+          "/soc/batch-agent-status",
+          { project_ids: stillPending.map((p) => p.id) },
+        );
+        for (const r of res.data.results) {
+          if (r.status === "connected") {
+            setProjects((prev) =>
+              prev.map((p) => p.id === r.project_id ? { ...p, wazuh_agent_registered: true, wazuh_agent_id: r.wazuh_agent_id ?? p.wazuh_agent_id } : p)
+            );
+            const proj = stillPending.find((p) => p.id === r.project_id);
+            if (proj) showToast(`Agent "${proj.wazuh_agent_name || proj.slug}" connected!`, "success");
+          }
+        }
+      } catch { /* silent */ }
+    }, 20_000);
+    return () => { if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; } };
+  }, [projects]);
 
   function openModal() {
     setForm({ name: "", target_url: "", description: "", wazuh_agent_name: "" });
@@ -309,7 +340,7 @@ export default function UserProjects() {
                   <div style={{ borderRight: "1px solid var(--border)" }}>
                     <div className="eyebrow">Agent</div>
                     <div className="mono" style={{ fontSize: 11, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {project.wazuh_agent_name || "—"}
+                      {project.wazuh_agent_name || project.slug || "—"}
                     </div>
                   </div>
                   <div style={{ borderRight: "1px solid var(--border)", paddingLeft: 12 }}>
@@ -522,8 +553,13 @@ export default function UserProjects() {
 
 /* ── Helpers ──────────────────────────────────────────── */
 
+function parseUtcDate(iso: string): Date {
+  if (!iso.endsWith("Z") && !/[+-]\d{2}:\d{2}$/.test(iso)) return new Date(iso + "Z");
+  return new Date(iso);
+}
+
 function formatRelative(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
+  const diff = Date.now() - parseUtcDate(iso).getTime();
   const days  = Math.floor(diff / 86_400_000);
   if (days === 0)  return "today";
   if (days === 1)  return "yesterday";

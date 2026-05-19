@@ -45,7 +45,7 @@ async def _log_task_failure(
 ) -> None:
     """Write a dead-letter record to MongoDB for audit and manual replay."""
     try:
-        from core.database import init_db, get_database
+        from core.database import get_database, init_db
         await init_db()
         db = get_database()
         await db["task_failures"].insert_one({
@@ -103,7 +103,7 @@ def triage_single_alert(self, alert_id: str):
     try:
         _dedup_r = _sync_redis.from_url(settings.app_redis_url, socket_connect_timeout=2)
         acquired = _dedup_r.set(
-            f"triage:lock:{alert_id}", "1", nx=True, px=300_000  # 5-min TTL
+            f"triage:lock:{alert_id}", "1", nx=True, px=1_800_000  # 30-min TTL — longer than max triage time
         )
         if not acquired:
             task_log.debug("triage lock already held — skipping duplicate")
@@ -131,8 +131,9 @@ async def _triage_async(alert_id: str):
 
 async def _push_triage_pending(alert_id: str) -> None:
     """Push alert_id into the sorted set for batch processing by drain_triage_queue."""
-    import redis.asyncio as aioredis
     import time
+
+    import redis.asyncio as aioredis
     try:
         r = aioredis.from_url(settings.app_redis_url, socket_connect_timeout=2)
         await r.zadd("soc:triage_pending", {alert_id: time.time()})
@@ -147,8 +148,8 @@ async def _push_triage_pending(alert_id: str) -> None:
 
 @celery.task(
     name="domains.soc.tasks.drain_triage_queue",
-    soft_time_limit=55,
-    time_limit=60,
+    soft_time_limit=25,
+    time_limit=30,
 )
 def drain_triage_queue():
     """
@@ -165,7 +166,7 @@ async def _drain_async():
     import redis.asyncio as aioredis
     r = aioredis.from_url(settings.app_redis_url, socket_connect_timeout=2)
     try:
-        items = await r.zpopmin("soc:triage_pending", count=15)
+        items = await r.zpopmin("soc:triage_pending", count=50)
         alert_ids = [
             item[0].decode() if isinstance(item[0], bytes) else item[0]
             for item in items
@@ -181,7 +182,7 @@ async def _drain_async():
             pending = await (
                 Alert.find({"ai_verdict": None, "rule_level": {"$gte": 4}})
                 .sort("timestamp")
-                .limit(5)
+                .limit(10)
                 .to_list()
             )
             alert_ids = [str(a.id) for a in pending]
@@ -189,14 +190,15 @@ async def _drain_async():
         if not alert_ids:
             return
 
-        log.info("SOC drain processing batch", count=len(alert_ids), service="celery-soc")
-        from domains.soc.triage_pipeline import run_triage_pipeline
-        for i in range(0, len(alert_ids), 2):
-            batch = alert_ids[i : i + 2]
-            await asyncio.gather(
-                *[run_triage_pipeline(aid) for aid in batch],
-                return_exceptions=True,
-            )
+        log.info("SOC drain dispatching batch", count=len(alert_ids), service="celery-soc")
+        dispatched = 0
+        for aid in alert_ids:
+            try:
+                triage_single_alert.delay(aid)
+                dispatched += 1
+            except Exception as exc:
+                log.warning("drain dispatch failed for %s: %s", aid, exc)
+        log.info("SOC drain dispatched %d/%d tasks", dispatched, len(alert_ids), service="celery-soc")
     except Exception as exc:
         log.warning("SOC drain failed", error=str(exc), service="celery-soc")
     finally:
@@ -296,9 +298,9 @@ async def _poll_async():
         from core.database import init_db
         await init_db()
 
-        from domains.soc.wazuh_client import wazuh_client
-        from domains.soc.service import ingest_wazuh_alert
         from domains.auth.models import User
+        from domains.soc.service import ingest_wazuh_alert
+        from domains.soc.wazuh_client import wazuh_client
 
         if not settings.wazuh_api_password:
             poll_log.debug("wazuh_api_password not set — skipping REST poll")

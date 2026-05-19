@@ -5,7 +5,7 @@
  * message shapes. useWebSocket<Alert>("/ws/alerts") means "messages are Alert objects."
  */
 import { useEffect, useRef, useState, useCallback } from "react";
-import { WS_BASE, TOKEN_KEY } from "@/lib/constants";
+import { WS_BASE } from "@/lib/constants";
 
 interface UseWebSocketOptions {
   /** Which channel to subscribe to (e.g., "scans", "alerts") */
@@ -47,10 +47,8 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions) {
   const connect = useCallback(() => {
     if (isUnmounted.current) return;
 
-    const token = localStorage.getItem(TOKEN_KEY);
-    const url = token
-      ? `${WS_BASE}/${channel}?token=${encodeURIComponent(token)}`
-      : `${WS_BASE}/${channel}`;
+    // Browser sends the HttpOnly cookie automatically on the WS upgrade request.
+    const url = `${WS_BASE}/${channel}`;
     const ws = new WebSocket(url);
 
     ws.onopen = () => {

@@ -3,8 +3,7 @@
 # ============================================================
 
 import logging
-from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Literal
 
 from beanie import PydanticObjectId
 
@@ -29,11 +28,11 @@ async def create_notification(
     user_id: str,
     type: NotificationType,
     title: str,
-    body: Optional[str] = None,
-    scan_id: Optional[str] = None,
-    scan_target: Optional[str] = None,
-    severity_summary: Optional[dict[str, int]] = None,
-    risk_score: Optional[float] = None,
+    body: str | None = None,
+    scan_id: str | None = None,
+    scan_target: str | None = None,
+    severity_summary: dict[str, int] | None = None,
+    risk_score: float | None = None,
 ) -> Notification:
     """
     Persist a new notification and push it to the user's WebSocket channel.
@@ -88,7 +87,7 @@ async def get_notifications(
     return await query.sort(-Notification.created_at).limit(limit).to_list()
 
 
-async def mark_read(notification_id: str, user_id: str) -> Optional[Notification]:
+async def mark_read(notification_id: str, user_id: str) -> Notification | None:
     """Mark a single notification as read. Returns None if not found or not owned."""
     notif = await Notification.get(PydanticObjectId(notification_id))
     if not notif or notif.user_id != user_id:

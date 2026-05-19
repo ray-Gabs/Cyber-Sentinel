@@ -5,11 +5,15 @@
 # Wazuh API docs: https://documentation.wazuh.com/current/user-manual/api/
 # ============================================================
 
-import httpx
+import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any
+
+import httpx
 
 from core.config import settings
+
+log = logging.getLogger(__name__)
 
 
 class WazuhClient:
@@ -24,16 +28,16 @@ class WazuhClient:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
-        user: Optional[str] = None,
-        password: Optional[str] = None,
+        base_url: str | None = None,
+        user: str | None = None,
+        password: str | None = None,
     ):
         self.base_url = base_url or settings.wazuh_api_url
         self.user = user or settings.wazuh_api_user
         self.password = password or settings.wazuh_api_password
         self.verify_ssl = settings.wazuh_verify_ssl
-        self._token: Optional[str] = None
-        self._token_expires: Optional[datetime] = None
+        self._token: str | None = None
+        self._token_expires: datetime | None = None
 
     # ─────────────────────────────────────────────
     # Auth
@@ -627,11 +631,14 @@ class WazuhClient:
         """
         ctx: dict[str, Any] = {"agent_id": agent_id}
 
-        async def _safe(coro, key: str, default: Any = None):
+        async def _safe(coro, key: str):
             try:
                 ctx[key] = await coro
-            except Exception as e:
-                ctx[key] = default if default is not None else f"error: {e}"
+            except Exception as exc:
+                # Use None so the triage pipeline skips the field rather than
+                # passing an error string to the LLM as if it were real data.
+                log.debug("[WazuhClient] build_agent_context %s failed for %s: %s", key, agent_id, exc)
+                ctx[key] = None
 
         await _safe(self.get_agent(agent_id), "agent")
         await _safe(self.get_agent_os(agent_id), "os")

@@ -20,7 +20,6 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from core.config import settings
 
@@ -95,8 +94,8 @@ class GroqProvider(BaseLLMProvider):
                 )
                 self._key_index = (idx + 1) % n
                 return response.choices[0].message.content
-            except asyncio.TimeoutError:
-                raise TimeoutError(f"Groq did not respond within {_LLM_TIMEOUT}s")
+            except asyncio.TimeoutError as exc:
+                raise TimeoutError(f"Groq did not respond within {_LLM_TIMEOUT}s") from exc
             except Exception as e:
                 if "429" in str(e):
                     log.warning("Groq key[%d/%d] rate limited, trying next", idx + 1, n)
@@ -149,8 +148,8 @@ class ClaudeProvider(BaseLLMProvider):
                 )
                 self._key_index = (idx + 1) % n
                 return response.content[0].text
-            except asyncio.TimeoutError:
-                raise TimeoutError(f"Claude did not respond within {_LLM_TIMEOUT}s")
+            except asyncio.TimeoutError as exc:
+                raise TimeoutError(f"Claude did not respond within {_LLM_TIMEOUT}s") from exc
             except anthropic.RateLimitError:
                 log.warning("Claude key[%d/%d] rate limited, trying next", idx + 1, n)
                 continue
@@ -203,8 +202,8 @@ class OpenAIProvider(BaseLLMProvider):
                 )
                 self._key_index = (idx + 1) % n
                 return response.choices[0].message.content
-            except asyncio.TimeoutError:
-                raise TimeoutError(f"OpenAI did not respond within {_LLM_TIMEOUT}s")
+            except asyncio.TimeoutError as exc:
+                raise TimeoutError(f"OpenAI did not respond within {_LLM_TIMEOUT}s") from exc
             except RateLimitError:
                 log.warning("OpenAI key[%d/%d] rate limited, trying next", idx + 1, n)
                 continue
@@ -247,8 +246,8 @@ class GeminiProvider(BaseLLMProvider):
                 return response.text
             except ValueError as e:
                 raise RuntimeError(f"Gemini response blocked or empty (safety filter): {e}") from e
-        except asyncio.TimeoutError:
-            raise TimeoutError(f"Gemini did not respond within {_LLM_TIMEOUT}s")
+        except asyncio.TimeoutError as exc:
+            raise TimeoutError(f"Gemini did not respond within {_LLM_TIMEOUT}s") from exc
 
 
 # ─────────────────────────────────────────────
@@ -265,11 +264,11 @@ _PROVIDER_REGISTRY: dict[str, type[BaseLLMProvider]] = {
 # Fallback order when the configured provider has no API key
 _FALLBACK_ORDER = ["claude", "groq", "gemini", "openai"]
 
-_provider_instance: Optional[BaseLLMProvider] = None
-_soc_provider_instance: Optional[BaseLLMProvider] = None
+_provider_instance: BaseLLMProvider | None = None
+_soc_provider_instance: BaseLLMProvider | None = None
 
 
-def _init_provider(name: str) -> Optional[BaseLLMProvider]:
+def _init_provider(name: str) -> BaseLLMProvider | None:
     """Try to instantiate a provider by name. Returns None on failure."""
     provider_cls = _PROVIDER_REGISTRY.get(name)
     if not provider_cls:
@@ -283,7 +282,7 @@ def _init_provider(name: str) -> Optional[BaseLLMProvider]:
         return None
 
 
-def get_provider() -> Optional[BaseLLMProvider]:
+def get_provider() -> BaseLLMProvider | None:
     """
     Return the singleton main provider instance.
 
@@ -326,7 +325,7 @@ def get_provider() -> Optional[BaseLLMProvider]:
     return None
 
 
-def get_soc_provider() -> Optional[BaseLLMProvider]:
+def get_soc_provider() -> BaseLLMProvider | None:
     """
     Return the singleton SOC triage provider instance.
 

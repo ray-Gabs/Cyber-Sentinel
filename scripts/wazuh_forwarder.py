@@ -9,7 +9,7 @@ Usage:
     python3 wazuh_forwarder.py
 
 Required env vars:
-    CYBER_SENTINEL_URL      Base URL, e.g. http://10.4.89.178
+    CYBER_SENTINEL_URL      Base URL, e.g. http://192.168.1.100
     WAZUH_WEBHOOK_TOKEN     Shared secret — must match WAZUH_WEBHOOK_TOKEN in
                             Cyber Sentinel's .env
 

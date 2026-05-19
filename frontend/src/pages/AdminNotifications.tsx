@@ -33,8 +33,13 @@ const TYPE_CONFIG: Record<string, { iconName: string; color: string; label: stri
 
 const DEFAULT_CFG = { iconName: "bell", color: "var(--accent)", label: "Notification" };
 
+function parseUtcDate(iso: string): Date {
+  if (!iso.endsWith("Z") && !/[+-]\d{2}:\d{2}$/.test(iso)) return new Date(iso + "Z");
+  return new Date(iso);
+}
+
 function timeAgo(iso: string): string {
-  const diff  = Date.now() - new Date(iso).getTime();
+  const diff  = Date.now() - parseUtcDate(iso).getTime();
   const mins  = Math.floor(diff / 60_000);
   const hours = Math.floor(diff / 3_600_000);
   const days  = Math.floor(diff / 86_400_000);
@@ -53,7 +58,7 @@ export default function AdminNotifications() {
   const [filter, setFilter]     = useState<FilterTab>("all");
 
   useEffect(() => {
-    if (!loading && user && (user as { role?: string }).role !== "admin") {
+    if (!loading && user && user.role !== "admin") {
       navigate("/dashboard", { replace: true });
     }
   }, [user, loading, navigate]);
@@ -62,7 +67,7 @@ export default function AdminNotifications() {
     setFetching(true);
     try {
       const params = filter === "unread" ? { unread_only: true } : {};
-      const { data } = await api.get<Notification[]>("/api/notifications", { params });
+      const { data } = await api.get<Notification[]>("/notifications", { params });
       setNotifications(data);
     } catch {
       // non-critical
@@ -75,7 +80,7 @@ export default function AdminNotifications() {
 
   async function markRead(id: string) {
     try {
-      await api.patch(`/api/notifications/${id}/read`);
+      await api.patch(`/notifications/${id}/read`);
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
       );

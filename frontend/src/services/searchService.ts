@@ -22,6 +22,6 @@ export interface SearchResults {
 }
 
 export async function globalSearch(q: string): Promise<SearchResults> {
-  const { data } = await api.get<SearchResults>("/api/search", { params: { q } });
+  const { data } = await api.get<SearchResults>("/search", { params: { q } });
   return data;
 }

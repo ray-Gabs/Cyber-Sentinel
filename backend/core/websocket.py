@@ -5,9 +5,10 @@
 # broadcast real-time updates (scan progress, new alerts, etc.)
 # ============================================================
 
-from fastapi import WebSocket
 import json
 from typing import Any
+
+from fastapi import WebSocket
 
 
 class ConnectionManager:

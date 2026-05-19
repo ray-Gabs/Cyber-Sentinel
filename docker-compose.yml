@@ -127,8 +127,8 @@ services:
       - CELERY_RESULT_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/1
       - APP_REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/2
       - FRONTEND_URL=http://localhost:8888
-      # Replace 10.4.89.178 with this VM's actual IP if it changes.
-      - CORS_EXTRA_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost:8888,https://localhost,http://10.4.89.178,http://10.4.89.178:8000,http://10.4.89.178:8888
+      # Add your server's IP/hostname to CORS_EXTRA_ORIGINS in .env if accessing from other hosts.
+      - CORS_EXTRA_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost:8888,https://localhost,${CORS_EXTRA_ORIGINS:-}
       - ZAP_API_URL=http://zap:8080
       - ZAP_API_KEY=${ZAP_API_KEY:-changeme}
       - PYTHONPATH=/app
@@ -182,6 +182,7 @@ services:
       - sentinel-net
     command: celery -A core.celery_app worker --loglevel=info --pool=prefork --concurrency=2 -Q celery
     environment:
+      - JWT_SECRET=${JWT_SECRET}
       - MONGODB_URI=mongodb://mongo:27017
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
       # ROOT CAUSE FIX: without these two, all per-user/per-alert safety mechanisms are disabled
@@ -217,6 +218,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      - nuclei_templates:/home/sentinel/nuclei-templates  # persist templates across restarts
     restart: unless-stopped
     stop_grace_period: 120s
     logging:
@@ -246,6 +248,7 @@ services:
       - sentinel-net
     command: celery -A core.celery_app beat --loglevel=info --scheduler celery.beat.PersistentScheduler --pidfile /tmp/celerybeat.pid
     environment:
+      - JWT_SECRET=${JWT_SECRET}
       - MONGODB_URI=mongodb://mongo:27017
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
       # ROOT CAUSE FIX: beat must connect to the correct broker/backend
@@ -288,6 +291,7 @@ services:
       - sentinel-net
     command: celery -A core.celery_app worker --loglevel=info --pool=prefork --concurrency=3 -Q soc
     environment:
+      - JWT_SECRET=${JWT_SECRET}
       - MONGODB_URI=mongodb://mongo:27017
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme}@redis:6379/0
       # ROOT CAUSE FIX: without these two, dedup lock + triage queue + poll lock are all broken
@@ -379,7 +383,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1536m
+          memory: 2048m  # Ajax spider (Chromium) + active scan probes need ~1.5-2 GB
         reservations:
           memory: 512m
 
@@ -469,6 +473,7 @@ services:
 
 volumes:
   mongo_data:
+  nuclei_templates:        # nuclei template cache — survives celery container restarts
   forwarder_state:
   wazuh_api_config:
   wazuh_etc:

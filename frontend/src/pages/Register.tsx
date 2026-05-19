@@ -36,19 +36,37 @@ export default function Register() {
   const confirmTouched = confirmPassword.length > 0;
   const passwordsMatch = password === confirmPassword;
 
+  const USERNAME_RE = /^[A-Za-z0-9_.-]+$/;
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const trimmedUsername = username.trim();
+    const trimmedEmail    = email.trim().toLowerCase();
+
+    if (!USERNAME_RE.test(trimmedUsername)) {
+      setError("Username may only contain letters, numbers, underscores, dots, and hyphens.");
+      return;
+    }
     if (!passwordsMatch) { setError("Passwords do not match."); return; }
     setError("");
     setLoading(true);
     try {
-      await register({ username, email, password });
-      navigate("/?registered=pending");
+      await register({ username: trimmedUsername, email: trimmedEmail, password });
+      navigate("/login", { state: { registered: true } });
     } catch (err: unknown) {
-      setError(
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-        || "Registration failed. Try a different username.",
-      );
+      const httpErr = err as { response?: { data?: { detail?: string | { msg: string }[] } }; request?: unknown };
+      if (!httpErr?.response && httpErr?.request) {
+        setError("Unable to reach the server. Check your connection and try again.");
+      } else {
+        const detail = httpErr?.response?.data?.detail;
+        setError(
+          typeof detail === "string"
+            ? detail
+            : Array.isArray(detail)
+              ? detail.map((d) => d.msg).join(", ")
+              : "Registration failed. Try a different username or email.",
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -71,22 +89,17 @@ export default function Register() {
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-          <div>
-            <label className="field-label">Username</label>
-            <input
-              className="input"
-              placeholder="rgabriel"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoComplete="username"
-              required
-            />
-          </div>
-          <div>
-            <label className="field-label">Display name</label>
-            <input className="input" placeholder="Ray Gabriel" />
-          </div>
+        <div style={{ marginBottom: 14 }}>
+          <label className="field-label">Username</label>
+          <input
+            className="input"
+            placeholder="e.g. jdoe"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
+            maxLength={32}
+            required
+          />
         </div>
 
         <div style={{ marginBottom: 14 }}>

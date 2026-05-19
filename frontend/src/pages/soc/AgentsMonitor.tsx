@@ -34,6 +34,8 @@ function statusLabel(s: string) {
   return s;
 }
 
+const COL_TEMPLATE = "0.75rem 2.5rem 1fr 8rem 7rem 10rem 9rem 1.5rem";
+
 function AgentRow({ agent, onClick }: { agent: WazuhAgent; onClick: () => void }) {
   const tone = statusTone(agent.status);
   const osLabel = agent.os?.name ?? agent.os?.platform ?? "—";
@@ -41,52 +43,57 @@ function AgentRow({ agent, onClick }: { agent: WazuhAgent; onClick: () => void }
 
   return (
     <div
-      className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/5 transition-colors"
-      style={{ borderBottom: "1px solid var(--border)" }}
+      className="hover:bg-white/5 transition-colors"
+      style={{
+        display: "grid",
+        gridTemplateColumns: COL_TEMPLATE,
+        gap: "1rem",
+        alignItems: "center",
+        padding: "11px 16px",
+        borderBottom: "1px solid var(--border)",
+        cursor: "pointer",
+      }}
       onClick={onClick}
     >
-      <div
-        className="w-2 h-2 rounded-full shrink-0"
-        style={{ background: dotColor, boxShadow: agent.status === "active" ? `0 0 6px ${dotColor}` : "none" }}
-      />
-      <div className="w-10 shrink-0">
-        <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>#{agent.id}</span>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate mono" style={{ color: "var(--text)" }}>{agent.name}</p>
-        <p className="text-xs truncate" style={{ color: "var(--text-3)" }}>
+      {/* Dot */}
+      <div style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: agent.status === "active" ? `0 0 6px ${dotColor}` : "none" }} />
+      {/* ID */}
+      <span className="mono" style={{ fontSize: 11, color: "var(--text-3)" }}>#{agent.id}</span>
+      {/* Agent name + OS */}
+      <div style={{ minWidth: 0 }}>
+        <p className="mono" style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{agent.name}</p>
+        <p style={{ fontSize: 11, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {osLabel}{agent.version ? ` · v${agent.version.replace("Wazuh v", "")}` : ""}
         </p>
       </div>
-      <div className="hidden sm:block w-32 shrink-0">
-        <span className="mono" style={{ fontSize: 11, color: "var(--text-2)" }}>{agent.ip ?? "—"}</span>
-      </div>
-      <div className="hidden md:flex items-center gap-1 w-28 shrink-0 flex-wrap">
+      {/* IP */}
+      <span className="mono hidden sm:block" style={{ fontSize: 11, color: "var(--text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {agent.ip ?? "—"}
+      </span>
+      {/* Groups */}
+      <div className="hidden md:flex" style={{ gap: 4, overflow: "hidden", alignItems: "center" }}>
         {(agent.group ?? []).slice(0, 2).map((g) => (
-          <span key={g} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "color-mix(in oklab, var(--accent) 12%, transparent)", color: "var(--accent)" }}>
+          <span key={g} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "color-mix(in oklab, var(--accent) 12%, transparent)", color: "var(--accent)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {g}
           </span>
         ))}
       </div>
-      <div className="hidden lg:block w-36 shrink-0">
-        <span className="text-xs" style={{ color: "var(--text-3)" }}>
-          {agent.lastKeepAlive ? formatDate(agent.lastKeepAlive) : "—"}
-        </span>
-      </div>
-      <span
-        className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full shrink-0"
-        style={{
-          background: `color-mix(in oklab, var(--sev-${tone}) 12%, transparent)`,
-          color: `var(--sev-${tone})`,
-        }}
-      >
-        <span className="w-1.5 h-1.5 rounded-full" style={{ background: `var(--sev-${tone})` }} />
+      {/* Last Seen */}
+      <span className="hidden lg:block" style={{ fontSize: 11, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {agent.lastKeepAlive ? formatDate(agent.lastKeepAlive) : "—"}
+      </span>
+      {/* Status */}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 999, background: `color-mix(in oklab, var(--sev-${tone}) 12%, transparent)`, color: `var(--sev-${tone})`, whiteSpace: "nowrap", justifySelf: "start" }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: `var(--sev-${tone})`, flexShrink: 0 }} />
         {statusLabel(agent.status)}
       </span>
-      <Icon name="chevR" size={14} style={{ color: "var(--text-3)", flexShrink: 0 }} />
+      {/* Chevron */}
+      <Icon name="chevR" size={14} style={{ color: "var(--text-3)" }} />
     </div>
   );
 }
+
+const AGENTS_PER_PAGE = 10;
 
 export default function AgentsMonitor() {
   const navigate = useNavigate();
@@ -94,6 +101,7 @@ export default function AgentsMonitor() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
 
   const load = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -119,6 +127,8 @@ export default function AgentsMonitor() {
   const active       = agents.filter((a) => a.status === "active").length;
   const disconnected = agents.filter((a) => a.status === "disconnected").length;
   const pending      = agents.filter((a) => a.status === "pending" || a.status === "never_connected").length;
+  const totalPages   = Math.max(1, Math.ceil(agents.length / AGENTS_PER_PAGE));
+  const pagedAgents  = agents.slice((page - 1) * AGENTS_PER_PAGE, page * AGENTS_PER_PAGE);
 
   const handleAgentClick = (agent: WazuhAgent) => {
     navigate(`${ROUTES.ALERTS}?agent_name=${encodeURIComponent(agent.name)}`);
@@ -154,7 +164,7 @@ export default function AgentsMonitor() {
         <div
           className="hidden sm:grid items-center px-4 py-2.5 text-xs font-medium uppercase tracking-wide border-b"
           style={{
-            gridTemplateColumns: "0.75rem 2.5rem 1fr 8rem 7rem 9rem 8rem 1rem",
+            gridTemplateColumns: COL_TEMPLATE,
             gap: "1rem",
             color: "var(--text-3)",
             borderColor: "var(--border)",
@@ -191,17 +201,36 @@ export default function AgentsMonitor() {
             </p>
           </div>
         ) : (
-          agents.map((agent) => (
+          pagedAgents.map((agent) => (
             <AgentRow key={agent.id} agent={agent} onClick={() => handleAgentClick(agent)} />
           ))
         )}
 
         {!loading && !error && agents.length > 0 && (
           <div
-            className="px-4 py-2.5 text-xs border-t"
+            className="px-4 py-2.5 text-xs border-t flex items-center justify-between"
             style={{ color: "var(--text-3)", borderColor: "var(--border)", background: "var(--bg-2)" }}
           >
-            {agents.length} agent{agents.length !== 1 ? "s" : ""} total · click a row to filter alerts by agent
+            <span>{agents.length} agent{agents.length !== 1 ? "s" : ""} total · click a row to filter alerts by agent</span>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => p - 1)}
+                  disabled={page === 1}
+                  className="btn btn-sm disabled:opacity-40"
+                  style={{ fontSize: 11, padding: "2px 8px" }}
+                >← Prev</button>
+                <span className="mono" style={{ fontSize: 11 }}>
+                  {page}/{totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={page >= totalPages}
+                  className="btn btn-sm disabled:opacity-40"
+                  style={{ fontSize: 11, padding: "2px 8px" }}
+                >Next →</button>
+              </div>
+            )}
           </div>
         )}
       </div>

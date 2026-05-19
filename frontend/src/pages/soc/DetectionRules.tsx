@@ -1,11 +1,19 @@
 /**
- * DetectionRules — per-user CRUD management for regex-based detection rules.
+ * DetectionRules — per-user CRUD for contextual tagging rules.
+ *
+ * These rules add application and project-specific context to Wazuh alerts —
+ * they are NOT a replacement for Wazuh's native detection engine. Wazuh's
+ * rule_groups field already classifies generic attack patterns. These rules
+ * tag alerts with knowledge Wazuh can't have: app identity, project scope,
+ * analyst-defined patterns discovered during incident review.
  *
  * Sections:
- *   • Platform Rules  — user_id="system", read-only, shared across all users
  *   • My Rules        — owned by the current user, full CRUD (personal or project-scoped)
+ *   • Project Presets — seeded when a project is created (e.g. JuiceShop), read-only
+ *   • Platform Rules  — legacy user_id="system" rules (read-only, shown for existing deployments)
  */
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   listDetectionRules,
   createDetectionRule,
@@ -72,6 +80,7 @@ function RuleFormModal({ initial, onSave, onClose, saving, title, projects }: Ru
   );
   const [patternError, setPatternError] = useState("");
   const [testInput, setTestInput]       = useState("");
+  const [saveError, setSaveError]       = useState("");
 
   const set = <K extends keyof DetectionRuleCreate>(field: K, value: DetectionRuleCreate[K]) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -86,9 +95,14 @@ function RuleFormModal({ initial, onSave, onClose, saving, title, projects }: Ru
     e.preventDefault();
     if (!form.name.trim() || !form.pattern.trim()) return;
     if (!isValidRegex(form.pattern)) { setPatternError("Invalid regular expression."); return; }
-    if (scope === "project" && !form.project_id) { return; }
+    if (scope === "project" && !form.project_id) return;
     setPatternError("");
-    await onSave(form);
+    setSaveError("");
+    try {
+      await onSave(form);
+    } catch {
+      setSaveError("Failed to save rule — check your connection and try again.");
+    }
   };
 
   const testStatus = (() => {
@@ -96,7 +110,7 @@ function RuleFormModal({ initial, onSave, onClose, saving, title, projects }: Ru
     try { new RegExp(form.pattern); }
     catch { return "invalid" as const; }
     if (!testInput.trim()) return null;
-    return new RegExp(form.pattern).test(testInput) ? "match" as const : "no_match" as const;
+    return new RegExp(form.pattern, "i").test(testInput) ? "match" as const : "no_match" as const;
   })();
 
   return (
@@ -110,9 +124,12 @@ function RuleFormModal({ initial, onSave, onClose, saving, title, projects }: Ru
         style={{ padding: "1.5rem" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-base font-semibold mb-5" style={{ color: "var(--text)" }}>
+        <h2 className="text-base font-semibold mb-1" style={{ color: "var(--text)" }}>
           {title}
         </h2>
+        <p className="text-xs mb-5" style={{ color: "var(--text-3)" }}>
+          Add app or project-specific context that Wazuh's rule groups don't capture.
+        </p>
         <form onSubmit={handleSubmit} className="space-y-4">
 
           {/* Scope selector */}
@@ -138,7 +155,7 @@ function RuleFormModal({ initial, onSave, onClose, saving, title, projects }: Ru
             </div>
           </div>
 
-          {/* Project dropdown (only when project scope) */}
+          {/* Project dropdown */}
           {scope === "project" && (
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: "var(--text-2)" }}>Project</label>
@@ -166,7 +183,7 @@ function RuleFormModal({ initial, onSave, onClose, saving, title, projects }: Ru
               type="text"
               value={form.name}
               onChange={(e) => set("name", e.target.value)}
-              placeholder="e.g. Brute Force Login"
+              placeholder="e.g. JuiceShop Admin Panel Access"
               className="w-full input text-sm"
             />
           </div>
@@ -177,19 +194,19 @@ function RuleFormModal({ initial, onSave, onClose, saving, title, projects }: Ru
               type="text"
               value={form.description ?? ""}
               onChange={(e) => set("description", e.target.value)}
-              placeholder="Optional short description"
+              placeholder="What application or scenario does this tag?"
               className="w-full input text-sm"
             />
           </div>
 
           <div>
-            <label className="text-xs font-medium mb-1 block" style={{ color: "var(--text-2)" }}>Pattern (regex) *</label>
+            <label className="text-xs font-medium mb-1 block" style={{ color: "var(--text-2)" }}>Pattern (regex, case-insensitive) *</label>
             <input
               required
               type="text"
               value={form.pattern}
               onChange={(e) => { set("pattern", e.target.value); setPatternError(""); }}
-              placeholder="e.g. failed.*login|authentication.*failure"
+              placeholder="e.g. juiceshop|juice.?shop|dvwa"
               className="w-full input text-sm mono"
             />
             {patternError && (
@@ -255,6 +272,15 @@ function RuleFormModal({ initial, onSave, onClose, saving, title, projects }: Ru
             </div>
           </div>
 
+          {saveError && (
+            <div
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs"
+              style={{ backgroundColor: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "var(--sev-critical)" }}
+            >
+              <Icon name="alertCircle" size={13} />
+              {saveError}
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn btn-sm" disabled={saving}>Cancel</button>
             <button
@@ -281,6 +307,7 @@ interface UserRuleRowProps {
 }
 
 function UserRuleRow({ rule, projectName, onToggle, onEdit, onDelete }: UserRuleRowProps) {
+  const navigate = useNavigate();
   const sevColor = SEV_COLOR[rule.severity] ?? "var(--border)";
   return (
     <div
@@ -292,7 +319,7 @@ function UserRuleRow({ rule, projectName, onToggle, onEdit, onDelete }: UserRule
       }}
     >
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
+        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
           <p className="text-sm font-semibold truncate" style={{ color: "var(--text)" }}>{rule.name}</p>
           {projectName ? (
             <span
@@ -308,6 +335,17 @@ function UserRuleRow({ rule, projectName, onToggle, onEdit, onDelete }: UserRule
             >
               <Icon name="user" size={9} /> Personal
             </span>
+          )}
+          {rule.source_alert_id && (
+            <button
+              onClick={() => navigate(`/alerts/${rule.source_alert_id}`)}
+              className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 transition-colors"
+              style={{ backgroundColor: "rgba(168,85,247,0.1)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.2)" }}
+              title={`Created from Wazuh rule ${rule.source_rule_id ?? "unknown"} — click to open source alert`}
+            >
+              <Icon name="target" size={9} />
+              {rule.source_rule_id ? `Rule ${rule.source_rule_id}` : "From alert"}
+            </button>
           )}
         </div>
         {rule.description && (
@@ -338,8 +376,8 @@ function UserRuleRow({ rule, projectName, onToggle, onEdit, onDelete }: UserRule
   );
 }
 
-// ── Rule row — platform/global (read-only) ───────────────────────────────
-function PlatformRuleRow({ rule }: { rule: DetectionRule }) {
+// ── Rule row — preset/platform (read-only) ────────────────────────────────
+function ReadOnlyRuleRow({ rule }: { rule: DetectionRule }) {
   const sevColor = SEV_COLOR[rule.severity] ?? "var(--border)";
   return (
     <div
@@ -359,7 +397,7 @@ function PlatformRuleRow({ rule }: { rule: DetectionRule }) {
             className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
             style={{ backgroundColor: "rgba(148,163,184,0.12)", color: "var(--text-3)", border: "1px solid var(--border)" }}
           >
-            <Icon name="globe" size={9} /> Platform
+            <Icon name="lock" size={9} /> Read-only
           </span>
         </div>
         {rule.description && (
@@ -373,7 +411,7 @@ function PlatformRuleRow({ rule }: { rule: DetectionRule }) {
         </p>
       </div>
       <SeverityBadge severity={rule.severity} />
-      <div title="Platform rules are managed by the platform" className="p-1.5 rounded" style={{ color: "var(--text-3)" }}>
+      <div className="p-1.5 rounded" style={{ color: "var(--text-3)" }}>
         <Icon name="lock" size={13} />
       </div>
     </div>
@@ -381,14 +419,14 @@ function PlatformRuleRow({ rule }: { rule: DetectionRule }) {
 }
 
 // ── Stats strip ───────────────────────────────────────────────────────────
-function StatsStrip({ platform, personal, project, active }: {
-  platform: number; personal: number; project: number; active: number;
+function StatsStrip({ personal, project, fromAlert, active }: {
+  personal: number; project: number; fromAlert: number; active: number;
 }) {
   const items = [
-    { label: "Platform", value: platform, color: "var(--text-3)" },
-    { label: "Personal", value: personal, color: "#94a3b8" },
-    { label: "Project",  value: project,  color: "#60a5fa" },
-    { label: "Active",   value: active,   color: "#22c55e" },
+    { label: "Personal",   value: personal,   color: "#94a3b8" },
+    { label: "Project",    value: project,    color: "#60a5fa" },
+    { label: "From alert", value: fromAlert,  color: "#c084fc" },
+    { label: "Active",     value: active,     color: "#22c55e" },
   ];
   return (
     <div
@@ -417,6 +455,8 @@ export default function DetectionRules() {
   const [confirmDeleteRule, setConfirmDeleteRule] = useState<DetectionRule | null>(null);
   const [saving, setSaving]                     = useState(false);
   const [search, setSearch]                     = useState("");
+  const [myRulesPage, setMyRulesPage]           = useState(1);
+  const RULES_PER_PAGE = 10;
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -442,6 +482,7 @@ export default function DetectionRules() {
     [projects]
   );
 
+  // system + project_id = preset seeded for a specific app; system + no project = legacy platform rule
   const platformRules = rules.filter((r) => r.user_id === "system" && !r.project_id);
   const presetRules   = rules.filter((r) => r.user_id === "system" && !!r.project_id);
   const myRules       = rules.filter((r) => r.user_id !== "system");
@@ -454,9 +495,16 @@ export default function DetectionRules() {
       )
     : myRules;
 
-  const personalCount = myRules.filter((r) => !r.project_id).length;
-  const projectCount  = myRules.filter((r) => !!r.project_id).length;
-  const activeCount   = rules.filter((r) => r.enabled).length;
+  const myRulesTotalPages = Math.max(1, Math.ceil(filteredMyRules.length / RULES_PER_PAGE));
+  const pagedMyRules = filteredMyRules.slice(
+    (myRulesPage - 1) * RULES_PER_PAGE,
+    myRulesPage * RULES_PER_PAGE
+  );
+
+  const personalCount  = myRules.filter((r) => !r.project_id).length;
+  const projectCount   = myRules.filter((r) => !!r.project_id).length;
+  const fromAlertCount = myRules.filter((r) => !!r.source_alert_id).length;
+  const activeCount    = myRules.filter((r) => r.enabled).length;
 
   const handleSave = async (form: DetectionRuleCreate) => {
     setSaving(true);
@@ -470,8 +518,9 @@ export default function DetectionRules() {
       }
       setModalMode(null);
       setEditTarget(null);
-    } catch {
+    } catch (err) {
       setError("Failed to save rule.");
+      throw err;
     } finally {
       setSaving(false);
     }
@@ -486,9 +535,7 @@ export default function DetectionRules() {
     }
   };
 
-  const handleDelete = (rule: DetectionRule) => {
-    setConfirmDeleteRule(rule);
-  };
+  const handleDelete = (rule: DetectionRule) => setConfirmDeleteRule(rule);
 
   const executeDelete = async () => {
     if (!confirmDeleteRule) return;
@@ -521,7 +568,6 @@ export default function DetectionRules() {
 
   return (
     <>
-      {/* Delete confirm */}
       <ConfirmModal
         open={!!confirmDeleteRule}
         title="Delete Rule"
@@ -533,7 +579,6 @@ export default function DetectionRules() {
         onCancel={() => setConfirmDeleteRule(null)}
       />
 
-      {/* Modal */}
       {modalMode && (
         <RuleFormModal
           title={modalMode === "edit" ? "Edit Detection Rule" : "New Detection Rule"}
@@ -550,7 +595,7 @@ export default function DetectionRules() {
         <PageHead
           eyebrow="SOC"
           title="Detection Rules"
-          sub="Regex patterns matched against every incoming Wazuh alert"
+          sub="Contextual tagging rules that layer app and project identity onto Wazuh's native alert classification"
           actions={
             <button className="btn btn-primary btn-sm flex items-center gap-1.5" onClick={() => setModalMode("add")}>
               <Icon name="plus" size={14} /> New Rule
@@ -561,9 +606,9 @@ export default function DetectionRules() {
         {/* ── Stats ───────────────────────────────────────────── */}
         {!loading && (
           <StatsStrip
-            platform={platformRules.length + presetRules.length}
             personal={personalCount}
             project={projectCount}
+            fromAlert={fromAlertCount}
             active={activeCount}
           />
         )}
@@ -576,12 +621,16 @@ export default function DetectionRules() {
           <Icon name="info" size={14} className="mt-0.5 shrink-0" style={{ color: "var(--accent)" }} />
           <div className="text-xs leading-relaxed" style={{ color: "var(--text-2)" }}>
             <strong style={{ color: "var(--text)" }}>How it works: </strong>
-            On alert ingestion, its{" "}
+            At alert ingestion, regex patterns are matched against the alert's{" "}
             <code className="mono text-[11px] px-1 rounded" style={{ backgroundColor: "var(--bg-2)" }}>rule_description</code>,{" "}
-            <code className="mono text-[11px] px-1 rounded" style={{ backgroundColor: "var(--bg-2)" }}>full_log</code>, and other fields
-            are matched against your enabled rules. Matched rule names are stored on the alert and influence severity.{" "}
-            <strong style={{ color: "var(--text)" }}>Personal</strong> rules match your alerts only.{" "}
-            <strong style={{ color: "var(--text)" }}>Project</strong> rules are scoped to one project.
+            <code className="mono text-[11px] px-1 rounded" style={{ backgroundColor: "var(--bg-2)" }}>full_log</code>, and other fields.
+            Matched rule names are stored on the alert and passed to the AI triage engine as additional context.{" "}
+            <strong style={{ color: "var(--text)" }}>Best used for:</strong> tagging alerts by application (JuiceShop, DVWA),
+            capturing analyst-discovered patterns, or scoping alerts to a project.{" "}
+            <strong style={{ color: "var(--text)" }}>Not needed for:</strong> generic attack patterns — Wazuh's{" "}
+            <code className="mono text-[11px] px-1 rounded" style={{ backgroundColor: "var(--bg-2)" }}>rule_groups</code>{" "}
+            already classifies those. The fastest way to create a rule is via the{" "}
+            <strong style={{ color: "var(--text)" }}>Create Rule</strong> button on any alert detail page.
           </div>
         </div>
 
@@ -631,7 +680,7 @@ export default function DetectionRules() {
                       style={{ color: "var(--text)", width: "140px" }}
                       placeholder="Filter rules…"
                       value={search}
-                      onChange={(e) => setSearch(e.target.value)}
+                      onChange={(e) => { setSearch(e.target.value); setMyRulesPage(1); }}
                     />
                   </div>
                 )}
@@ -646,8 +695,11 @@ export default function DetectionRules() {
                     <Icon name="filter" size={18} style={{ color: "#F59E0B" }} />
                   </div>
                   <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>No rules yet</p>
-                  <p className="text-xs mt-1 mb-4" style={{ color: "var(--text-2)" }}>
-                    Create regex rules to auto-classify incoming alerts
+                  <p className="text-xs mt-1 mb-1" style={{ color: "var(--text-2)" }}>
+                    Create rules to tag alerts with application and project context
+                  </p>
+                  <p className="text-xs mb-4" style={{ color: "var(--text-3)" }}>
+                    Tip: the fastest way is via the <strong style={{ color: "var(--text-2)" }}>Create Rule</strong> button on any alert detail page
                   </p>
                   <button className="btn btn-primary btn-sm flex items-center gap-1.5" onClick={() => setModalMode("add")}>
                     <Icon name="plus" size={13} /> Add First Rule
@@ -658,18 +710,31 @@ export default function DetectionRules() {
                   No rules match "{search}"
                 </p>
               ) : (
-                <div className="space-y-2">
-                  {filteredMyRules.map((rule) => (
-                    <UserRuleRow
-                      key={rule.id}
-                      rule={rule}
-                      projectName={rule.project_id ? projectById[rule.project_id] : undefined}
-                      onToggle={handleToggle}
-                      onEdit={openEdit}
-                      onDelete={handleDelete}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="space-y-2">
+                    {pagedMyRules.map((rule) => (
+                      <UserRuleRow
+                        key={rule.id}
+                        rule={rule}
+                        projectName={rule.project_id ? projectById[rule.project_id] : undefined}
+                        onToggle={handleToggle}
+                        onEdit={openEdit}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </div>
+                  {myRulesTotalPages > 1 && (
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-xs mono" style={{ color: "var(--text-3)" }}>
+                        {(myRulesPage - 1) * RULES_PER_PAGE + 1}–{Math.min(myRulesPage * RULES_PER_PAGE, filteredMyRules.length)} of {filteredMyRules.length} rules
+                      </span>
+                      <div className="flex gap-1">
+                        <button onClick={() => setMyRulesPage((p) => p - 1)} disabled={myRulesPage === 1} className="btn btn-sm disabled:opacity-40">← Prev</button>
+                        <button onClick={() => setMyRulesPage((p) => p + 1)} disabled={myRulesPage >= myRulesTotalPages} className="btn btn-sm disabled:opacity-40">Next →</button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </section>
 
@@ -685,30 +750,38 @@ export default function DetectionRules() {
                   >
                     {presetRules.length}
                   </span>
-                  <span className="text-xs ml-1" style={{ color: "var(--text-3)" }}>· scoped to your projects · read-only</span>
+                  <span className="text-xs ml-1" style={{ color: "var(--text-3)" }}>· seeded when your project was created · read-only</span>
                 </div>
                 <div className="space-y-2">
-                  {presetRules.map((rule) => <PlatformRuleRow key={rule.id} rule={rule} />)}
+                  {presetRules.map((rule) => <ReadOnlyRuleRow key={rule.id} rule={rule} />)}
                 </div>
               </section>
             )}
 
-            {/* ── Platform Rules ─────────────────────────────────── */}
+            {/* ── Legacy Platform Rules (existing deployments only) ── */}
             {platformRules.length > 0 && (
               <section>
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-2">
                   <Icon name="globe" size={13} style={{ color: "var(--text-3)" }} />
-                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-2)" }}>Platform Rules</h2>
+                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-3)" }}>Legacy Platform Rules</h2>
                   <span
                     className="mono text-[11px] px-1.5 py-0.5 rounded"
                     style={{ backgroundColor: "var(--bg-2)", color: "var(--text-3)", border: "1px solid var(--border)" }}
                   >
                     {platformRules.length}
                   </span>
-                  <span className="text-xs ml-1" style={{ color: "var(--text-3)" }}>· shared across all users · always active</span>
+                </div>
+                <div
+                  className="flex items-start gap-2 rounded-lg px-3 py-2 mb-2 text-xs"
+                  style={{ backgroundColor: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", color: "var(--text-3)" }}
+                >
+                  <Icon name="alert" size={12} className="mt-0.5 shrink-0" style={{ color: "#f59e0b" }} />
+                  These generic rules (SQLi, XSS, brute force, etc.) are redundant — Wazuh's{" "}
+                  <code className="mono px-1 rounded" style={{ backgroundColor: "var(--bg-2)" }}>rule_groups</code> already
+                  classifies them on every alert. They won't appear on new deployments.
                 </div>
                 <div className="space-y-2">
-                  {platformRules.map((rule) => <PlatformRuleRow key={rule.id} rule={rule} />)}
+                  {platformRules.map((rule) => <ReadOnlyRuleRow key={rule.id} rule={rule} />)}
                 </div>
               </section>
             )}

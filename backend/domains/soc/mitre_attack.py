@@ -4,7 +4,6 @@
 # ============================================================
 
 import logging
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -865,7 +864,8 @@ async def enrich_alert_with_attack(alert, llm_service=None) -> list[dict[str, st
 
 async def _llm_classify_attack(alert, llm_service) -> list[dict[str, str]]:
     """Use LLM to classify an alert into MITRE ATT&CK techniques."""
-    import json, re
+    import json
+    import re
 
     prompt = (
         "You are a MITRE ATT&CK expert. Classify this SIEM alert into ATT&CK techniques.\n"
@@ -881,7 +881,7 @@ async def _llm_classify_attack(alert, llm_service) -> list[dict[str, str]]:
     text = await llm_service._generate(prompt, use_cache=True)
     text = text.strip()
     if text.startswith("```"):
-        lines = [l for l in text.split("\n") if not l.strip().startswith("```")]
+        lines = [ln for ln in text.split("\n") if not ln.strip().startswith("```")]
         text = "\n".join(lines).strip()
 
     match = re.search(r"\[.*\]", text, re.DOTALL)

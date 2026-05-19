@@ -6,8 +6,7 @@
 # ============================================================
 
 import hashlib
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from datetime import datetime, timedelta, timezone
 
 from motor.motor_asyncio import AsyncIOMotorCollection
 
@@ -37,7 +36,7 @@ class AiCache:
     def _hash(prompt: str) -> str:
         return hashlib.sha256(prompt.encode()).hexdigest()
 
-    async def get(self, prompt: str) -> Optional[str]:
+    async def get(self, prompt: str) -> str | None:
         doc = await self._collection().find_one({"_id": self._hash(prompt)})
         if doc:
             return doc.get("response")

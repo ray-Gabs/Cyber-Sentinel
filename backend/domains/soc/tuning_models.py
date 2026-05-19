@@ -3,7 +3,7 @@
 # ============================================================
 
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Literal
 
 from beanie import Document
 from pydantic import Field
@@ -31,15 +31,15 @@ class TuningRecommendation(Document):
         "disable_rule",                    # rule is pure noise — disable it
     ]
     current_level: int
-    suggested_level: Optional[int] = None # only set for increase_threshold
+    suggested_level: int | None = None # only set for increase_threshold
     top_agents: list[str] = []            # top agents generating FP alerts for this rule
     sample_alert_ids: list[str] = []      # up to 10 sample alert IDs for review
     reason: str = ""
     analysis_window_days: int = 7
     status: Literal["pending", "applied", "dismissed"] = "pending"
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    applied_at: Optional[datetime] = None
-    applied_by: Optional[str] = None      # user_id of admin who acted on it
+    applied_at: datetime | None = None
+    applied_by: str | None = None      # user_id of admin who acted on it
 
     class Settings:
         name = "tuning_recommendations"

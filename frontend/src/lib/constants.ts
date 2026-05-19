@@ -85,6 +85,7 @@ export const ROUTES = {
   SCANS: "/scans",
   SCAN_NEW: "/scans/new",
   SCAN_DETAIL: "/scans/:id",
+  SCANS_SCHEDULED: "/scans/scheduled",
   ALERTS: "/alerts",
   ALERT_DETAIL: "/alerts/:id",
   ANALYTICS: "/analytics",

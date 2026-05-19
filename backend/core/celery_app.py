@@ -20,16 +20,18 @@
 #     celery -A core.celery_app beat --loglevel=info
 # ============================================================
 
-import os, sys
+import os
+import sys
 
 # Ensure the backend directory is on sys.path so Celery can find local packages.
 _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
-from celery import Celery
-from celery.schedules import crontab
-from core.config import settings
+from celery import Celery  # noqa: E402
+from celery.schedules import crontab  # noqa: E402
+
+from core.config import settings  # noqa: E402
 
 celery = Celery(
     "cyber_sentinel",
@@ -67,11 +69,14 @@ celery.conf.update(
 # SOC tasks (poll + triage) go to the dedicated 'soc' queue (celery-soc worker).
 # This prevents poll/triage tasks from starving run_scan in the same queue.
 celery.conf.task_routes = {
-    "domains.soc.tasks.poll_wazuh_alerts":       {"queue": "soc"},
-    "domains.soc.tasks.triage_single_alert":     {"queue": "soc"},
-    "domains.soc.tasks.drain_triage_queue":      {"queue": "soc"},
-    "domains.soc.tasks.run_correlation_for_scan": {"queue": "soc"},
-    "domains.soc.tasks.weekly_alert_tuning":     {"queue": "soc"},
+    "domains.soc.tasks.poll_wazuh_alerts":                    {"queue": "soc"},
+    "domains.soc.tasks.triage_single_alert":                  {"queue": "soc"},
+    "domains.soc.tasks.drain_triage_queue":                   {"queue": "soc"},
+    "domains.soc.tasks.run_correlation_for_scan":             {"queue": "soc"},
+    "domains.soc.tasks.weekly_alert_tuning":                  {"queue": "soc"},
+    # Scheduled-scan dispatcher runs on the pentest queue
+    "domains.pentesting.tasks.dispatch_scheduled_scans":      {"queue": "celery"},
+    "domains.pentesting.tasks.verify_findings":               {"queue": "celery"},
 }
 
 # --------------- Beat Schedule (Periodic Tasks) ---------------
@@ -90,6 +95,12 @@ celery.conf.beat_schedule = {
         "task": "domains.soc.tasks.weekly_alert_tuning",
         "schedule": crontab(hour=2, minute=0, day_of_week=1),  # every Monday 02:00 UTC
         "options": {"expires": 3600},
+    },
+    # Dispatch any due scheduled scans every minute
+    "dispatch-scheduled-scans": {
+        "task": "domains.pentesting.tasks.dispatch_scheduled_scans",
+        "schedule": 60.0,
+        "options": {"expires": 55},  # discard if previous run is still in-flight
     },
 }
 

@@ -2,18 +2,20 @@
 # backend/domains/correlation/router.py — Correlation REST Endpoints
 # ============================================================
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
 from beanie import PydanticObjectId
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
+from core.cache import TTL_FAST, cache_get, cache_invalidate, cache_set
 from core.dependencies import get_current_user
+from core.rate_limit import get_user_or_ip_key, limiter
 from domains.auth.models import User
-from domains.pentesting.models import Scan
 from domains.correlation import service
 from domains.correlation.schemas import (
-    CorrelationResponse,
     CorrelationLinkResponse,
+    CorrelationResponse,
     CorrelationRunRequest,
 )
+from domains.pentesting.models import Scan
 
 router = APIRouter()
 
@@ -24,7 +26,7 @@ def _to_response(c) -> CorrelationResponse:
         scan_id=c.scan_id,
         scan_target=c.scan_target,
         total_links=c.total_links,
-        links=[CorrelationLinkResponse(**l.model_dump()) for l in c.links],
+        links=[CorrelationLinkResponse(**lnk.model_dump()) for lnk in c.links],
         ai_summary=c.ai_summary,
         created_at=c.created_at,
     )
@@ -44,7 +46,9 @@ async def _get_owned_scan(scan_id: str, user: User) -> Scan:
 
 
 @router.post("/run", response_model=CorrelationResponse, status_code=201)
+@limiter.limit("10/minute", key_func=get_user_or_ip_key)
 async def run_correlation(
+    request: Request,
     data: CorrelationRunRequest,
     user: User = Depends(get_current_user),
 ):
@@ -52,13 +56,17 @@ async def run_correlation(
     await _get_owned_scan(data.scan_id, user)
     try:
         result = await service.run_correlation(data.scan_id)
+        scoped_user_id = None if user.role == "admin" else str(user.id)
+        await cache_invalidate(f"cs:cache:correlation:list:{scoped_user_id or 'admin'}:*")
         return _to_response(result)
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found") from exc
 
 
 @router.get("/scan/{scan_id}", response_model=CorrelationResponse)
+@limiter.limit("60/minute", key_func=get_user_or_ip_key)
 async def get_correlation(
+    request: Request,
     scan_id: str,
     user: User = Depends(get_current_user),
 ):
@@ -71,9 +79,11 @@ async def get_correlation(
 
 
 @router.get("/")
+@limiter.limit("60/minute", key_func=get_user_or_ip_key)
 async def list_correlations(
+    request: Request,
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(10, ge=1, le=200),
     user: User = Depends(get_current_user),
 ):
     """
@@ -82,32 +92,45 @@ async def list_correlations(
     Empty list → 200 with items: [] — never 404.
     """
     scoped_user_id = None if user.role == "admin" else str(user.id)
+    cache_key = f"cs:cache:correlation:list:{scoped_user_id or 'admin'}:{skip}:{limit}"
 
-    # Convert skip/limit to page/size for the service
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     page = (skip // limit) + 1 if limit else 1
     results = await service.list_correlations(page, limit, user_id=scoped_user_id)
     total = await service.count_correlations(user_id=scoped_user_id)
 
-    return {
-        "items": [_to_response(c) for c in results],
+    response = {
+        "items": [_to_response(c).model_dump() for c in results],
         "total": total,
         "skip": skip,
         "limit": limit,
     }
+    await cache_set(cache_key, response, TTL_FAST)
+    return response
 
 
 @router.delete("/", status_code=200)
-async def delete_all_user_correlations(user: User = Depends(get_current_user)):
+@limiter.limit("5/minute", key_func=get_user_or_ip_key)
+async def delete_all_user_correlations(request: Request, user: User = Depends(get_current_user)):
     """Delete all correlations for the current user."""
     count = await service.delete_all_correlations(str(user.id))
+    scoped_user_id = None if user.role == "admin" else str(user.id)
+    await cache_invalidate(f"cs:cache:correlation:list:{scoped_user_id or 'admin'}:*")
     return {"deleted": count, "message": f"Deleted {count} correlation(s)"}
 
 
 @router.delete("/{correlation_id}", status_code=200)
+@limiter.limit("20/minute", key_func=get_user_or_ip_key)
 async def delete_single_correlation(
+    request: Request,
     correlation_id: str,
     user: User = Depends(get_current_user),
 ):
     """Delete a single correlation by ID (owner only)."""
     await service.delete_correlation(correlation_id, str(user.id))
+    scoped_user_id = None if user.role == "admin" else str(user.id)
+    await cache_invalidate(f"cs:cache:correlation:list:{scoped_user_id or 'admin'}:*")
     return {"deleted": correlation_id}

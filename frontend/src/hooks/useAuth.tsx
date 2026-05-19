@@ -30,22 +30,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // On mount: check if we have a valid token and fetch user info
+  // On mount: attempt to fetch the current user via the HttpOnly cookie.
+  // The cookie is sent automatically — no token read from JS.
+  // A 401 response means no valid session; ProtectedRoute handles redirects.
   useEffect(() => {
-    if (authService.isAuthenticated()) {
-      authService
-        .getMe()
-        .then(setUser)
-        .catch(() => {
-          // Token is invalid/expired — clear it but do NOT redirect.
-          // ProtectedRoute handles redirects for auth-gated pages.
-          // Public routes like "/" must never be hijacked to "/login".
+    authService
+      .getMe()
+      .then(setUser)
+      .catch((err: unknown) => {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status !== 401) {
           authService.clearToken();
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+        }
+        // 401 is handled by the api interceptor redirect — no extra action needed
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (data: LoginRequest) => {
