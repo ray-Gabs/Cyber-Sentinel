@@ -10,8 +10,8 @@ uvicorn[standard]==0.34.*
 python-multipart==0.0.*
 
 # --- Database ---
-motor==3.6.*               # Async MongoDB driver
-beanie==1.27.*             # MongoDB ODM (built on Motor + Pydantic)
+motor==3.7.*               # Async MongoDB driver
+beanie==2.0.*             # MongoDB ODM (built on Motor + Pydantic)
 
 # --- Auth ---
 PyJWT[crypto]>=2.8.0,<3.0.0        # JWT encoding/decoding (replaces python-jose — CVE-2024-33664)
