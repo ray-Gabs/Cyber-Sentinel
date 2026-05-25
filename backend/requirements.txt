@@ -43,7 +43,7 @@ beautifulsoup4==4.12.*            # HTML parsing (fallback crawler + fingerprint
 
 # --- Reports ---
 reportlab>=4.0,<5.0               # Pure-Python PDF generation — no GTK/Cairo system deps (works on Windows + Linux)
-playwright>=1.40.0                # Headless Chromium PDF renderer (run: playwright install chromium)
+playwright>=1.60.0                # Headless Chromium PDF renderer (run: playwright install chromium)
 jinja2==3.1.*                     # HTML templates for reports
 
 # --- Rate Limiting ---
