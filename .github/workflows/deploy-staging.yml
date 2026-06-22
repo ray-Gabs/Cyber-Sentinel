@@ -37,7 +37,7 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@2ead44a4de06ab3ae7b4b7a6bc7c1c9f73b11f19  # v1.2.0
